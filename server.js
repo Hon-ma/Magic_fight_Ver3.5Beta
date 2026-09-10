@@ -9,10 +9,16 @@
 // あくまで「届いたものを、同じ部屋の他の人に渡す」だけの郵便屋さんです。
 
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const MAX_MEMBERS_PER_ROOM = 4;
+
+// ゲーム画面(public/index.html)は起動時に一度だけ読み込んでメモリに載せておく。
+// 内容が変わることはないので、リクエストのたびにディスクを読みに行かなくてよい。
+const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
 
 // roomName -> { stage: string|null, members: Map<id, { ws, name }> }
 const rooms = new Map();
@@ -40,10 +46,11 @@ function broadcastToRoom(roomName, payload, excludeId) {
   }
 }
 
-// Renderがサーバーの生存確認に使う簡単なヘルスチェック用エンドポイント
+// アクセスされたら、常にゲーム画面(index.html)を返す。
+// 単一ページのゲームなので、パスの振り分けは特に必要ない。
 const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('Magic Fight relay server is running.\n');
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(INDEX_HTML);
 });
 
 const wss = new WebSocketServer({ server });
