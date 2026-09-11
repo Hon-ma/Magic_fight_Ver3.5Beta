@@ -96,6 +96,7 @@
     @keyframes blink { from { opacity: 0.7; } to { opacity: 1; } }
 
     #info { margin-top: 4px; font-size: 13px; font-weight: bold; color: #fff; }
+    #net-status { font-size: 12px; font-weight: bold; color: #81ecec; margin-top: 2px; }
     #active-buff { font-size: 12px; font-weight: bold; color: #ffeaa7; margin-top: 2px; }
 
     /* バトルログ */
@@ -360,7 +361,7 @@
       </div>
 
       <div id="info">合言葉を入力して参戦</div>
-      <div id="net-status" style="font-size:12px;font-weight:bold;color:#81ecec;margin-top:2px;"></div>
+      <div id="net-status"></div>
       <div id="active-buff"></div>
     </div>
   </div>
@@ -496,6 +497,28 @@
   </div>
 
   <script>
+    // --- 連続衝突判定（CCD）ヘルパー ---
+    function distToSegmentSquared(p, v, w) {
+      const l2 = v.distanceToSquared(w);
+      if (l2 === 0) return { distSq: p.distanceToSquared(v), hitPoint: v.clone() };
+      let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y) + (p.z - v.z) * (w.z - v.z)) / l2;
+      t = Math.max(0, Math.min(1, t));
+      const hitPoint = new THREE.Vector3(
+        v.x + t * (w.x - v.x),
+        v.y + t * (w.y - v.y),
+        v.z + t * (w.z - v.z)
+      );
+      return { distSq: p.distanceToSquared(hitPoint), hitPoint };
+    }
+
+    // --- サーバーとの時刻同期 ＆ Ping測定 ---
+    let serverTimeOffset = 0;
+    let currentPing = 0;
+    let pingIntervalTimer = null;
+    function getServerTime() {
+      return Date.now() + serverTimeOffset;
+    }
+
     // プレイヤーが障害物の内部にいるかを判定
     function isPlayerInsideObstacle(pos) {
       const playerBox = new THREE.Box3();
@@ -538,7 +561,6 @@
         }
       }
 
-      // 複合コライダーなどで塞がっている場合の周囲螺旋探索
       for (let r = 0.5; r <= 8.0; r += 0.4) {
         for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
           const tx = playerPos.x + Math.cos(angle) * r;
@@ -616,7 +638,7 @@
     };
 
     let selectedUltType = "beam";
-    let selectedUltSubtype = "A"; // "A" または "B"
+    let selectedUltSubtype = "A";
 
     function updateSubtypePanelUI() {
       const data = ultMasterData[selectedUltType];
@@ -671,7 +693,6 @@
     const mapObstacles = [];
     let safeSpawns = [];
 
-    // ステージオブジェクト破棄＆GPUメモリ完全解放
     function clearStage() {
       stageObjects.forEach(obj => {
         scene.remove(obj);
@@ -751,7 +772,6 @@
       damagePopups.push({ sprite, life: 0.75, maxLife: 0.75 });
     }
 
-    // 頭上ステータス＆ネームスプライト
     function createNameAndStatusSprite(name) {
       const canvas = document.createElement('canvas');
       canvas.width = 320;
@@ -904,7 +924,7 @@
         hemiLight.intensity = 0.8;
         sunLight.intensity = 0.5;
         sunLight.color.setHex(0xa29bfe);
-        sunLight.castShadow = false; // 洞窟内はシャドウマップ無効化で大幅軽量化
+        sunLight.castShadow = false;
 
         const floorMat = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(65, 65), floorMat);
@@ -919,7 +939,6 @@
         addBox(-32.5, 0, 0, 2, 12, 65, 0x222f3e, true);
         addBox(32.5, 0, 0, 2, 12, 65, 0x222f3e, true);
 
-        // 松明の環境点光源（浮遊する球体メッシュは作らず、不可視のPointLightのみで自然に空間を照らす）
         [[-18, 10], [12, -14], [-4, -8], [20, 18], [-8, 22]].forEach(([lx, lz]) => {
           const lLight = new THREE.PointLight(0xffa834, 2.3, 18, 1.5);
           lLight.position.set(lx, 3.5, lz);
@@ -982,7 +1001,6 @@
         safeSpawns = [ { x: -35, z: -35 }, { x: 35, z: 35 }, { x: -35, z: 35 }, { x: 35, z: -35 } ];
 
       } else {
-        // temple (神殿)
         currentMapSize = 70;
         scene.background = new THREE.Color(0x5c93c4);
         scene.fog = null;
@@ -1245,7 +1263,6 @@
       if (fullShieldTimer > 0) finalAmt *= 0.5;
       if (superMagicTimer > 0) finalAmt *= 0.5;
 
-      // ★メガビームB / ハイジャンプB：ULTチャージが100%以降にも適用されEXまで蓄積可能
       const allowUltOver100 = (
         (selectedUltType === 'beam' && selectedUltSubtype === 'B') ||
         (selectedUltType === 'highjump' && selectedUltSubtype === 'B')
@@ -1284,7 +1301,6 @@
       updateHudBars();
     }
 
-    // 柱・壁埋まり防止の安全スポーン選択
     function resetSpawn(giveInvincible = true, isDeathRespawn = false) {
       let s = { x: 0, z: 0 };
       if (safeSpawns.length > 0) {
@@ -1337,7 +1353,6 @@
       thunderSpeedTimer = 0;
       thunderSpeedMultiplier = 1.0;
 
-      // ★グレードアップBタイプ：死亡後のリスポーン時のみ段階が1つ下がる（元が第1段階なら第1段階）
       if (isDeathRespawn && selectedUltType === 'upgrade' && selectedUltSubtype === 'B') {
         upgradeLevel = Math.max(1, upgradeLevel - 1);
       } else if (!isDeathRespawn) {
@@ -1395,7 +1410,6 @@
 
       const currentTypeName = `${ultMasterData[selectedUltType].name}[${selectedUltSubtype}]`;
 
-      // ★EX時もクイックワープ残り時間を確実に表示！
       if (ultPercent >= 200.0) {
         l2.className = 'ult-ready-ex';
         l1.className = '';
@@ -1430,7 +1444,6 @@
     }
 
     function resolveCollision(newX, newZ) {
-      // ★スーパーマジックBタイプ：EX透明化中は障害物を通り抜けられる！
       if (selectedUltType === 'super' && selectedUltSubtype === 'B' && invisibilityTimer > 0) {
         const half = currentMapSize / 2 - 1.0;
         return {
@@ -1631,7 +1644,7 @@
       setTimeout(() => { overlay.style.opacity = '0'; }, 160);
     }
 
-    // --- 7. 通信ネットワーク（WebSocket中継サーバー方式）---
+    // --- 7. 通信ネットワーク（WebSocket中継 ＆ 遅延補償同期）---
     let myPeerId = "player";
     let isHost = false;
     let ws = null;
@@ -1699,11 +1712,26 @@
           isHost: isHost,
           stage: stageToSend
         });
+
+        if (pingIntervalTimer) clearInterval(pingIntervalTimer);
+        pingIntervalTimer = setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            sendToServer({ type: '__ping', clientTime: Date.now() });
+          }
+        }, 1000);
       });
 
       ws.addEventListener('message', (event) => {
         let data;
         try { data = JSON.parse(event.data); } catch (e) { return; }
+
+        if (data.type === '__pong') {
+          const now = Date.now();
+          const rtt = now - data.clientTime;
+          currentPing = Math.round(rtt / 2);
+          serverTimeOffset = data.serverTime + (rtt / 2) - now;
+          return;
+        }
 
         if (data.type === '__joined') {
           clearConnectTimeout();
@@ -1756,6 +1784,7 @@
 
       ws.addEventListener('close', () => {
         clearConnectTimeout();
+        if (pingIntervalTimer) { clearInterval(pingIntervalTimer); pingIntervalTimer = null; }
         if (isGameStarted) {
           document.getElementById('info').innerText = 'サーバーとの接続が切断されました';
           setNetStatus('サーバーとの接続が切断されました');
@@ -1811,14 +1840,70 @@
           receivedTarget = { type: 'dummy', index: data.targetDummyIdx };
         }
         spawnSpell(data.x, data.y, data.z, data.vx, data.vy, data.vz, actualShooterId, col, data.scale || 1.0, !!data.isHoming, !!data.isExSuperHoming, receivedTarget);
-      } else if (data.type === 'hit_confirmed') {
-        if (data.targetShooterId === myPeerId || data.targetShooterId === 'player') {
-          // ★スーパーマジックAタイプなら通常弾チャージが25%
+      } else if (data.type === 'hit_rejected') {
+        if (data.reason === 'high_latency') {
+          addBattleLog(`<span style="color:#e17055">⚠️ 高遅延のため着弾が無効化されました (Ping:${data.delay}ms / ノーレジ)</span>`);
+        }
+      } else if (data.type === 'hit_approved') {
+        // シューター側の処理（ULTチャージ＆EXシールド時間延長）
+        if (data.shooterId === myPeerId || data.shooterId === 'player') {
           let baseAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
           if (data.isCurseTarget) baseAmt *= 0.5;
           addUltCharge(baseAmt, false);
 
-          // ★EXフルシールド効果：通常弾を当てるたびにシールド展開残り時間+1.5秒
+          if (fullShieldTimer > 0 && isExFullShieldActive) {
+            fullShieldTimer += 1.5;
+            addBattleLog(`<span style="color:#ffd32a">🛡️ EXフルシールド時間延長！(+1.5s / 残り${fullShieldTimer.toFixed(1)}s)</span>`);
+          }
+        }
+
+        // 被弾者側の処理（ダメージ計算・シールドガード・反射）
+        if (data.targetId === myPeerId && myHp > 0 && !isDead) {
+          let rawDamage = data.rawDmg;
+          let damage = rawDamage;
+
+          if (respawnInvincibleTimer > 0) {
+            damage = 0;
+            createExplosion(playerPos, 0xf1c40f);
+          } else {
+            if (fullShieldTimer > 0) {
+              damage *= 0.4;
+              createExplosion(playerPos, isExFullShieldActive ? 0xff007f : 0xf1c40f, isExFullShieldActive);
+              const mitigated = rawDamage * 0.6;
+              const reflectDmg = mitigated * 0.5;
+              broadcastMsg({ type: 'reflect_damage', targetId: data.shooterId, dmg: reflectDmg });
+            } else if (isGuarding) {
+              const camDir = new THREE.Vector3();
+              camera.getWorldDirection(camDir);
+              const bDir = new THREE.Vector3(
+                data.bulletPos.x - playerPos.x,
+                0,
+                data.bulletPos.z - playerPos.z
+              ).normalize();
+              if (camDir.dot(bDir) < 0.3) {
+                damage = 5;
+                if (superMagicTimer <= 0) {
+                  myMp = Math.max(0, myMp - 30);
+                  if (myMp <= 0) triggerOverheat();
+                }
+                createExplosion(myShield.getWorldPosition(new THREE.Vector3()), 0x00cec9);
+              }
+            }
+
+            if (isVulnerable) { damage *= 1.5; isVulnerable = false; }
+
+            if (damage > 0) {
+              applyDamage(damage, data.shooterId);
+              triggerHitEffect();
+            }
+          }
+        }
+      } else if (data.type === 'hit_confirmed') {
+        if (data.targetShooterId === myPeerId || data.targetShooterId === 'player') {
+          let baseAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
+          if (data.isCurseTarget) baseAmt *= 0.5;
+          addUltCharge(baseAmt, false);
+
           if (fullShieldTimer > 0 && isExFullShieldActive) {
             fullShieldTimer += 1.5;
             addBattleLog(`<span style="color:#ffd32a">🛡️ EXフルシールド時間延長！(+1.5s / 残り${fullShieldTimer.toFixed(1)}s)</span>`);
@@ -1831,7 +1916,6 @@
           remotePlayers[senderId].isDead = true;
         }
         if (data.killerId === myPeerId || data.killerId === 'player') {
-          // ★オートヒールBタイプなら敵撃破HP回復が50
           const healBonus = (selectedUltType === 'heal' && selectedUltSubtype === 'B') ? 50 : 30;
           myHp = Math.min(100, myHp + healBonus);
           updateHudBars();
@@ -1897,7 +1981,6 @@
           triggerHitEffect();
         }
       } else if (data.type === 'warp_damage') {
-        // ★クイックワープBによる奇襲被弾（タイプ文字は伏せて表示）
         if (data.targetId === myPeerId && myHp > 0 && !isDead && respawnInvincibleTimer <= 0) {
           applyDamage(data.dmg, senderId, true);
           triggerHitEffect();
@@ -1948,7 +2031,6 @@
 
       let finalDmg = amount;
 
-      // ★メガビームAタイプ：ビーム溜め〜発射の最中、被ダメージ50%軽減
       if (selectedUltType === 'beam' && selectedUltSubtype === 'A' && (beamCharging || beamFiring)) {
         finalDmg *= 0.5;
       }
@@ -1966,7 +2048,6 @@
       myHp -= finalDmg;
       spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
 
-      // ★フルシールドBタイプ：常時、被ダメ2ごとにULT1%チャージ (finalDmg * 0.5%)
       if (selectedUltType === 'shield' && selectedUltSubtype === 'B' && finalDmg > 0) {
         addUltCharge(finalDmg * 0.5, false);
       }
@@ -2061,6 +2142,7 @@
       clearInputs();
       clearConnectTimeout();
 
+      if (pingIntervalTimer) { clearInterval(pingIntervalTimer); pingIntervalTimer = null; }
       if (ws) { try { ws.close(); } catch (e) {} ws = null; }
       isHost = false;
       clearAllRemotePlayers();
@@ -2152,7 +2234,6 @@
       });
     });
 
-    // サブ能力選択クリック
     document.getElementById('subtype-card-a').addEventListener('click', () => {
       selectedUltSubtype = "A";
       updateSubtypePanelUI();
@@ -2168,7 +2249,6 @@
       playerName = document.getElementById('name-input').value.trim() || '魔導士';
       const room = document.getElementById('room-input').value.trim() || 'arena888';
 
-      // ★部屋入室時は必ずULTを0%にし、強化段階も初期化
       ultPercent = 0.0;
       warpExpireTimer = 0;
       upgradeLevel = 1;
@@ -2380,7 +2460,6 @@
         myBeam = createVisualBeam(isEx ? 0xff007f : 0x00f2fe, isEx);
         scene.add(myBeam);
       } else if (selectedUltType === 'shield') {
-        // ★フルシールドAタイプなら効果時間+2秒 (10秒)
         fullShieldTimer = (selectedUltSubtype === 'A') ? 10.0 : 8.0;
         isExFullShieldActive = isEx;
         if (isEx) {
@@ -2401,7 +2480,6 @@
           }
         }
       } else if (selectedUltType === 'heal') {
-        // ★オートヒールAタイプなら効果時間7.5秒
         autoHealTimer = (selectedUltSubtype === 'A') ? 7.5 : 5.0;
         if (isEx) {
           curseDebuffTimer = 0;
@@ -2421,7 +2499,6 @@
             document.getElementById('mp-label').innerText = 'MP (MANA)';
             document.getElementById('mp-label').style.color = '#fff';
           }
-          // ★グレードアップAタイプ：第4段階以降でMP全回復に加えHPが15回復
           if (selectedUltSubtype === 'A') {
             myHp = Math.min(100, myHp + 15);
             updateHudBars();
@@ -2443,7 +2520,6 @@
 
         broadcastMsg({ type: 'slam_knockback', x: playerPos.x, z: playerPos.z, isEx });
 
-        // ふっとばし命中判定
         let knockHitCount = 0;
         if (currentStage === 'training') {
           dummies.forEach(d => {
@@ -2465,7 +2541,6 @@
           });
         }
 
-        // ★ハイジャンプAタイプ：ジャンプ時のふっとばしが当たるとULTが25%チャージされる
         if (selectedUltSubtype === 'A' && knockHitCount > 0) {
           const gain = knockHitCount * 25.0;
           addUltCharge(gain, true);
@@ -2539,7 +2614,6 @@
       velocityY = 0;
       warpExpireTimer = 0;
 
-      // ★クイックワープBタイプ：テレポート時に相手に20ダメージを与える
       if (selectedUltType === 'warp' && selectedUltSubtype === 'B') {
         if (currentStage === 'training' && targetEnemy.dummyRef) {
           targetEnemy.dummyRef.hp -= 20;
@@ -2656,7 +2730,6 @@
       const totalGain = hitGroundCount * 5.0 + hitAirCount * 30.0;
       if (totalGain > 0) addUltCharge(totalGain, true);
 
-      // ★ハイパーサンダーAタイプ：与えた合計ダメージ%、5秒間移動速度上昇
       if (selectedUltSubtype === 'A') {
         let totalDmgDealt = 0;
         if (currentStage === 'training') {
@@ -2679,7 +2752,6 @@
         }
       }
 
-      // ★ハイパーサンダーBタイプ：空中に敵が一人もいなかった場合、ULTが50%チャージされる
       if (selectedUltSubtype === 'B' && hitAirCount === 0) {
         addUltCharge(50.0, true);
         addBattleLog(`<span style="color:#f1c40f">★ サンダー効果: 対空敵不在ボーナス！ULT+50%チャージ！</span>`);
@@ -2688,7 +2760,6 @@
 
     function activateCurseShock(isEx = false) {
       const centerPos = new THREE.Vector3(playerPos.x, playerPos.y + 0.9, playerPos.z);
-      // ★カースショックBタイプ：半径+5m (20m)
       const curseRadius = (selectedUltType === 'curse' && selectedUltSubtype === 'B') ? 20.0 : 15.0;
 
       triggerCurseSphereVisual(centerPos, isEx, curseRadius);
@@ -2720,7 +2791,6 @@
         });
       }
 
-      // ★カースショックAタイプ：相手が失ったMPの50%（1人につき50MP）、自身のMPを回復
       if (selectedUltType === 'curse' && selectedUltSubtype === 'A' && hitCurseCount > 0) {
         const mpGain = hitCurseCount * 50;
         myMp = Math.min(100, myMp + mpGain);
@@ -2863,6 +2933,7 @@
     // --- 11. メインループ ---
     const clock = new THREE.Clock();
     let networkTimer = 0;
+    const ccdRaycaster = new THREE.Raycaster();
 
     function animate() {
       requestAnimationFrame(animate);
@@ -2887,7 +2958,6 @@
         if (c.time >= 1.3) { scene.remove(c.group); corpses.splice(i, 1); }
       }
 
-      // ★ハイジャンプ時間経過チャージ（Bタイプなら200%まで自動蓄積）
       if (selectedUltType === 'highjump') {
         const maxNaturalCap = (selectedUltSubtype === 'B') ? 200.0 : 100.0;
         if (ultPercent < maxNaturalCap) {
@@ -2895,7 +2965,6 @@
         }
       }
 
-      // ハイパーサンダーA加速
       if (thunderSpeedTimer > 0) {
         thunderSpeedTimer -= delta;
         if (thunderSpeedTimer <= 0) thunderSpeedMultiplier = 1.0;
@@ -2920,7 +2989,6 @@
       if (invisibilityTimer > 0) {
         invisibilityTimer -= delta;
       }
-      // ★スーパーマジックBタイプ：透明化が切れた瞬間に障害物内にいれば外に押し出す
       if (selectedUltType === 'super' && selectedUltSubtype === 'B') {
         if (wasInvisible && invisibilityTimer <= 0) {
           ejectPlayerFromObstacles();
@@ -3285,8 +3353,7 @@
         if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
       }
 
-      // 魔法弾
-      const spellSphere = new THREE.Sphere(new THREE.Vector3(), 0.35);
+      // --- 魔法弾ループ (CCD: 連続衝突判定 & シューター優先) ---
       for (let i = spells.length - 1; i >= 0; i--) {
         const s = spells[i];
         s.life -= delta;
@@ -3380,107 +3447,134 @@
           }
         }
 
-        s.group.position.x += s.vx * delta;
-        s.group.position.y += s.vy * delta;
-        s.group.position.z += s.vz * delta;
-        spellSphere.center.copy(s.group.position);
+        // CCD: 前フレーム位置から今フレーム位置までの線分計算
+        const prevPos = s.group.position.clone();
+        const stepVec = new THREE.Vector3(s.vx * delta, s.vy * delta, s.vz * delta);
+        const nextPos = prevPos.clone().add(stepVec);
+        const stepDist = stepVec.length();
+        const stepDir = stepDist > 0 ? stepVec.clone().normalize() : new THREE.Vector3(0, 0, 1);
 
         let collided = false;
+        let collidePoint = nextPos.clone();
 
-        for (let box of colliders) {
-          if (box.intersectsSphere(spellSphere)) { collided = true; break; }
+        // 1. 障害物・壁との連続判定（レイキャストによるすり抜け防止）
+        if (stepDist > 0) {
+          ccdRaycaster.set(prevPos, stepDir);
+          ccdRaycaster.far = stepDist;
+          const hits = ccdRaycaster.intersectObjects(obstacleMeshes);
+          if (hits.length > 0) {
+            collided = true;
+            collidePoint = hits[0].point;
+          }
         }
-        if (s.group.position.y <= 0.2 || s.group.position.y >= 21.8) collided = true;
 
-        if (switchCrystal && s.group.position.distanceTo(switchCrystal.position) <= 1.4) {
+        // 天井・床判定
+        if (!collided && (nextPos.y <= 0.2 || nextPos.y >= 21.8)) {
           collided = true;
-          dummyAttackSwitch = !dummyAttackSwitch;
-          switchCrystal.material.color.setHex(dummyAttackSwitch ? 0x2ecc71 : 0xff4757);
-          addBattleLog(dummyAttackSwitch ? `反撃マネキン: 攻撃スイッチ【ON】` : `反撃マネキン: 攻撃スイッチ【OFF】`);
+          collidePoint.y = Math.max(0.2, Math.min(21.8, nextPos.y));
         }
 
-        // 訓練場マネキン着弾
-        if (currentStage === 'training' && s.isMine) {
-          dummies.forEach(d => {
+        // スイッチクリスタル判定
+        if (!collided && switchCrystal) {
+          const { distSq, hitPoint } = distToSegmentSquared(switchCrystal.position, prevPos, nextPos);
+          if (distSq <= 1.4 * 1.4) {
+            collided = true;
+            collidePoint = hitPoint;
+            dummyAttackSwitch = !dummyAttackSwitch;
+            switchCrystal.material.color.setHex(dummyAttackSwitch ? 0x2ecc71 : 0xff4757);
+            addBattleLog(dummyAttackSwitch ? `反撃マネキン: 攻撃スイッチ【ON】` : `反撃マネキン: 攻撃スイッチ【OFF】`);
+          }
+        }
+
+        // 2. シューター優先 ＆ CCD（訓練場ダミーへの着弾判定）
+        if (!collided && s.isMine && currentStage === 'training') {
+          for (const d of dummies) {
+            if (d.hp <= 0) continue;
             const dCenter = d.mesh.position.clone().add(new THREE.Vector3(0, 0.9, 0));
-            if (s.group.position.distanceTo(dCenter) < 1.35 * s.scale) {
+            const hitR = 1.35 * s.scale;
+            const { distSq, hitPoint } = distToSegmentSquared(dCenter, prevPos, nextPos);
+
+            if (distSq <= hitR * hitR) {
               collided = true;
+              collidePoint = hitPoint;
               let dmg = s.isExSuperHoming ? 35 : ((upgradeLevel >= 3) ? 25 : 20);
               let isCrit = s.isExSuperHoming;
               if (d.isVulnerable) { dmg *= 1.5; d.isVulnerable = false; isCrit = true; }
               d.hp -= dmg;
               spawnDamagePopup(d.mesh.position, dmg, isCrit);
 
-              // ★スーパーマジックAタイプなら通常弾チャージが25%
               let chargeAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
               if (d.curseDebuffTimer > 0) chargeAmt *= 0.5;
               addUltCharge(chargeAmt, false);
 
-              // ★EXフルシールド効果：通常弾を当てるたびにシールド展開残り時間+1.5秒
               if (fullShieldTimer > 0 && isExFullShieldActive) {
                 fullShieldTimer += 1.5;
                 addBattleLog(`<span style="color:#ffd32a">🛡️ EXフルシールド時間延長！(+1.5s / 残り${fullShieldTimer.toFixed(1)}s)</span>`);
               }
-
-              createExplosion(s.group.position, s.isExSuperHoming ? 0xff007f : 0x00f2fe, s.isExSuperHoming);
+              break;
             }
-          });
+          }
         }
 
-        if (s.isMine && currentStage !== 'training') {
-          Object.values(remotePlayers).forEach(rp => {
-            if (rp.group.visible && rp.hasPos && !rp.isDead) {
-              const eCenter = rp.group.position.clone().add(new THREE.Vector3(0, 0.9, 0));
-              if (s.group.position.distanceTo(eCenter) < 1.35 * s.scale) collided = true;
+        // 3. シューター優先 ＆ CCD（マルチプレイでの相手プレイヤーへの着弾判定）
+        if (!collided && s.isMine && currentStage !== 'training') {
+          for (const [pid, rp] of Object.entries(remotePlayers)) {
+            if (!rp.group.visible || !rp.hasPos || rp.isDead) continue;
+            const eCenter = rp.group.position.clone().add(new THREE.Vector3(0, 0.9, 0));
+            const hitR = 1.35 * s.scale;
+            const { distSq, hitPoint } = distToSegmentSquared(eCenter, prevPos, nextPos);
+
+            if (distSq <= hitR * hitR) {
+              collided = true;
+              collidePoint = hitPoint;
+              let rawDamage = s.isExSuperHoming ? 35 : ((s.scale > 1.2) ? 25 : 20);
+
+              sendToServer({
+                type: 'hit_claim',
+                targetId: pid,
+                hitTime: getServerTime(),
+                bulletPos: { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
+                rawDmg: rawDamage,
+                bulletScale: s.scale,
+                isExSuperHoming: s.isExSuperHoming,
+                isCurseTarget: rp.curseDebuffTimer > 0
+              });
+              break;
             }
-          });
+          }
         }
 
-        // 被弾判定
-        if (!s.isMine && myHp > 0 && !isDead) {
+        // 4. 訓練場の反撃マネキンによる自機への着弾判定（CCD）
+        if (!collided && !s.isMine && s.shooterId === 'dummy_shooter' && myHp > 0 && !isDead) {
           const myCenter = new THREE.Vector3(playerPos.x, playerPos.y + 0.9, playerPos.z);
-          if (s.group.position.distanceTo(myCenter) < 1.35 * s.scale) {
+          const hitR = 1.35 * s.scale;
+          const { distSq, hitPoint } = distToSegmentSquared(myCenter, prevPos, nextPos);
+
+          if (distSq <= hitR * hitR) {
             collided = true;
-            let rawDamage = s.isExSuperHoming ? 35 : ((s.scale > 1.2) ? 25 : 20);
+            collidePoint = hitPoint;
+            let rawDamage = 20;
             let damage = rawDamage;
 
             if (respawnInvincibleTimer > 0) {
-              damage = 0; createExplosion(s.group.position, 0xf1c40f);
+              damage = 0; createExplosion(hitPoint, 0xf1c40f);
             } else {
-              broadcastMsg({
-                type: 'hit_confirmed',
-                targetShooterId: s.shooterId,
-                isCurseTarget: curseDebuffTimer > 0
-              });
-
-              // ★フルシールド（通常・EXともに60%軽減＆軽減したダメージの50%を反射！）
               if (fullShieldTimer > 0) {
                 damage *= 0.4;
-                createExplosion(s.group.position, isExFullShieldActive ? 0xff007f : 0xf1c40f, isExFullShieldActive);
-
-                const mitigated = rawDamage * 0.6;
-                const reflectDmg = mitigated * 0.5;
-                if (s.shooterId === 'dummy_shooter') {
-                  const shooterDummy = dummies.find(d => d.type === 'shooter');
-                  if (shooterDummy) {
-                    shooterDummy.hp -= reflectDmg;
-                    spawnDamagePopup(shooterDummy.mesh.position, reflectDmg, false, true);
-                  }
-                } else {
-                  broadcastMsg({ type: 'reflect_damage', targetId: s.shooterId, dmg: reflectDmg });
+                createExplosion(hitPoint, isExFullShieldActive ? 0xff007f : 0xf1c40f, isExFullShieldActive);
+                const reflectDmg = (rawDamage * 0.6) * 0.5;
+                const shooterDummy = dummies.find(d => d.type === 'shooter');
+                if (shooterDummy) {
+                  shooterDummy.hp -= reflectDmg;
+                  spawnDamagePopup(shooterDummy.mesh.position, reflectDmg, false, true);
                 }
               } else if (isGuarding) {
-                const camDir = new THREE.Vector3();
-                camera.getWorldDirection(camDir);
-                const bDir = new THREE.Vector3(s.vx, 0, s.vz).normalize();
-                if (camDir.dot(bDir) < -0.3) {
-                  damage = 5;
-                  if (superMagicTimer <= 0) {
-                    myMp = Math.max(0, myMp - 30);
-                    if (myMp <= 0) triggerOverheat();
-                  }
-                  createExplosion(myShield.getWorldPosition(new THREE.Vector3()), 0x00cec9);
+                damage = 5;
+                if (superMagicTimer <= 0) {
+                  myMp = Math.max(0, myMp - 30);
+                  if (myMp <= 0) triggerOverheat();
                 }
+                createExplosion(myShield.getWorldPosition(new THREE.Vector3()), 0x00cec9);
               }
 
               if (isVulnerable) { damage *= 1.5; isVulnerable = false; }
@@ -3493,10 +3587,19 @@
           }
         }
 
-        if (collided || s.life <= 0) {
+        // 弾の消滅／位置確定
+        if (collided) {
+          s.group.position.copy(collidePoint);
           createExplosion(s.group.position, s.color, s.isExSuperHoming);
           scene.remove(s.group);
           spells.splice(i, 1);
+        } else {
+          s.group.position.copy(nextPos);
+          if (s.life <= 0) {
+            createExplosion(s.group.position, s.color, s.isExSuperHoming);
+            scene.remove(s.group);
+            spells.splice(i, 1);
+          }
         }
       }
 
