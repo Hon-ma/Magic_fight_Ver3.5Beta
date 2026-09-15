@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Magic Fight 3D</title>
+  <title>3D Magic FPS Duel</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body { overflow: hidden; background: #0a0c10; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -171,6 +171,41 @@
     #death-overlay h2 { font-size: 38px; margin-bottom: 8px; text-shadow: 0 0 16px #ff4757; letter-spacing: 2px; }
     #death-overlay p { font-size: 18px; color: #dfe6e9; font-weight: bold; }
 
+    #rate-hud {
+      position: absolute; top: 56px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 14px; align-items: center; padding: 6px 18px;
+      background: rgba(15, 20, 30, 0.7); border: 1px solid rgba(241,196,15,0.5); border-radius: 20px;
+      font-size: 13px; font-weight: bold; color: #ffeaa7; z-index: 14; backdrop-filter: blur(4px);
+    }
+    #rate-hud-kd { color: #fff; }
+    #rate-hud-target { color: #b2bec3; font-weight: normal; font-size: 11px; }
+    #rate-hud-rate { color: #f1c40f; }
+
+    #rate-result-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(5, 8, 12, 0.92); display: none; align-items: center; justify-content: center;
+      z-index: 40; color: #fff;
+    }
+    #rate-result-box {
+      width: 100%; max-width: 480px; background: rgba(255,255,255,0.05); border: 2px solid #f1c40f;
+      border-radius: 14px; padding: 28px; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    #rate-result-title { font-size: 32px; letter-spacing: 3px; margin-bottom: 16px; text-shadow: 0 0 16px currentColor; }
+    #rate-result-title.win { color: #55efc4; }
+    #rate-result-title.lose { color: #ff4757; }
+    #rate-result-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
+    .rr-row {
+      display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;
+      background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 14px;
+    }
+    .rr-row.me { border: 1px solid rgba(241,196,15,0.6); }
+    .rr-row .rr-name { font-weight: bold; }
+    .rr-row .rr-kd { color: #b2bec3; font-size: 12px; margin-left: 6px; }
+    .rr-row .rr-delta { font-weight: bold; }
+    .rr-row .rr-delta.pos { color: #55efc4; }
+    .rr-row .rr-delta.neg { color: #ff4757; }
+    #rate-result-box .btn { margin: 6px; }
+
     #esc-notice {
       position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
       background: rgba(231, 76, 60, 0.85); color: #fff; padding: 6px 18px;
@@ -220,9 +255,43 @@
       background: #1e272e; color: #fff; outline: none; font-weight: bold;
     }
 
+    .rate-display-box {
+      padding: 9px; font-size: 15px; border-radius: 6px; border: 2px solid #f1c40f;
+      background: #1e272e; color: #ffeaa7; font-weight: bold; text-align: center;
+    }
+
+    .room-preview-box {
+      width: 100%; background: rgba(255,255,255,0.05); border: 2px solid rgba(9,132,227,0.5);
+      border-radius: 10px; padding: 14px; margin-bottom: 14px; text-align: left;
+    }
+    .room-preview-box .rp-row { display: flex; justify-content: space-between; font-size: 13px; color: #dfe6e9; margin-bottom: 4px; }
+    .room-preview-box .rp-row b { color: #74b9ff; }
+    .room-preview-box .rp-mode-tag {
+      display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; margin-left: 6px;
+    }
+    .room-preview-box .rp-mode-tag.rate { background: rgba(241,196,15,0.2); color: #ffeaa7; border: 1px solid #f1c40f; }
+    .room-preview-box .rp-mode-tag.free { background: rgba(108,92,231,0.2); color: #a29bfe; border: 1px solid #6c5ce7; }
+    .room-preview-box .rp-player-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .room-preview-box .rp-player {
+      display: flex; justify-content: space-between; font-size: 12.5px; background: rgba(255,255,255,0.04);
+      padding: 5px 10px; border-radius: 6px;
+    }
+    .room-preview-box .rp-player .rp-rate { color: #f1c40f; font-weight: bold; }
+    .room-preview-box .rp-empty { font-size: 12px; color: #888; font-style: italic; }
+
+    .battle-mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; margin-bottom: 12px; }
+    .battle-mode-card {
+      background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.15); border-radius: 8px;
+      padding: 10px; cursor: pointer; transition: 0.15s; text-align: left;
+    }
+    .battle-mode-card:hover { border-color: rgba(0,206,201,0.6); }
+    .battle-mode-card.selected { border-color: #f1c40f; background: rgba(241,196,15,0.12); }
+    .battle-mode-card .title { font-size: 13.5px; font-weight: bold; margin-bottom: 3px; }
+    .battle-mode-card .desc { font-size: 11px; color: #b2bec3; }
+
     .section-title { font-size: 13px; font-weight: bold; color: #ffeaa7; margin-bottom: 6px; text-align: left; width: 100%; display: flex; justify-content: space-between; align-items: center; }
     
-    .stage-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; margin-bottom: 14px; }
+    .stage-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; margin-bottom: 12px; }
     .stage-card {
       background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.2);
       border-radius: 8px; padding: 9px; text-align: left; cursor: pointer; transition: 0.2s;
@@ -231,6 +300,21 @@
     .stage-card.selected { background: rgba(0, 206, 201, 0.25); border-color: #00cec9; box-shadow: 0 0 10px rgba(0, 206, 201, 0.6); }
     .stage-card .title { font-size: 13px; font-weight: bold; color: #00cec9; margin-bottom: 2px; }
     .stage-card .desc { font-size: 10.5px; color: #dfe6e9; line-height: 1.3; }
+
+    /* 通常弾選択グリッド */
+    .bullet-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; margin-bottom: 12px; }
+    .bullet-card {
+      background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.18);
+      border-radius: 8px; padding: 6px 8px; text-align: left; cursor: pointer; transition: all 0.2s;
+    }
+    .bullet-card:hover { background: rgba(241, 196, 15, 0.15); border-color: #f1c40f; transform: translateY(-2px); }
+    .bullet-card.selected {
+      background: rgba(241, 196, 15, 0.25); border-color: #f1c40f;
+      box-shadow: 0 0 12px rgba(241, 196, 15, 0.6);
+    }
+    .bullet-card .b-name { font-size: 11.5px; font-weight: bold; color: #ffeaa7; margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; }
+    .bullet-card .b-cost { font-size: 9px; background: #0984e3; color: #fff; padding: 1px 4px; border-radius: 6px; }
+    .bullet-card .b-desc { font-size: 9.5px; color: #dfe6e9; line-height: 1.25; }
 
     /* 必殺技選択グリッド */
     .char-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; width: 100%; margin-bottom: 10px; }
@@ -248,25 +332,19 @@
     .char-card .desc { font-size: 10px; color: #dfe6e9; line-height: 1.25; }
     .char-card .ex-desc { font-size: 9.5px; color: #fd79a8; margin-top: 3px; font-weight: bold; }
 
-    /* サブ能力選択パネル (Aタイプ / Bタイプ) */
+    /* サブ能力選択パネル */
     .subtype-container {
       width: 100%; background: rgba(12, 18, 28, 0.88); border: 2px solid rgba(0, 206, 201, 0.5);
       border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; backdrop-filter: blur(6px);
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
     }
-    .subtype-header {
-      display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
-    }
-    .subtype-header-title {
-      font-size: 12.5px; font-weight: bold; color: #ffeaa7; display: flex; align-items: center; gap: 6px;
-    }
+    .subtype-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .subtype-header-title { font-size: 12.5px; font-weight: bold; color: #ffeaa7; display: flex; align-items: center; gap: 6px; }
     .subtype-header-badge {
       font-size: 11px; font-weight: bold; padding: 2px 10px; border-radius: 12px;
       background: rgba(0, 206, 201, 0.25); color: #81ecec; border: 1px solid #00cec9;
     }
-    .subtype-options {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%;
-    }
+    .subtype-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
     .subtype-card {
       background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(255, 255, 255, 0.18);
       border-radius: 8px; padding: 9px 12px; text-align: left; cursor: pointer; transition: all 0.2s;
@@ -282,12 +360,8 @@
       background: rgba(253, 121, 168, 0.2); border-color: #fd79a8;
       box-shadow: 0 0 14px rgba(253, 121, 168, 0.55);
     }
-    .subtype-top {
-      display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
-    }
-    .subtype-badge {
-      font-size: 10px; font-weight: bold; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.5px;
-    }
+    .subtype-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .subtype-badge { font-size: 10px; font-weight: bold; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.5px; }
     .subtype-badge.tag-a { background: #00cec9; color: #111; }
     .subtype-badge.tag-b { background: #fd79a8; color: #111; }
     .subtype-title { font-size: 11.5px; font-weight: bold; color: #fff; }
@@ -332,6 +406,21 @@
     <p id="death-countdown">リスポーンまで 3 秒</p>
   </div>
 
+  <div id="rate-hud" style="display: none;">
+    <span id="rate-hud-kd">0 K / 0 D</span>
+    <span id="rate-hud-target">（3キル先取）</span>
+    <span id="rate-hud-rate">Rate 1000</span>
+  </div>
+
+  <div id="rate-result-overlay">
+    <div id="rate-result-box">
+      <h2 id="rate-result-title">VICTORY</h2>
+      <div id="rate-result-list"></div>
+      <button id="rate-rematch-btn" class="btn" style="display:none;">もう一戦する</button>
+      <button id="rate-leave-btn" class="btn back">ロビーへ戻る</button>
+    </div>
+  </div>
+
   <div id="battle-log"></div>
 
   <div id="ui">
@@ -367,8 +456,8 @@
   </div>
 
   <div id="overlay">
-    <h1>MAGIC FIGHT 3D</h1>
-    <div class="subtitle">★Ver3.5βアップデート！戦術の強化！</div>
+    <h1>ARENA OF MAGIC</h1>
+    <div class="subtitle">★通常弾5タイプ選択 ＆ 必殺技200%チャージ＋サブスタイル機能！</div>
 
     <div id="step-1" class="step-container">
       <div class="room-box">
@@ -390,6 +479,29 @@
           <label>プレイヤー名</label>
           <input type="text" id="name-input" maxlength="10" value="魔導士A">
         </div>
+        <div class="input-group">
+          <label>現在のレート</label>
+          <div id="rate-display" class="rate-display-box">1000</div>
+        </div>
+      </div>
+
+      <div id="room-preview-area" class="room-preview-box" style="display: none;">
+        <div class="section-title">🔍 部屋の詳細</div>
+        <div id="room-preview-content">確認中...</div>
+      </div>
+
+      <div id="battle-mode-area" style="width: 100%; display: none;">
+        <div class="section-title">対戦モード選択（ホストが決定）</div>
+        <div class="battle-mode-grid">
+          <div class="battle-mode-card selected" data-mode="rate">
+            <div class="title">🏆 レート戦</div>
+            <div class="desc">先に3キルした方の勝利。勝敗でレートが変動する。</div>
+          </div>
+          <div class="battle-mode-card" data-mode="free">
+            <div class="title">🎮 フリーバトル</div>
+            <div class="desc">キル数・制限なしの、今まで通りの自由対戦。</div>
+          </div>
+        </div>
       </div>
 
       <div id="stage-selection-area" style="width: 100%;">
@@ -410,8 +522,35 @@
         </div>
       </div>
 
+      <!-- 通常弾の選択エリア -->
       <div class="section-title">
-        <span>① 必殺技スタイルを選択 (200%でEX超強化)</span>
+        <span>① 通常弾スタイルを選択 (クリック攻撃)</span>
+      </div>
+      <div class="bullet-grid">
+        <div class="bullet-card selected" data-bullet="magic">
+          <div class="b-name">魔法弾 <span class="b-cost">MP25</span></div>
+          <div class="b-desc">いつもの標準弾。威力20、中速、中サイズ。扱いやすさ抜群。</div>
+        </div>
+        <div class="bullet-card" data-bullet="sniper">
+          <div class="b-name">狙撃弾 <span class="b-cost">MP25</span></div>
+          <div class="b-desc">遠距離ほど威力UP(10〜35)。高速・極小判定の長距離狙撃用。</div>
+        </div>
+        <div class="bullet-card" data-bullet="heavy">
+          <div class="b-name">重量弾 <span class="b-cost">MP25</span></div>
+          <div class="b-desc">威力30のヘビーショット。低速だが弾判定が大きく当てやすい。</div>
+        </div>
+        <div class="bullet-card" data-bullet="bomb">
+          <div class="b-name">爆弾 <span class="b-cost">MP35</span></div>
+          <div class="b-desc">着弾地点で半径1.8m爆発！直撃15+爆風5、敵を軽く吹き飛ばす。</div>
+        </div>
+        <div class="bullet-card" data-bullet="ricochet">
+          <div class="b-name">反射弾 <span class="b-cost">MP20</span></div>
+          <div class="b-desc">壁に1度バウンド！跳ね返ると弾速が急加速(×1.5)。威力15。</div>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <span>② 必殺技スタイルを選択 (200%でEX超強化)</span>
       </div>
       <div class="char-grid">
         <div class="char-card selected" data-ult="beam">
@@ -446,7 +585,7 @@
         </div>
         <div class="char-card" data-ult="upgrade">
           <div class="name">⑦ グレードアップ <span class="cost">20%</span></div>
-          <div class="desc">第4段階で誘導弾。以降MP全回復。</div>
+          <div class="desc">第3段階で弾ダメ1.25倍、第4で誘導弾。</div>
           <div class="ex-desc">【EX】(最終段階後) 次の弾が超強力ホーミング！</div>
         </div>
         <div class="char-card" data-ult="highjump">
@@ -464,7 +603,7 @@
       <!-- サブ能力選択エリア (Aタイプ / Bタイプ) -->
       <div id="subtype-panel" class="subtype-container">
         <div class="subtype-header">
-          <span class="subtype-header-title">⚡ ② 戦術サブ能力を選択（Aタイプ / Bタイプ）</span>
+          <span class="subtype-header-title">⚡ ③ 戦術サブ能力を選択（Aタイプ / Bタイプ）</span>
           <span id="subtype-current-ult-name" class="subtype-header-badge">メガビーム</span>
         </div>
         <div class="subtype-options">
@@ -500,7 +639,7 @@
     // --- 連続衝突判定（CCD）ヘルパー ---
     function distToSegmentSquared(p, v, w) {
       const l2 = v.distanceToSquared(w);
-      if (l2 === 0) return { distSq: p.distanceToSquared(v), hitPoint: v.clone() };
+      if (l2 === 0) return { distSq: p.distanceToSquared(v), hitPoint: v.clone(), t: 0 };
       let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y) + (p.z - v.z) * (w.z - v.z)) / l2;
       t = Math.max(0, Math.min(1, t));
       const hitPoint = new THREE.Vector3(
@@ -508,7 +647,7 @@
         v.y + t * (w.y - v.y),
         v.z + t * (w.z - v.z)
       );
-      return { distSq: p.distanceToSquared(hitPoint), hitPoint };
+      return { distSq: p.distanceToSquared(hitPoint), hitPoint, t };
     }
 
     // --- サーバーとの時刻同期 ＆ Ping測定 ---
@@ -518,6 +657,108 @@
     function getServerTime() {
       return Date.now() + serverTimeOffset;
     }
+
+    // --- オートセーブ（プレイヤー名 ＆ レート） ---
+    // タブを閉じてもPCを再起動しても保持されるよう、ブラウザのlocalStorageへ保存する。
+    const SAVE_KEY = 'magicFightSaveData_v1';
+    const DEFAULT_SAVED_DATA = { playerName: '魔導士A', rate: 1000 };
+
+    function loadSavedData() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return { ...DEFAULT_SAVED_DATA };
+        const parsed = JSON.parse(raw);
+        return {
+          playerName: (typeof parsed.playerName === 'string' && parsed.playerName.trim())
+            ? parsed.playerName.slice(0, 10) : DEFAULT_SAVED_DATA.playerName,
+          rate: Number.isFinite(parsed.rate) ? Math.max(0, Math.round(parsed.rate)) : DEFAULT_SAVED_DATA.rate
+        };
+      } catch (e) {
+        return { ...DEFAULT_SAVED_DATA };
+      }
+    }
+
+    function saveData(partial) {
+      try {
+        const current = loadSavedData();
+        const merged = { ...current, ...partial };
+        localStorage.setItem(SAVE_KEY, JSON.stringify(merged));
+        return merged;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    let savedData = loadSavedData();
+    let myRate = savedData.rate;
+
+    // --- レート戦の試合内状態 ---
+    let isRateMatch = false;      // 現在の部屋がレート戦かどうか
+    let isRateMatchOver = false;  // このマッチが既に決着しているか（多重終了防止）
+    let myKills = 0;
+    let myDeaths = 0;
+
+    function applySavedDataToUI() {
+      savedData = loadSavedData();
+      myRate = savedData.rate;
+      const nameInput = document.getElementById('name-input');
+      if (nameInput) nameInput.value = savedData.playerName;
+      const rateDisplay = document.getElementById('rate-display');
+      if (rateDisplay) rateDisplay.innerText = String(savedData.rate);
+    }
+
+    // --- 通常弾マスターデータ ---
+    const bulletMasterData = {
+      magic: {
+        name: "魔法弾",
+        mpCost: 25,
+        baseDmg: 20,
+        speed: 44,
+        scale: 1.0,
+        colorHex: 0x0984e3,
+        desc: "標準的な魔法弾"
+      },
+      sniper: {
+        name: "狙撃弾",
+        mpCost: 25,
+        baseDmg: 10,
+        speed: 76,
+        scale: 0.6,
+        colorHex: 0x00cec9,
+        desc: "遠距離特化弾"
+      },
+      heavy: {
+        name: "重量弾",
+        mpCost: 25,
+        baseDmg: 30,
+        speed: 26,
+        scale: 1.55,
+        colorHex: 0x9b59b6,
+        desc: "高威力・低速・大判定"
+      },
+      bomb: {
+        name: "爆弾",
+        mpCost: 35,
+        baseDmg: 15,
+        splashDmg: 5,
+        splashRadius: 1.8, // 1.8mへ強化
+        speed: 38,
+        scale: 1.3,
+        colorHex: 0xe67e22,
+        desc: "爆風＆ふっとばし"
+      },
+      ricochet: {
+        name: "反射弾",
+        mpCost: 20,
+        baseDmg: 15,
+        speed: 40,
+        scale: 0.7,
+        colorHex: 0x2ecc71,
+        maxBounces: 1,
+        desc: "壁反射＆加速"
+      }
+    };
+    let selectedBulletType = "magic";
 
     // プレイヤーが障害物の内部にいるかを判定
     function isPlayerInsideObstacle(pos) {
@@ -1175,11 +1416,40 @@
     chargeBall.visible = false;
     scene.add(chargeBall);
 
+    // カースショック用球体
     const shockSphereGeo = new THREE.SphereGeometry(1, 24, 24);
     const shockMat = new THREE.MeshBasicMaterial({ color: 0xa29bfe, transparent: true, opacity: 0.45, wireframe: true, depthWrite: false, side: THREE.DoubleSide });
     const shockSphere = new THREE.Mesh(shockSphereGeo, shockMat);
     shockSphere.visible = false;
     scene.add(shockSphere);
+
+    // ★ 爆弾の爆風エフェクト用球体
+    const bombBlastMat = new THREE.MeshBasicMaterial({ color: 0xff793f, transparent: true, opacity: 0.65, wireframe: true, depthWrite: false, side: THREE.DoubleSide });
+    const bombBlastSphere = new THREE.Mesh(shockSphereGeo, bombBlastMat);
+    bombBlastSphere.visible = false;
+    scene.add(bombBlastSphere);
+
+    function triggerBombBlastVisual(pos, maxR = 1.8) {
+      bombBlastSphere.position.copy(pos);
+      bombBlastSphere.scale.set(0.1, 0.1, 0.1);
+      bombBlastSphere.visible = true;
+      const startTime = performance.now();
+      const dur = 280; // 0.28秒で急拡大
+
+      function expandBlast() {
+        const elapsed = (performance.now() - startTime);
+        const progress = Math.min(1.0, elapsed / dur);
+        const s = 0.1 + progress * maxR;
+        bombBlastSphere.scale.set(s, s, s);
+        bombBlastSphere.material.opacity = Math.max(0, 0.7 * (1.0 - progress));
+        if (progress < 1.0) {
+          requestAnimationFrame(expandBlast);
+        } else {
+          bombBlastSphere.visible = false;
+        }
+      }
+      expandBlast();
+    }
 
     // --- 4. バトルログ ---
     function addBattleLog(text, type = 'normal') {
@@ -1443,6 +1713,79 @@
       }
     }
 
+    // --- レート戦 HUD ＆ 結果表示 ---
+    function updateRateHud() {
+      const hud = document.getElementById('rate-hud');
+      if (!hud) return;
+      if (!isRateMatch) {
+        hud.style.display = 'none';
+        return;
+      }
+      hud.style.display = 'flex';
+      document.getElementById('rate-hud-kd').innerText = `${myKills} K / ${myDeaths} D`;
+      document.getElementById('rate-hud-rate').innerText = `Rate ${myRate}`;
+    }
+
+    function handleRateMatchResult(data) {
+      isRateMatchOver = true;
+      clearInputs();
+      releasePointerLock();
+
+      const myResult = (data.results || []).find(r => r.id === myPeerId);
+      const others = (data.results || []).filter(r => r.id !== myPeerId);
+
+      document.getElementById('death-overlay').style.display = 'none';
+
+      const titleEl = document.getElementById('rate-result-title');
+      const isWin = myResult ? myResult.isWinner : (data.winnerId === myPeerId);
+      titleEl.innerText = isWin ? 'VICTORY' : 'DEFEAT';
+      titleEl.className = isWin ? 'win' : 'lose';
+
+      const listEl = document.getElementById('rate-result-list');
+      listEl.innerHTML = '';
+
+      const rows = myResult ? [myResult, ...others] : others;
+      rows.forEach(r => {
+        const isMe = r.id === myPeerId;
+        const deltaSign = r.delta >= 0 ? '+' : '';
+        const deltaClass = r.delta >= 0 ? 'pos' : 'neg';
+        const row = document.createElement('div');
+        row.className = 'rr-row' + (isMe ? ' me' : '');
+        row.innerHTML = `
+          <span class="rr-name">${isMe ? '★ ' : ''}${escapeHtml(r.name)}${r.isWinner ? ' 🏆' : ''}
+            <span class="rr-kd">${r.kills}K / ${r.deaths}D</span>
+          </span>
+          <span>
+            <span>${r.oldRate} → ${r.newRate}</span>
+            <span class="rr-delta ${deltaClass}">(${deltaSign}${r.delta})</span>
+          </span>`;
+        listEl.appendChild(row);
+      });
+
+      if (myResult) {
+        myRate = myResult.newRate;
+        saveData({ rate: myRate });
+        updateRateHud();
+      }
+
+      document.getElementById('rate-rematch-btn').style.display = isHost ? 'inline-block' : 'none';
+      document.getElementById('rate-result-overlay').style.display = 'flex';
+
+      addBattleLog(isWin
+        ? `<span style="color:#55efc4">★★★ レート戦に勝利！ ★★★</span>`
+        : `<span style="color:#ff4757">レート戦に敗北…</span>`);
+    }
+
+    document.getElementById('rate-rematch-btn').addEventListener('click', () => {
+      sendToServer({ type: '__rematch' });
+      document.getElementById('rate-result-overlay').style.display = 'none';
+    });
+
+    document.getElementById('rate-leave-btn').addEventListener('click', () => {
+      document.getElementById('rate-result-overlay').style.display = 'none';
+      leaveGame();
+    });
+
     function resolveCollision(newX, newZ) {
       if (selectedUltType === 'super' && selectedUltSubtype === 'B' && invisibilityTimer > 0) {
         const half = currentMapSize / 2 - 1.0;
@@ -1494,20 +1837,62 @@
       setTimeout(() => flash.style.opacity = '0', 300);
     }
 
-    function createExplosion(pos, colorHex = 0x00f2fe, isRainbow = false) {
-      const pLight = new THREE.PointLight(isRainbow ? 0xff007f : colorHex, 2.5, 6);
+    function createExplosion(pos, colorHex = 0x00f2fe, isRainbow = false, scaleMul = 1.0) {
+      const pLight = new THREE.PointLight(isRainbow ? 0xff007f : colorHex, 2.5 * scaleMul, 6 * scaleMul);
       pLight.position.copy(pos);
       scene.add(pLight);
-      setTimeout(() => scene.remove(pLight), 100);
+      setTimeout(() => scene.remove(pLight), 120);
 
-      const count = isRainbow ? 20 : 12;
+      const count = Math.floor((isRainbow ? 20 : 12) * scaleMul);
       for (let i = 0; i < count; i++) {
         const col = isRainbow ? new THREE.Color().setHSL(Math.random(), 1.0, 0.6) : new THREE.Color(colorHex);
         const pMesh = new THREE.Mesh(sharedParticleGeo, new THREE.MeshBasicMaterial({ color: col }));
         pMesh.position.copy(pos);
         scene.add(pMesh);
-        const v = new THREE.Vector3((Math.random() - 0.5) * 15, Math.random() * 10 + 1, (Math.random() - 0.5) * 15);
-        particles.push({ mesh: pMesh, v, life: 0.35 + Math.random() * 0.2 });
+        const v = new THREE.Vector3((Math.random() - 0.5) * 15 * scaleMul, Math.random() * 10 * scaleMul + 1, (Math.random() - 0.5) * 15 * scaleMul);
+        particles.push({ mesh: pMesh, v, life: (0.35 + Math.random() * 0.2) * Math.min(1.5, scaleMul) });
+      }
+    }
+
+    // ★ 爆弾の爆風処理（着弾地点で半径1.8mの球形爆発＆ノックバック＋ダメージ）
+    function executeBombExplosion(blastCenter, shooterId, directHitTarget = null) {
+      // 1. カースショック風の爆風拡大エフェクト
+      triggerBombBlastVisual(blastCenter, 1.8);
+      createExplosion(blastCenter, 0xff793f, false, 1.8);
+
+      let splashDamage = 5;
+      if (upgradeLevel >= 3) splashDamage = Math.round(splashDamage * 1.25);
+
+      // ソロ・訓練場での爆風判定
+      if (currentStage === 'training') {
+        dummies.forEach(d => {
+          if (d.hp <= 0) return;
+          const dCenter = d.mesh.position.clone().add(new THREE.Vector3(0, 0.85, 0));
+          const dist = blastCenter.distanceTo(dCenter);
+          if (dist <= 1.8) {
+            // 直撃した相手にはすでに直撃ダメが入っているため、爆風5ダメのみ追加付与
+            let dmg = splashDamage;
+            if (d.isVulnerable) { dmg *= 1.5; d.isVulnerable = false; }
+            d.hp -= dmg;
+            spawnDamagePopup(d.mesh.position, dmg);
+
+            // ハイジャンプの半分程度のふっとばし（水平8.0, 垂直3.0）
+            const pVec = new THREE.Vector3(d.mesh.position.x - blastCenter.x, 0, d.mesh.position.z - blastCenter.z).normalize();
+            if (pVec.lengthSq() === 0) pVec.set(0, 0, 1);
+            d.knockbackVel.addScaledVector(pVec, 8.0);
+            d.velY = Math.max(d.velY, 3.0);
+            d.isGrounded = false;
+          }
+        });
+      } else {
+        // マルチプレイ：他プレイヤーへ爆風通知
+        broadcastMsg({
+          type: 'bomb_splash',
+          x: blastCenter.x, y: blastCenter.y, z: blastCenter.z,
+          shooterId: shooterId,
+          splashDmg: splashDamage,
+          radius: 1.8
+        });
       }
     }
 
@@ -1591,7 +1976,7 @@
       return null;
     }
 
-    function spawnSpell(x, y, z, vx, vy, vz, shooterId, colorHex = 0x0984e3, scale = 1.0, isHoming = false, isExSuperHoming = false, targetInfo = null) {
+    function spawnSpell(x, y, z, vx, vy, vz, shooterId, colorHex = 0x0984e3, scale = 1.0, isHoming = false, isExSuperHoming = false, targetInfo = null, bulletType = 'magic', bouncesLeft = 0) {
       let count = 0;
       let oldestIdx = -1;
       for (let i = 0; i < spells.length; i++) {
@@ -1601,14 +1986,14 @@
         }
       }
 
-      if (count >= 10 && oldestIdx !== -1) {
+      if (count >= 12 && oldestIdx !== -1) {
         const oldGroup = spells[oldestIdx].group;
         scene.remove(oldGroup);
         spells.splice(oldestIdx, 1);
       }
 
       const isMine = (shooterId === myPeerId || shooterId === 'player');
-      let color = isMine ? 0x0984e3 : colorHex;
+      let color = isMine ? (bulletMasterData[bulletType]?.colorHex || 0x0984e3) : colorHex;
       if (isExSuperHoming) color = 0xff007f;
 
       const spellGroup = new THREE.Group();
@@ -1620,9 +2005,10 @@
       spellGroup.position.set(x, y, z);
       scene.add(spellGroup);
 
-      const life = isExSuperHoming ? 4.5 : 3.0;
+      const life = isExSuperHoming ? 4.5 : (bulletType === 'sniper' ? 2.5 : 3.2);
       spells.push({
         group: spellGroup,
+        startPos: new THREE.Vector3(x, y, z),
         vx, vy, vz,
         life,
         shooterId,
@@ -1632,7 +2018,9 @@
         isHoming,
         isExSuperHoming,
         targetInfo,
-        flightTime: 0
+        flightTime: 0,
+        bulletType,
+        bouncesLeft
       });
     }
 
@@ -1673,12 +2061,110 @@
       sendToServer(payload);
     }
 
+    // --- 部屋プレビュー（「合言葉で部屋に入る」選択時に部屋の詳細を確認） ---
+    let previewWs = null;
+    let previewRequestSeq = 0;
+
+    function renderRoomPreview(html) {
+      const content = document.getElementById('room-preview-content');
+      const area = document.getElementById('room-preview-area');
+      if (!content || !area) return;
+      area.style.display = 'block';
+      content.innerHTML = html;
+    }
+
+    function requestRoomInfoPreview(roomName) {
+      if (!roomName) return;
+      const mySeq = ++previewRequestSeq;
+      renderRoomPreview('確認中...');
+
+      if (previewWs) {
+        try { previewWs.close(); } catch (e) {}
+        previewWs = null;
+      }
+
+      let socket;
+      try {
+        socket = new WebSocket(RELAY_SERVER_URL);
+      } catch (e) {
+        renderRoomPreview('<span class="rp-empty">サーバーに接続できませんでした</span>');
+        return;
+      }
+      previewWs = socket;
+
+      const timeoutHandle = setTimeout(() => {
+        if (mySeq === previewRequestSeq) {
+          renderRoomPreview('<span class="rp-empty">応答がありません（サーバー起動中の可能性があります）</span>');
+        }
+        try { socket.close(); } catch (e) {}
+      }, 6000);
+
+      socket.addEventListener('open', () => {
+        try { socket.send(JSON.stringify({ type: '__room_info_request', room: roomName })); } catch (e) {}
+      });
+
+      socket.addEventListener('message', (event) => {
+        let data;
+        try { data = JSON.parse(event.data); } catch (e) { return; }
+        if (data.type !== '__room_info_result') return;
+        clearTimeout(timeoutHandle);
+        if (mySeq !== previewRequestSeq) return;
+
+        if (!data.exists) {
+          renderRoomPreview('<span class="rp-empty">この合言葉の部屋はまだ存在しません（ホスト待ち、または存在しない部屋です）</span>');
+        } else {
+          const modeLabel = data.mode === 'rate' ? 'レート戦' : 'フリーバトル';
+          const modeClass = data.mode === 'rate' ? 'rate' : 'free';
+          const stageNames = { temple: '神殿 (Temple)', cave: '洞窟 (Cave)', arena: '闘技場 (Arena)' };
+          const stageLabel = stageNames[data.stage] || (data.stage || '未選択');
+
+          let playersHtml = '<div class="rp-empty">参加者はいません</div>';
+          if (data.players && data.players.length > 0) {
+            playersHtml = '<div class="rp-player-list">' + data.players.map(p =>
+              `<div class="rp-player"><span>${escapeHtml(p.name)}</span><span class="rp-rate">Rate ${p.rate}${data.mode === 'rate' ? ` (${p.kills}K / ${p.deaths}D)` : ''}</span></div>`
+            ).join('') + '</div>';
+          }
+
+          renderRoomPreview(
+            `<div class="rp-row"><span>ステージ</span><b>${stageLabel}</b></div>` +
+            `<div class="rp-row"><span>モード</span><span class="rp-mode-tag ${modeClass}">${modeLabel}</span></div>` +
+            `<div class="rp-row"><span>参加人数</span><b>${data.players ? data.players.length : 0}人</b></div>` +
+            playersHtml
+          );
+        }
+
+        try { socket.close(); } catch (e) {}
+      });
+
+      socket.addEventListener('error', () => {
+        if (mySeq === previewRequestSeq) {
+          renderRoomPreview('<span class="rp-empty">通信エラーが発生しました</span>');
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.innerText = String(str);
+      return d.innerHTML;
+    }
+
+    function closeRoomPreview() {
+      previewRequestSeq++; // 進行中の応答を無効化
+      if (previewWs) {
+        try { previewWs.close(); } catch (e) {}
+        previewWs = null;
+      }
+      const area = document.getElementById('room-preview-area');
+      if (area) area.style.display = 'none';
+    }
+
     function initNetwork(roomId) {
       currentRoomId = roomId;
       if (currentStage === 'training') {
         myPeerId = "solo_player";
         document.getElementById('info').innerText = '訓練場（ソロ練習モード）';
-        addBattleLog(`訓練場へ入場しました。必殺技＆サブ能力[${selectedUltSubtype}タイプ]をお試しください！`);
+        addBattleLog(`訓練場へ入場しました。通常弾[${bulletMasterData[selectedBulletType].name}]＆サブ能力[${selectedUltSubtype}タイプ]をお試しください！`);
         return;
       }
 
@@ -1710,7 +2196,9 @@
           room: roomId,
           name: playerName,
           isHost: isHost,
-          stage: stageToSend
+          stage: stageToSend,
+          mode: selectedBattleMode,
+          rate: myRate
         });
 
         if (pingIntervalTimer) clearInterval(pingIntervalTimer);
@@ -1733,22 +2221,35 @@
           return;
         }
 
+        if (data.type === '__no_host') {
+          alert('この部屋にはまだホストがいません。先にホストが部屋を作成する必要があります。');
+          leaveGame();
+          return;
+        }
+
         if (data.type === '__joined') {
           clearConnectTimeout();
           myPeerId = data.id;
+          isRateMatch = (data.mode === 'rate');
+          isRateMatchOver = false;
+          myKills = 0;
+          myDeaths = 0;
+          updateRateHud();
           if (isHost) {
-            document.getElementById('info').innerText = 'ホストとして待機中... (最大4人)';
+            const modeLabel = isRateMatch ? 'レート戦' : 'フリーバトル';
+            document.getElementById('info').innerText = `ホストとして待機中... (最大4人) [${modeLabel}]`;
             setNetStatus('参加者を待っています…（合言葉を友達に伝えてください）');
             buildStage(selectedStage);
             resetSpawn(true);
-            addBattleLog(`部屋作成完了: [${currentRoomId}] ステージ: ${currentStage.toUpperCase()}`);
+            addBattleLog(`部屋作成完了: [${currentRoomId}] ステージ: ${currentStage.toUpperCase()} / モード: ${modeLabel}`);
           } else {
-            document.getElementById('info').innerText = '戦闘中';
+            const modeLabel = isRateMatch ? 'レート戦' : 'フリーバトル';
+            document.getElementById('info').innerText = `戦闘中 [${modeLabel}]`;
             setNetStatus('ホストに接続しました ✓');
             const targetStage = data.stage || 'temple';
             buildStage(targetStage);
             resetSpawn(true);
-            addBattleLog(`ステージ同期: ${targetStage.toUpperCase()}`);
+            addBattleLog(`ステージ同期: ${targetStage.toUpperCase()} / モード: ${modeLabel}`);
             sendToServer({ type: 'handshake', name: playerName });
           }
           return;
@@ -1776,6 +2277,26 @@
           removeRemotePlayer(data.id);
           addBattleLog(`プレイヤーが切断しました`);
           setNetStatus(data.count > 0 ? `接続中: ${data.count}人` : '参加者を待っています…（合言葉を友達に伝えてください）');
+          return;
+        }
+
+        if (data.type === '__rate_match_result') {
+          handleRateMatchResult(data);
+          return;
+        }
+
+        if (data.type === '__rematch_start') {
+          isRateMatchOver = false;
+          myKills = 0;
+          myDeaths = 0;
+          updateRateHud();
+          document.getElementById('rate-result-overlay').style.display = 'none';
+          document.getElementById('death-overlay').style.display = 'none';
+          addBattleLog(`<span style="color:#f1c40f">★ 次のレート戦が開始されました！</span>`);
+          resetSpawn(true, false);
+          // ブラウザの仕様上、ユーザー操作なしでrequestPointerLockは呼べないため、
+          // resume-overlay（クリックで再ロック）をpointerlockchangeの通常フローに任せる。
+          document.getElementById('resume-overlay').style.display = 'flex';
           return;
         }
 
@@ -1831,7 +2352,7 @@
 
       } else if (data.type === 'shoot') {
         const rp = remotePlayers[senderId];
-        const col = rp ? rp.color : 0xff4757;
+        const col = rp ? (bulletMasterData[data.bulletType]?.colorHex || rp.color) : 0xff4757;
         const actualShooterId = data.shooterId || senderId;
         let receivedTarget = null;
         if (data.targetType === 'player') {
@@ -1839,13 +2360,13 @@
         } else if (data.targetType === 'dummy') {
           receivedTarget = { type: 'dummy', index: data.targetDummyIdx };
         }
-        spawnSpell(data.x, data.y, data.z, data.vx, data.vy, data.vz, actualShooterId, col, data.scale || 1.0, !!data.isHoming, !!data.isExSuperHoming, receivedTarget);
+        spawnSpell(data.x, data.y, data.z, data.vx, data.vy, data.vz, actualShooterId, col, data.scale || 1.0, !!data.isHoming, !!data.isExSuperHoming, receivedTarget, data.bulletType || 'magic', data.bouncesLeft || 0);
       } else if (data.type === 'hit_rejected') {
         if (data.reason === 'high_latency') {
           addBattleLog(`<span style="color:#e17055">⚠️ 高遅延のため着弾が無効化されました (Ping:${data.delay}ms / ノーレジ)</span>`);
         }
       } else if (data.type === 'hit_approved') {
-        // シューター側の処理（ULTチャージ＆EXシールド時間延長）
+        // シューター側の処理
         if (data.shooterId === myPeerId || data.shooterId === 'player') {
           let baseAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
           if (data.isCurseTarget) baseAmt *= 0.5;
@@ -1857,7 +2378,7 @@
           }
         }
 
-        // 被弾者側の処理（ダメージ計算・シールドガード・反射）
+        // 被弾者側の処理
         if (data.targetId === myPeerId && myHp > 0 && !isDead) {
           let rawDamage = data.rawDmg;
           let damage = rawDamage;
@@ -1898,15 +2419,26 @@
             }
           }
         }
-      } else if (data.type === 'hit_confirmed') {
-        if (data.targetShooterId === myPeerId || data.targetShooterId === 'player') {
-          let baseAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
-          if (data.isCurseTarget) baseAmt *= 0.5;
-          addUltCharge(baseAmt, false);
+      } else if (data.type === 'bomb_splash') {
+        // ★ 爆弾爆風のマルチ同期
+        const blastPos = new THREE.Vector3(data.x, data.y, data.z);
+        triggerBombBlastVisual(blastPos, data.radius || 1.8);
+        createExplosion(blastPos, 0xff793f, false, 1.8);
 
-          if (fullShieldTimer > 0 && isExFullShieldActive) {
-            fullShieldTimer += 1.5;
-            addBattleLog(`<span style="color:#ffd32a">🛡️ EXフルシールド時間延長！(+1.5s / 残り${fullShieldTimer.toFixed(1)}s)</span>`);
+        if (data.shooterId !== myPeerId && myHp > 0 && !isDead && respawnInvincibleTimer <= 0) {
+          const myCenter = new THREE.Vector3(playerPos.x, playerPos.y + 0.85, playerPos.z);
+          const dist = blastPos.distanceTo(myCenter);
+          if (dist <= (data.radius || 1.8)) {
+            let dmg = data.splashDmg || 5;
+            if (isVulnerable) dmg *= 1.5;
+            applyDamage(dmg, data.shooterId);
+
+            // ハイジャンプの半分威力のふっとばし
+            const pVec = new THREE.Vector3(playerPos.x - data.x, 0, playerPos.z - data.z).normalize();
+            if (pVec.lengthSq() === 0) pVec.set(0, 0, 1);
+            playerKnockbackVel.addScaledVector(pVec, 8.0);
+            velocityY = Math.max(velocityY, 3.0);
+            triggerHitEffect();
           }
         }
       } else if (data.type === 'player_died') {
@@ -1916,6 +2448,11 @@
           remotePlayers[senderId].isDead = true;
         }
         if (data.killerId === myPeerId || data.killerId === 'player') {
+          if (isRateMatch && !isRateMatchOver) {
+            myKills++;
+            updateRateHud();
+            addBattleLog(`<span style="color:#f1c40f">★ 撃破！ (${myKills}/3キル)</span>`);
+          }
           const healBonus = (selectedUltType === 'heal' && selectedUltSubtype === 'B') ? 50 : 30;
           myHp = Math.min(100, myHp + healBonus);
           updateHudBars();
@@ -2028,6 +2565,7 @@
 
     function applyDamage(amount, attackerId, isCrit = false, isReflect = false) {
       if (myHp <= 0 || isDead || respawnInvincibleTimer > 0) return;
+      if (isRateMatchOver) return;
 
       let finalDmg = amount;
 
@@ -2065,7 +2603,7 @@
       setTimeout(() => { flash.style.opacity = '0'; }, 150);
     }
 
-    // --- 8. 入力制御 ＆ ESC退出 ＆ ポインターロック解放保護 ---
+    // --- 8. 入力制御 ＆ ESC退出 ---
     let isLocked = false;
     let pitch = 0, yaw = 0;
     const keys = {};
@@ -2073,6 +2611,7 @@
     let leftDownTime = 0;
     let lastShootTime = 0;
     let selectedStage = 'temple';
+    let selectedBattleMode = 'rate'; // 'rate' or 'free' — ホストが選択
 
     let gameModeChoice = 'host';
     let lastEscPressTime = 0;
@@ -2156,6 +2695,12 @@
       thunderSpeedMultiplier = 1.0;
       updateHudBars();
 
+      isRateMatch = false;
+      isRateMatchOver = false;
+      myKills = 0;
+      myDeaths = 0;
+      updateRateHud();
+
       beamCharging = false;
       beamFiring = false;
       myBeam.visible = false;
@@ -2167,10 +2712,12 @@
       document.getElementById('overlay').style.display = 'flex';
       document.getElementById('resume-overlay').style.display = 'none';
       document.getElementById('death-overlay').style.display = 'none';
+      document.getElementById('rate-result-overlay').style.display = 'none';
       document.getElementById('esc-notice').style.display = 'none';
       document.getElementById('ex-notification').style.opacity = '0';
       document.getElementById('info').innerText = '合言葉を入力して参戦';
       setNetStatus('');
+      applySavedDataToUI();
     }
 
     document.getElementById('btn-goto-host').addEventListener('click', () => {
@@ -2182,6 +2729,8 @@
 
       document.getElementById('mode-badge').innerText = `モード: 部屋を作成（ホスト） [ルーム: ${document.getElementById('room-input').value}]`;
       document.getElementById('stage-selection-area').style.display = 'block';
+      document.getElementById('battle-mode-area').style.display = 'block';
+      closeRoomPreview();
       document.getElementById('step-1').style.display = 'none';
       document.getElementById('step-2').style.display = 'flex';
       updateSubtypePanelUI();
@@ -2194,9 +2743,11 @@
 
       document.getElementById('mode-badge').innerText = `モード: 部屋に参加 [ルーム: ${document.getElementById('room-input').value}]`;
       document.getElementById('stage-selection-area').style.display = 'none';
+      document.getElementById('battle-mode-area').style.display = 'none';
       document.getElementById('step-1').style.display = 'none';
       document.getElementById('step-2').style.display = 'flex';
       updateSubtypePanelUI();
+      requestRoomInfoPreview(document.getElementById('room-input').value.trim() || 'arena888');
     });
 
     document.getElementById('btn-goto-solo').addEventListener('click', () => {
@@ -2205,14 +2756,27 @@
       selectedStage = 'training';
       document.getElementById('mode-badge').innerText = `モード: 訓練場 (ソロ練習)`;
       document.getElementById('stage-selection-area').style.display = 'none';
+      document.getElementById('battle-mode-area').style.display = 'none';
+      closeRoomPreview();
       document.getElementById('step-1').style.display = 'none';
       document.getElementById('step-2').style.display = 'flex';
       updateSubtypePanelUI();
     });
 
     document.getElementById('btn-step2-back').addEventListener('click', () => {
+      closeRoomPreview();
       document.getElementById('step-2').style.display = 'none';
       document.getElementById('step-1').style.display = 'flex';
+    });
+
+    // 参加モードで合言葉を変更したら部屋プレビューを再取得
+    let roomInputPreviewDebounce = null;
+    document.getElementById('room-input').addEventListener('input', () => {
+      if (gameModeChoice !== 'join') return;
+      clearTimeout(roomInputPreviewDebounce);
+      roomInputPreviewDebounce = setTimeout(() => {
+        requestRoomInfoPreview(document.getElementById('room-input').value.trim() || 'arena888');
+      }, 400);
     });
 
     document.querySelectorAll('.stage-card').forEach(card => {
@@ -2220,6 +2784,23 @@
         document.querySelectorAll('.stage-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
         selectedStage = card.getAttribute('data-stage');
+      });
+    });
+
+    document.querySelectorAll('.battle-mode-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.battle-mode-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        selectedBattleMode = card.getAttribute('data-mode');
+      });
+    });
+
+    // 通常弾選択
+    document.querySelectorAll('.bullet-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.bullet-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        selectedBulletType = card.getAttribute('data-bullet');
       });
     });
 
@@ -2248,6 +2829,8 @@
     document.getElementById('start-btn').addEventListener('click', () => {
       playerName = document.getElementById('name-input').value.trim() || '魔導士';
       const room = document.getElementById('room-input').value.trim() || 'arena888';
+      closeRoomPreview();
+      saveData({ playerName });
 
       ultPercent = 0.0;
       warpExpireTimer = 0;
@@ -2255,6 +2838,11 @@
       thunderSpeedTimer = 0;
       thunderSpeedMultiplier = 1.0;
       updateHudBars();
+
+      myKills = 0;
+      myDeaths = 0;
+      isRateMatch = false;
+      isRateMatchOver = false;
 
       if (gameModeChoice === 'solo') {
         buildStage('training');
@@ -2319,7 +2907,9 @@
         if (pressDuration < 170 && !beamFiring && !beamCharging) {
           const now = Date.now();
           if (now - lastShootTime >= 150) {
-            if (!isOverheated && (myMp >= 12 || superMagicTimer > 0)) {
+            const bMeta = bulletMasterData[selectedBulletType];
+            const neededMp = bMeta ? bMeta.mpCost : 25;
+            if (!isOverheated && (myMp >= (neededMp * 0.5) || superMagicTimer > 0)) {
               tryFireSpell();
               lastShootTime = now;
             }
@@ -2332,8 +2922,11 @@
 
     function tryFireSpell() {
       if (stunTimer > 0) return;
+      const bMeta = bulletMasterData[selectedBulletType];
+      const cost = bMeta ? bMeta.mpCost : 25;
+
       if (superMagicTimer <= 0) {
-        if (myMp >= 25) { myMp -= 25; }
+        if (myMp >= cost) { myMp -= cost; }
         else { myMp = 0; triggerOverheat(); }
         updateHudBars();
       }
@@ -2344,7 +2937,9 @@
       const sy = playerPos.y + eyeHeight + dir.y * 0.6;
       const sz = playerPos.z + dir.z * 0.6;
 
-      const spellScale = (upgradeLevel >= 2) ? 1.5 : 1.0;
+      let spellScale = bMeta ? bMeta.scale : 1.0;
+      if (upgradeLevel >= 2) spellScale *= 1.5;
+
       const isHoming = (upgradeLevel >= 4);
       const isExSuperHoming = nextShotExHoming;
 
@@ -2353,7 +2948,8 @@
         targetInfo = findBestCrosshairTarget(camera.position, dir);
       }
 
-      const speed = isExSuperHoming ? 36 : 44;
+      let speed = bMeta ? bMeta.speed : 44;
+      if (isExSuperHoming) speed = 36;
       const vx = dir.x * speed, vy = dir.y * speed, vz = dir.z * speed;
 
       if (nextShotExHoming) {
@@ -2362,7 +2958,8 @@
         addBattleLog(`<span style="color:#fd79a8">🌈 EX超誘導ホーミング弾 発射！(追尾ミサイル)</span>`);
       }
 
-      spawnSpell(sx, sy, sz, vx, vy, vz, myPeerId, 0x0984e3, spellScale, isHoming, isExSuperHoming, targetInfo);
+      const maxBounces = (selectedBulletType === 'ricochet') ? 1 : 0;
+      spawnSpell(sx, sy, sz, vx, vy, vz, myPeerId, bMeta.colorHex, spellScale, isHoming, isExSuperHoming, targetInfo, selectedBulletType, maxBounces);
       broadcastMsg({
         type: 'shoot',
         shooterId: myPeerId,
@@ -2373,7 +2970,9 @@
         isExSuperHoming,
         targetType: targetInfo ? targetInfo.type : null,
         targetPeerId: targetInfo && targetInfo.type === 'player' ? targetInfo.peerId : null,
-        targetDummyIdx: targetInfo && targetInfo.type === 'dummy' ? targetInfo.index : null
+        targetDummyIdx: targetInfo && targetInfo.type === 'dummy' ? targetInfo.index : null,
+        bulletType: selectedBulletType,
+        bouncesLeft: maxBounces
       });
     }
 
@@ -2389,7 +2988,7 @@
     }
 
     function handlePlayerDeath(killerId = null) {
-      if (isDead) return;
+      if (isDead || isRateMatchOver) return;
       isDead = true;
       clearInputs();
       myShield.visible = false;
@@ -2403,6 +3002,11 @@
       camera.position.set(playerPos.x, playerPos.y + eyeHeight, playerPos.z);
 
       spawnCorpse(playerPos, yaw);
+
+      if (isRateMatch && !isRateMatchOver) {
+        myDeaths++;
+        updateRateHud();
+      }
 
       broadcastMsg({
         type: 'player_died',
@@ -2421,9 +3025,10 @@
       countdown.innerText = `リスポーンまで ${sec} 秒`;
 
       const timer = setInterval(() => {
+        if (isRateMatchOver) { clearInterval(timer); return; }
         sec--;
         if (sec > 0) { countdown.innerText = `リスポーンまで ${sec} 秒`; }
-        else { clearInterval(timer); resetSpawn(true, true); }
+        else { clearInterval(timer); if (!isRateMatchOver) resetSpawn(true, true); }
       }, 1000);
     }
 
@@ -2490,7 +3095,11 @@
       } else if (selectedUltType === 'upgrade') {
         if (upgradeLevel < 4) {
           upgradeLevel++;
-          addBattleLog(`<span style="color:#a29bfe">★ グレードアップ進化！第${upgradeLevel}段階へ到達！</span>`, 'upgrade');
+          if (upgradeLevel === 3) {
+            addBattleLog(`<span style="color:#a29bfe">★ グレードアップ第3段階到達！全通常弾のダメージが1.25倍に強化！</span>`, 'upgrade');
+          } else {
+            addBattleLog(`<span style="color:#a29bfe">★ グレードアップ進化！第${upgradeLevel}段階へ到達！</span>`, 'upgrade');
+          }
         } else {
           myMp = 100;
           if (isOverheated) {
@@ -2930,6 +3539,32 @@
       }
     }
 
+    // ダメージ計算用ヘルパー
+    function computeBulletDamage(bType, originPos, hitPos, isExHoming) {
+      if (isExHoming) return 35;
+      let base = 20;
+
+      if (bType === 'sniper') {
+        const dist = originPos.distanceTo(hitPos);
+        const t = Math.min(1.0, dist / 35.0);
+        base = 10 + t * 25;
+      } else if (bType === 'heavy') {
+        base = 30;
+      } else if (bType === 'bomb') {
+        base = 15; // 直撃ダメージ
+      } else if (bType === 'ricochet') {
+        base = 15;
+      } else {
+        base = 20;
+      }
+
+      if (upgradeLevel >= 3) {
+        base *= 1.25;
+      }
+
+      return Math.round(base);
+    }
+
     // --- 11. メインループ ---
     const clock = new THREE.Clock();
     let networkTimer = 0;
@@ -3185,9 +3820,14 @@
       if (curseDebuffTimer > 0) curseDebuffTimer -= delta;
 
       const buffList = [];
+      const bMeta = bulletMasterData[selectedBulletType];
+      buffList.push(`<span style="color:#ffeaa7">通常弾: ${bMeta ? bMeta.name : '魔法弾'}</span>`);
       const ultMeta = ultMasterData[selectedUltType];
-      buffList.push(`<span style="color:#00cec9">スタイル: ${ultMeta.name}[${selectedUltSubtype}]</span>`);
-      if (selectedUltType === 'upgrade') buffList.push(`<span style="color:#a29bfe">強化: 第${upgradeLevel}段階</span>`);
+      buffList.push(`<span style="color:#00cec9">ULT: ${ultMeta.name}[${selectedUltSubtype}]</span>`);
+      if (selectedUltType === 'upgrade') {
+        const upTxt = (upgradeLevel >= 3) ? `第${upgradeLevel}段階 (弾ダメ1.25倍)` : `第${upgradeLevel}段階`;
+        buffList.push(`<span style="color:#a29bfe">強化: ${upTxt}</span>`);
+      }
       if (respawnInvincibleTimer > 0) buffList.push(`<span style="color:#f1c40f">無敵 (${respawnInvincibleTimer.toFixed(1)}s)</span>`);
       if (autoHealTimer > 0) buffList.push(`<span style="color:#2ecc71">ヒール/不死身 (${autoHealTimer.toFixed(1)}s)</span>`);
       if (superMagicTimer > 0) buffList.push(`MP無限 (${superMagicTimer.toFixed(1)}s)`);
@@ -3353,7 +3993,7 @@
         if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
       }
 
-      // --- 魔法弾ループ (CCD: 連続衝突判定 & シューター優先) ---
+      // --- 魔法弾ループ ---
       for (let i = spells.length - 1; i >= 0; i--) {
         const s = spells[i];
         s.life -= delta;
@@ -3442,7 +4082,8 @@
             s.vy += _tmpVecB.y * steerSpeed * delta;
             s.vz += _tmpVecB.z * steerSpeed * delta;
 
-            _tmpVecA.set(s.vx, s.vy, s.vz).normalize().multiplyScalar(44);
+            const baseSpd = bulletMasterData[s.bulletType]?.speed || 44;
+            _tmpVecA.set(s.vx, s.vy, s.vz).normalize().multiplyScalar(baseSpd);
             s.vx = _tmpVecA.x; s.vy = _tmpVecA.y; s.vz = _tmpVecA.z;
           }
         }
@@ -3456,8 +4097,9 @@
 
         let collided = false;
         let collidePoint = nextPos.clone();
+        let hitNormal = null;
 
-        // 1. 障害物・壁との連続判定（レイキャストによるすり抜け防止）
+        // 1. 障害物・壁との連続判定
         if (stepDist > 0) {
           ccdRaycaster.set(prevPos, stepDir);
           ccdRaycaster.far = stepDist;
@@ -3465,6 +4107,7 @@
           if (hits.length > 0) {
             collided = true;
             collidePoint = hits[0].point;
+            if (hits[0].face) hitNormal = hits[0].face.normal.clone();
           }
         }
 
@@ -3472,6 +4115,7 @@
         if (!collided && (nextPos.y <= 0.2 || nextPos.y >= 21.8)) {
           collided = true;
           collidePoint.y = Math.max(0.2, Math.min(21.8, nextPos.y));
+          hitNormal = new THREE.Vector3(0, nextPos.y <= 0.2 ? 1 : -1, 0);
         }
 
         // スイッチクリスタル判定
@@ -3486,19 +4130,19 @@
           }
         }
 
-        // 2. シューター優先 ＆ CCD（訓練場ダミーへの着弾判定）
+        // 2. 訓練場ダミーへの直撃判定
         if (!collided && s.isMine && currentStage === 'training') {
           for (const d of dummies) {
             if (d.hp <= 0) continue;
-            const dCenter = d.mesh.position.clone().add(new THREE.Vector3(0, 0.9, 0));
+            const dCenter = d.mesh.position.clone().add(new THREE.Vector3(0, 0.85, 0));
             const hitR = 1.35 * s.scale;
             const { distSq, hitPoint } = distToSegmentSquared(dCenter, prevPos, nextPos);
 
             if (distSq <= hitR * hitR) {
               collided = true;
               collidePoint = hitPoint;
-              let dmg = s.isExSuperHoming ? 35 : ((upgradeLevel >= 3) ? 25 : 20);
-              let isCrit = s.isExSuperHoming;
+              let dmg = computeBulletDamage(s.bulletType, s.startPos, hitPoint, s.isExSuperHoming);
+              let isCrit = s.isExSuperHoming || (s.bulletType === 'sniper' && s.startPos.distanceTo(hitPoint) > 20);
               if (d.isVulnerable) { dmg *= 1.5; d.isVulnerable = false; isCrit = true; }
               d.hp -= dmg;
               spawnDamagePopup(d.mesh.position, dmg, isCrit);
@@ -3516,18 +4160,18 @@
           }
         }
 
-        // 3. シューター優先 ＆ CCD（マルチプレイでの相手プレイヤーへの着弾判定）
+        // 3. マルチプレイでの相手プレイヤーへの直撃判定
         if (!collided && s.isMine && currentStage !== 'training') {
           for (const [pid, rp] of Object.entries(remotePlayers)) {
             if (!rp.group.visible || !rp.hasPos || rp.isDead) continue;
-            const eCenter = rp.group.position.clone().add(new THREE.Vector3(0, 0.9, 0));
+            const eCenter = rp.group.position.clone().add(new THREE.Vector3(0, 0.85, 0));
             const hitR = 1.35 * s.scale;
             const { distSq, hitPoint } = distToSegmentSquared(eCenter, prevPos, nextPos);
 
             if (distSq <= hitR * hitR) {
               collided = true;
               collidePoint = hitPoint;
-              let rawDamage = s.isExSuperHoming ? 35 : ((s.scale > 1.2) ? 25 : 20);
+              let rawDamage = computeBulletDamage(s.bulletType, s.startPos, hitPoint, s.isExSuperHoming);
 
               sendToServer({
                 type: 'hit_claim',
@@ -3544,9 +4188,9 @@
           }
         }
 
-        // 4. 訓練場の反撃マネキンによる自機への着弾判定（CCD）
+        // 4. 訓練場の反撃マネキンによる自機への着弾判定
         if (!collided && !s.isMine && s.shooterId === 'dummy_shooter' && myHp > 0 && !isDead) {
-          const myCenter = new THREE.Vector3(playerPos.x, playerPos.y + 0.9, playerPos.z);
+          const myCenter = new THREE.Vector3(playerPos.x, playerPos.y + 0.85, playerPos.z);
           const hitR = 1.35 * s.scale;
           const { distSq, hitPoint } = distToSegmentSquared(myCenter, prevPos, nextPos);
 
@@ -3587,16 +4231,46 @@
           }
         }
 
-        // 弾の消滅／位置確定
+        // 反射弾の壁バウンス処理
+        if (collided && s.bulletType === 'ricochet' && s.bouncesLeft > 0 && hitNormal) {
+          s.bouncesLeft--;
+          collided = false;
+
+          const inVel = new THREE.Vector3(s.vx, s.vy, s.vz);
+          const normal = hitNormal.normalize();
+          inVel.reflect(normal);
+
+          inVel.multiplyScalar(1.5);
+          s.vx = inVel.x;
+          s.vy = inVel.y;
+          s.vz = inVel.z;
+
+          s.group.position.copy(collidePoint).addScaledVector(normal, 0.15);
+          createExplosion(s.group.position, 0x2ecc71, false, 0.6);
+          continue;
+        }
+
+        // 弾の消滅／位置確定 ＆ 爆弾の爆風実行
         if (collided) {
           s.group.position.copy(collidePoint);
-          createExplosion(s.group.position, s.color, s.isExSuperHoming);
+
+          // ★ 爆弾が着弾した場合（直撃・壁・床問わず）半径1.8m爆風判定と球体エフェクトを実行
+          if (s.bulletType === 'bomb') {
+            executeBombExplosion(collidePoint, s.shooterId);
+          } else {
+            createExplosion(s.group.position, s.color, s.isExSuperHoming, 1.0);
+          }
+
           scene.remove(s.group);
           spells.splice(i, 1);
         } else {
           s.group.position.copy(nextPos);
           if (s.life <= 0) {
-            createExplosion(s.group.position, s.color, s.isExSuperHoming);
+            if (s.bulletType === 'bomb') {
+              executeBombExplosion(s.group.position, s.shooterId);
+            } else {
+              createExplosion(s.group.position, s.color, s.isExSuperHoming);
+            }
             scene.remove(s.group);
             spells.splice(i, 1);
           }
@@ -3615,6 +4289,7 @@
     buildStage('temple');
     resetSpawn(false);
     updateSubtypePanelUI();
+    applySavedDataToUI();
     animate();
   </script>
 </body>
