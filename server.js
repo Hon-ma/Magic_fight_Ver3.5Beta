@@ -824,13 +824,11 @@ wss.on('connection', (socket) => {
     // --- レート戦中の切断は問答無用で切断側の反則負け ---
     // メンバーを削除する「前」に、切断時点のキル/デスでレート変動を確定させる。
     // （finishRateMatch はメンバー一覧を参照するため、削除前に呼ぶ必要がある）
-    let matchWasJustFinishedByThisDisconnect = false;
     if (room.mode === 'rate' && room.matchActive) {
       const opponentIds = Array.from(room.members.keys()).filter(id => id !== myId);
       const winnerId = opponentIds.length > 0 ? opponentIds[0] : null;
       if (winnerId) {
         finishRateMatch(joinedRoom, winnerId, myId);
-        matchWasJustFinishedByThisDisconnect = true;
       } else {
         room.matchActive = false;
       }
@@ -840,18 +838,25 @@ wss.on('connection', (socket) => {
     const wasHost = (room.hostId === myId);
     if (wasHost) room.hostId = null;
 
-    // ホストが抜けると、残ったメンバーは新規参加者を迎えられず孤立してしまう
-    // （非ホストは __join 時に room.hostId が無いと弾かれるため、部屋が永久に使えなくなる）。
-    // ただし、たった今この切断によってレート戦の決着処理が走った場合は、
-    // 残ったプレイヤーに結果画面を見せる猶予を与えるため、即座には強制切断しない
-    // （結果画面の「ロビーに戻る」操作で自然に __left へ進む）。
-    if (wasHost && room.members.size > 0 && !matchWasJustFinishedByThisDisconnect) {
-      broadcastToRoom(joinedRoom, { type: '__host_left' });
-      for (const [, m] of room.members) {
-        try { m.ws.close(); } catch (e) {}
+    // --- バグ修正: ホスト自動引き継ぎ ---
+    // 以前はホストが抜けると即座に部屋を強制解散していたが、
+    // 「ホストが抜けたら、残っているメンバーの中で最も早く参加した人が
+    // 自動的に次のホストになる」という仕様を正しく機能させる。
+    // room.members は Map であり、Map は挿入順を保持するため、
+    // 残存メンバーの先頭（values().next()）が「最も早く参加した人」になる。
+    if (wasHost && room.members.size > 0) {
+      const nextHostEntry = room.members.entries().next().value; // [id, member]
+      if (nextHostEntry) {
+        const [nextHostId, nextHostMember] = nextHostEntry;
+        room.hostId = nextHostId;
+        // 新ホストにだけ「自分がホストになった」ことを通知し、
+        // クライアント側の isHost フラグ・UI（再戦ボタン等）を更新させる。
+        if (nextHostMember.ws && nextHostMember.ws.readyState === nextHostMember.ws.OPEN) {
+          nextHostMember.ws.send(JSON.stringify({ type: '__host_migrated', newHostId: nextHostId }));
+        }
+        // 他の残存メンバーにも、誰が新ホストになったかを周知する。
+        broadcastToRoom(joinedRoom, { type: '__host_changed', newHostId: nextHostId }, nextHostId);
       }
-      rooms.delete(joinedRoom);
-      return;
     }
 
     broadcastToRoom(joinedRoom, { type: '__left', id: myId, count: room.members.size }, myId);
