@@ -493,7 +493,18 @@ wss.on('connection', (socket) => {
         }
       }
 
-      const startRate = Number.isFinite(Number(data.rate)) ? Number(data.rate) : DEFAULT_RATE;
+      // Ver5修正: レートはサーバー権威のプロフィールDBを常に正とする。
+      // クライアントがlocalStorageから申告する data.rate は、
+      // 未参加・DB無しなど profile が取得できない場合のみのフォールバックとして扱う。
+      // （以前はクライアント申告値をそのまま採用していたため、localStorageが古い/
+      //   別ブラウザ/クリア後などにプロフィール画面の表示レートと実戦のレートがズレていた）
+      let startRate;
+      if (myClientId) {
+        const joinProfile = getOrCreateProfile(myClientId);
+        startRate = joinProfile ? joinProfile.rate : DEFAULT_RATE;
+      } else {
+        startRate = Number.isFinite(Number(data.rate)) ? Number(data.rate) : DEFAULT_RATE;
+      }
 
       room.members.set(myId, {
         ws: socket,
