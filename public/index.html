@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Magic FPS Duel</title>
+  <title>3D Magic Fight</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body { overflow: hidden; background: #0a0c10; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -276,6 +276,12 @@
       background: #f1c40f; color: #111; padding: 1px 7px; border-radius: 10px; display: none;
     }
     .medal-equipped-note { font-size: 12px; color: #ffeaa7; margin-top: 10px; text-align: center; }
+    .medal-clear-row { text-align: center; margin-top: 10px; }
+    .medal-clear-btn {
+      padding: 7px 18px; font-size: 12px; background: #4b6584; color: #fff;
+      box-shadow: none; border-radius: 8px;
+    }
+    .medal-clear-btn:hover { background: #778ca3; }
 
     #profile-close-btn { margin-top: 18px; }
 
@@ -549,6 +555,7 @@
         <div class="section-title" style="margin-bottom:0;">最大2つまで装備（重複可）。達成条件を満たすと解放されます。</div>
         <div class="medal-grid" id="profile-medal-grid"></div>
         <div class="medal-equipped-note" id="profile-medal-equipped-note"></div>
+        <div class="medal-clear-row"><button type="button" class="btn medal-clear-btn" id="profile-medal-clear-btn">勲章を全て外す</button></div>
       </div>
 
       <div class="btn-row">
@@ -618,7 +625,7 @@
   </div>
 
   <div id="overlay">
-    <h1>ARENA OF MAGIC</h1>
+    <h1>3D Magic Fight</h1>
     <div class="subtitle">★通常弾5タイプ選択 ＆ 必殺技200%チャージ＋サブスタイル機能！</div>
 
     <div id="step-1" class="step-container">
@@ -774,6 +781,7 @@
         <div class="section-title" style="margin-bottom:8px;">最大2つまで装備（重複可）。プロフィール画面と共通の設定です。</div>
         <div class="medal-grid" id="ult-screen-medal-grid"></div>
         <div class="medal-equipped-note" id="ult-screen-medal-equipped-note"></div>
+        <div class="medal-clear-row"><button type="button" class="btn medal-clear-btn" id="ult-screen-medal-clear-btn">勲章を全て外す</button></div>
       </div>
 
       <!-- サブ能力選択エリア (Aタイプ / Bタイプ) -->
@@ -870,7 +878,7 @@
       red:    { name: '赤の勲章', color: '#ff4757', cond: 'レート戦で敗北する',                          effect: '最大HP+10' },
       blue:   { name: '青の勲章', color: '#0984e3', cond: 'レート戦で勝利する',                          effect: '最大MP+15' },
       yellow: { name: '黄の勲章', color: '#f1c40f', cond: '1回のレート戦で50回ジャンプする',              effect: 'ジャンプ力1.15倍' },
-      green:  { name: '緑の勲章', color: '#2ecc71', cond: '総移動距離3000m',                             effect: '移動速度1.15倍' },
+      green:  { name: '緑の勲章', color: '#2ecc71', cond: '1回のレート戦で3000m以上移動する',              effect: '移動速度1.15倍' },
       orange: { name: '橙の勲章', color: '#e17055', cond: 'レート戦でEX ULTを使う',                       effect: 'MP回復速度1.15倍' },
       purple: { name: '紫の勲章', color: '#a55eea', cond: '合計被ダメージ99以内でレート戦に勝利する',       effect: '通常弾速度1.15倍' },
       white:  { name: '白の勲章', color: '#dfe6e9', cond: 'レート1100',                                  effect: '(初回スポーン含め)リスポーン時ULT+10%チャージ' }
@@ -1089,6 +1097,17 @@
       sendProfileMessage({ type: '__profile_equip_medals', clientId: MY_CLIENT_ID, medals: equipped });
     }
 
+    // 装備中の勲章を一括で全て外す
+    function clearAllMedals() {
+      if (!myProfile) return;
+      if (!myProfile.medalsEquipped || myProfile.medalsEquipped.length === 0) return;
+
+      myProfile.medalsEquipped = [];
+      renderMedalGrid('profile-medal-grid', 'profile-medal-equipped-note');
+      renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
+      sendProfileMessage({ type: '__profile_equip_medals', clientId: MY_CLIENT_ID, medals: [] });
+    }
+
     // --- プロフィール画面の開閉・タブ切り替え ---
     function openProfileOverlay() {
       document.getElementById('profile-overlay').style.display = 'flex';
@@ -1120,20 +1139,30 @@
     });
 
     // --- 必殺技選択画面内の「勲章」タブ切り替え ---
-    document.getElementById('ult-tab-skills').addEventListener('click', () => {
+    function resetUltSectionTabs() {
       document.getElementById('ult-tab-skills').classList.add('active');
       document.getElementById('ult-tab-medals').classList.remove('active');
       document.getElementById('ult-select-pane').classList.add('active');
       document.getElementById('medal-select-pane').classList.remove('active');
-    });
+      const subtypePanel = document.getElementById('subtype-panel');
+      if (subtypePanel) subtypePanel.style.display = '';
+    }
+    document.getElementById('ult-tab-skills').addEventListener('click', resetUltSectionTabs);
     document.getElementById('ult-tab-medals').addEventListener('click', () => {
       document.getElementById('ult-tab-medals').classList.add('active');
       document.getElementById('ult-tab-skills').classList.remove('active');
       document.getElementById('medal-select-pane').classList.add('active');
       document.getElementById('ult-select-pane').classList.remove('active');
+      // 勲章タブ表示中は戦術サブ能力選択を隠す
+      const subtypePanel = document.getElementById('subtype-panel');
+      if (subtypePanel) subtypePanel.style.display = 'none';
       // 必殺技選択画面に来るまでにプロフィール未取得のケースをカバー
       if (!myProfile) requestMyProfile(); else renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
     });
+
+    // --- 勲章を全て外すボタン（プロフィール画面／必殺技選択画面の両方） ---
+    document.getElementById('profile-medal-clear-btn').addEventListener('click', clearAllMedals);
+    document.getElementById('ult-screen-medal-clear-btn').addEventListener('click', clearAllMedals);
 
     // ================================================================
     // --- Ver5: セットコメント（1〜9キー2連続押し発言 ＆ 0キー長押し一覧） ---
@@ -2836,7 +2865,8 @@
           updateRateHud();
           if (isHost) {
             const modeLabel = isRateMatch ? 'レート戦' : 'フリーバトル';
-            document.getElementById('info').innerText = `ホストとして待機中... (最大4人) [${modeLabel}]`;
+            const capacityLabel = isRateMatch ? '最大2人' : '最大4人';
+            document.getElementById('info').innerText = `ホストとして待機中... (${capacityLabel}) [${modeLabel}]`;
             setNetStatus('参加者を待っています…（合言葉を友達に伝えてください）');
             buildStage(selectedStage);
             resetSpawn(true);
@@ -2882,6 +2912,12 @@
           removeRemotePlayer(data.id);
           addBattleLog(`プレイヤーが切断しました`);
           setNetStatus(data.count > 0 ? `接続中: ${data.count}人` : '参加者を待っています…（合言葉を友達に伝えてください）');
+          return;
+        }
+
+        if (data.type === '__host_left') {
+          alert('ホストが退出したため、この部屋は解散されました。');
+          leaveGame();
           return;
         }
 
@@ -3315,6 +3351,7 @@
       clearDummies();
 
       resetStageSelectionUI('temple');
+      resetUltSectionTabs();
       ultPercent = 0.0;
       warpExpireTimer = 0;
       upgradeLevel = 1;
@@ -4587,7 +4624,7 @@
           playerPos.x = resolved.x;
           playerPos.z = resolved.z;
 
-          // Ver5: 緑の勲章（総移動距離3000m）判定用に、まとめて一定間隔でサーバーへ報告
+          // Ver5: 緑の勲章（1回のレート戦で3000m以上移動）判定用に、まとめて一定間隔でサーバーへ報告
           pendingDistanceReport += movedDist;
         }
 
@@ -4652,7 +4689,7 @@
             isDead: isDead
           });
 
-          // Ver5: 緑の勲章（総移動距離3000m）判定用に、まとめた移動距離を定期送信
+          // Ver5: 緑の勲章（1回のレート戦で3000m以上移動）判定用に、まとめた移動距離を定期送信
           distanceReportTimer += 0.033;
           if (distanceReportTimer >= DISTANCE_REPORT_INTERVAL_S && pendingDistanceReport > 0) {
             distanceReportTimer = 0;
