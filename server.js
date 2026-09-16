@@ -69,19 +69,43 @@ try {
   }
 } catch (e) {
   console.error('[profiles] 読み込み失敗、空DBで起動します:', e.message);
+  // 破損したファイルは上書き保存で失われないよう、調査・復旧用にリネーム退避しておく。
+  try {
+    if (fs.existsSync(PROFILE_DB_PATH)) {
+      const backupPath = `${PROFILE_DB_PATH}.corrupt-${Date.now()}`;
+      fs.renameSync(PROFILE_DB_PATH, backupPath);
+      console.error(`[profiles] 破損ファイルを退避しました: ${backupPath}`);
+    }
+  } catch (renameErr) {
+    console.error('[profiles] 破損ファイルの退避に失敗:', renameErr.message);
+  }
   profileDB = {};
 }
 
 let profileSaveTimer = null;
+// 一時ファイルに書いてからrenameすることで、書き込み途中のプロセス強制終了時に
+// profiles.json自体が中途半端な（JSONとして壊れた）状態になるのを防ぐ。
+function writeProfileDBToDisk() {
+  try {
+    const tmpPath = `${PROFILE_DB_PATH}.tmp-${process.pid}`;
+    fs.writeFileSync(tmpPath, JSON.stringify(profileDB), 'utf8');
+    fs.renameSync(tmpPath, PROFILE_DB_PATH);
+  } catch (e) {
+    console.error('[profiles] 保存失敗:', e.message);
+  }
+}
+function flushProfileSaveNow() {
+  if (profileSaveTimer) {
+    clearTimeout(profileSaveTimer);
+    profileSaveTimer = null;
+  }
+  writeProfileDBToDisk();
+}
 function scheduleProfileSave() {
   if (profileSaveTimer) return;
   profileSaveTimer = setTimeout(() => {
     profileSaveTimer = null;
-    try {
-      fs.writeFileSync(PROFILE_DB_PATH, JSON.stringify(profileDB), 'utf8');
-    } catch (e) {
-      console.error('[profiles] 保存失敗:', e.message);
-    }
+    writeProfileDBToDisk();
   }, PROFILE_SAVE_DEBOUNCE_MS);
 }
 
@@ -92,7 +116,11 @@ function getOrCreateProfile(clientId) {
   }
   // 旧バージョンのプロフィールに新フィールドが欠けている場合を補完
   const p = profileDB[clientId];
+  if (typeof p.rate !== 'number' || !Number.isFinite(p.rate)) p.rate = DEFAULT_RATE;
   if (!p.stats) p.stats = defaultProfile(clientId).stats;
+  for (const key of ['freeBattles', 'rateBattles', 'rateWins', 'rateLosses']) {
+    if (typeof p.stats[key] !== 'number' || !Number.isFinite(p.stats[key])) p.stats[key] = 0;
+  }
   if (!Array.isArray(p.setComments) || p.setComments.length !== 9) {
     const merged = Array(9).fill(null);
     if (Array.isArray(p.setComments)) {
@@ -104,6 +132,12 @@ function getOrCreateProfile(clientId) {
   for (const id of MEDAL_IDS) if (typeof p.medalsUnlocked[id] !== 'boolean') p.medalsUnlocked[id] = false;
   if (!Array.isArray(p.medalsEquipped)) p.medalsEquipped = [];
   if (!p.progress) p.progress = defaultProfile(clientId).progress;
+  if (typeof p.progress.totalDistanceM !== 'number' || !Number.isFinite(p.progress.totalDistanceM)) {
+    p.progress.totalDistanceM = 0;
+  }
+  if (typeof p.progress.bestRateMatchJumps !== 'number' || !Number.isFinite(p.progress.bestRateMatchJumps)) {
+    p.progress.bestRateMatchJumps = 0;
+  }
   return p;
 }
 
@@ -168,6 +202,25 @@ function getOrCreateRoom(roomName) {
     });
   }
   return rooms.get(roomName);
+}
+
+// --- バグ修正: 「部屋に1人しかいないのにレート戦中/満員と判定される」問題への対処 ---
+// 本来メンバーの削除は socket の 'close' イベントでのみ行われるが、
+// 回線不安定・タブのバックグラウンド化・ページの強制リロードなどで
+// 実際にはもう繋がっていないソケットが 'close' 未発火のまま
+// room.members に残り続けることがある（pingの死活監視サイクル分の遅延も生じる）。
+// 特に「瞬断→即再接続」のケースでは、古い（実質死んでいる）接続がMapに残ったまま
+// 新しい接続が追加されてしまい、実質1人しかいないのに人数が2人とカウントされて
+// __rate_room_busy や __room_full が誤って返ってしまう。
+// 入室可否の判定・部屋情報取得の直前で、既に閉じている（OPENでない）ソケットを
+// 確実に取り除いてから人数判定を行うことで、この誤判定を防ぐ。
+function pruneDeadMembers(room) {
+  for (const [id, member] of room.members) {
+    if (!member.ws || member.ws.readyState !== member.ws.OPEN) {
+      room.members.delete(id);
+      if (room.hostId === id) room.hostId = null;
+    }
+  }
 }
 
 function roomInfoPayload(room) {
@@ -264,6 +317,12 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
       profile.stats.rateBattles += 1;
       if (isWinner) profile.stats.rateWins += 1; else profile.stats.rateLosses += 1;
 
+      // 緑の勲章: 1回のレート戦で3000m以上移動する
+      // （プロフィールの累計移動距離 - このマッチ開始時点の基準値 = マッチ内移動距離）
+      const matchDistance = profile
+        ? Math.max(0, profile.progress.totalDistanceM - me.matchStartDistance)
+        : 0;
+
       const checks = [
         // 赤の勲章: レート戦で敗北する
         ['red', !isWinner],
@@ -271,6 +330,8 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
         ['blue', isWinner],
         // 黄の勲章: 1回のレート戦で50回ジャンプする
         ['yellow', me.matchJumps >= 50],
+        // 緑の勲章: 1回のレート戦で3000m以上移動する
+        ['green', matchDistance >= 3000],
         // 橙の勲章: レート戦でEX ULTを使う
         ['orange', me.matchUsedExUlt === true],
         // 紫の勲章: 合計被ダメージ99以内でレート戦に勝利する
@@ -313,6 +374,7 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
     me.matchJumps = 0;
     me.matchDamageTaken = 0;
     me.matchUsedExUlt = false;
+    me.matchStartDistance = profile ? profile.progress.totalDistanceM : me.matchStartDistance;
   }
 
   broadcastToRoom(roomName, {
@@ -436,6 +498,7 @@ wss.on('connection', (socket) => {
       if (!room) {
         socket.send(JSON.stringify({ type: '__room_info_result', room: roomName, exists: false }));
       } else {
+        pruneDeadMembers(room);
         socket.send(JSON.stringify({
           type: '__room_info_result',
           room: roomName,
@@ -454,15 +517,24 @@ wss.on('connection', (socket) => {
       const isRoomNew = !rooms.has(roomName);
       const room = getOrCreateRoom(roomName);
 
+      // 修正: 入室可否（レート戦中/満員）を判定する前に、既に切断済みだが
+      // 'close' イベント未到達で残っている幽霊メンバーを掃除しておく。
+      // これをしないと、実質1人しかいない部屋でも人数が2人のまま扱われ、
+      // 「この部屋はレート戦中です！」と誤って弾かれることがある。
+      pruneDeadMembers(room);
+
       if (!data.isHost && !room.hostId) {
         socket.send(JSON.stringify({ type: '__no_host' }));
         if (isRoomNew) rooms.delete(roomName);
         return;
       }
 
-      // --- レート戦は完全1vs1。既に2人揃っている、または試合進行中の部屋には
+      // --- レート戦は完全1vs1。既に2人揃っている部屋には
       //     （ホスト本人の瞬断再接続を除き）合言葉を知っていても乱入できない。
-      if (!data.isHost && room.mode === 'rate' && (room.members.size >= RATE_MATCH_MEMBERS || room.matchActive)) {
+      // 修正: 以前は room.matchActive も条件に含めていたため、ホストが1人で
+      //       入室した時点で matchActive が true になり、2人目が正常に参加
+      //       できないバグがあった。人数のみで判定するように変更。
+      if (!data.isHost && room.mode === 'rate' && room.members.size >= RATE_MATCH_MEMBERS) {
         socket.send(JSON.stringify({ type: '__rate_room_busy' }));
         socket.close();
         return;
@@ -489,7 +561,10 @@ wss.on('connection', (socket) => {
         // 進行中のレート戦や確定済みのモードを誤って上書きしないため。
         if (isRoomNew) {
           room.mode = (data.mode === 'rate') ? 'rate' : 'free';
-          room.matchActive = true;
+          // 修正: レート戦は対戦相手が揃うまで matchActive にしない
+          // （揃うタイミングは下のメンバー登録後に別途判定する）。
+          // フリーバトルは従来通りホスト参加時点でアクティブ扱いにする。
+          room.matchActive = (room.mode !== 'rate');
         }
       }
 
@@ -498,13 +573,15 @@ wss.on('connection', (socket) => {
       // 未参加・DB無しなど profile が取得できない場合のみのフォールバックとして扱う。
       // （以前はクライアント申告値をそのまま採用していたため、localStorageが古い/
       //   別ブラウザ/クリア後などにプロフィール画面の表示レートと実戦のレートがズレていた）
-      let startRate;
-      if (myClientId) {
-        const joinProfile = getOrCreateProfile(myClientId);
-        startRate = joinProfile ? joinProfile.rate : DEFAULT_RATE;
-      } else {
-        startRate = Number.isFinite(Number(data.rate)) ? Number(data.rate) : DEFAULT_RATE;
-      }
+      const joinProfile = myClientId ? getOrCreateProfile(myClientId) : null;
+      const startRate = joinProfile ? joinProfile.rate
+        : (Number.isFinite(Number(data.rate)) ? Number(data.rate) : DEFAULT_RATE);
+
+      // 緑の勲章（1回のレート戦で3000m以上移動）判定用に、
+      // このマッチ開始時点でのプロフィール累計移動距離を基準値として控えておく。
+      const joinMatchStartDistance = (room.mode === 'rate' && joinProfile)
+        ? joinProfile.progress.totalDistanceM
+        : 0;
 
       room.members.set(myId, {
         ws: socket,
@@ -518,9 +595,14 @@ wss.on('connection', (socket) => {
         matchJumps: 0,          // 黄の勲章: このレート戦でのジャンプ回数
         matchDamageTaken: 0,    // 紫の勲章: このレート戦での合計被ダメージ
         matchUsedExUlt: false,  // 橙の勲章: このレート戦でEX ULTを使用したか
-        matchStartDistance: 0,  // 緑の勲章判定用の基準値（プロフィール側の累計距離）
+        matchStartDistance: joinMatchStartDistance, // 緑の勲章判定用の基準値（プロフィール側の累計距離）
         isFirstSpawnOfSession: true // 白の勲章: 初回スポーンかどうか
       });
+
+      // レート戦は対戦相手（2人目）が揃った時点でマッチを開始扱いにする。
+      if (room.mode === 'rate' && room.members.size >= RATE_MATCH_MEMBERS) {
+        room.matchActive = true;
+      }
 
       // Ver5: フリーバトル参加回数のカウント（レート戦は決着時にカウントするためここでは対象外）
       if (room.mode === 'free' && myClientId) {
@@ -591,11 +673,10 @@ wss.on('connection', (socket) => {
         const profile = myClientId ? getOrCreateProfile(myClientId) : null;
         if (profile) {
           profile.progress.totalDistanceM += meters;
-          if (!profile.medalsUnlocked.green && profile.progress.totalDistanceM >= 3000) {
-            profile.medalsUnlocked.green = true;
-            socket.send(JSON.stringify({ type: '__medal_unlocked', medal: 'green' }));
-          }
           scheduleProfileSave();
+          // 緑の勲章（1回のレート戦で3000m以上移動する）の判定は
+          // finishRateMatch() でマッチ内移動距離（現在値-matchStartDistance）
+          // を使って行うため、ここでは累計値を積算するのみ。
         }
       }
       return;
@@ -697,6 +778,10 @@ wss.on('connection', (socket) => {
           m.matchJumps = 0;
           m.matchDamageTaken = 0;
           m.matchUsedExUlt = false;
+          // 緑の勲章判定用の基準値も、finishRateMatch側の更新に依存せず
+          // ここで直接プロフィールの最新累計距離から取り直しておく（念のための防御）
+          const rematchProfile = m.clientId ? getOrCreateProfile(m.clientId) : null;
+          m.matchStartDistance = rematchProfile ? rematchProfile.progress.totalDistanceM : m.matchStartDistance;
         }
         room.matchActive = true;
         broadcastToRoom(joinedRoom, { type: '__rematch_start' });
@@ -739,18 +824,36 @@ wss.on('connection', (socket) => {
     // --- レート戦中の切断は問答無用で切断側の反則負け ---
     // メンバーを削除する「前」に、切断時点のキル/デスでレート変動を確定させる。
     // （finishRateMatch はメンバー一覧を参照するため、削除前に呼ぶ必要がある）
+    let matchWasJustFinishedByThisDisconnect = false;
     if (room.mode === 'rate' && room.matchActive) {
       const opponentIds = Array.from(room.members.keys()).filter(id => id !== myId);
       const winnerId = opponentIds.length > 0 ? opponentIds[0] : null;
       if (winnerId) {
         finishRateMatch(joinedRoom, winnerId, myId);
+        matchWasJustFinishedByThisDisconnect = true;
       } else {
         room.matchActive = false;
       }
     }
 
     room.members.delete(myId);
-    if (room.hostId === myId) room.hostId = null;
+    const wasHost = (room.hostId === myId);
+    if (wasHost) room.hostId = null;
+
+    // ホストが抜けると、残ったメンバーは新規参加者を迎えられず孤立してしまう
+    // （非ホストは __join 時に room.hostId が無いと弾かれるため、部屋が永久に使えなくなる）。
+    // ただし、たった今この切断によってレート戦の決着処理が走った場合は、
+    // 残ったプレイヤーに結果画面を見せる猶予を与えるため、即座には強制切断しない
+    // （結果画面の「ロビーに戻る」操作で自然に __left へ進む）。
+    if (wasHost && room.members.size > 0 && !matchWasJustFinishedByThisDisconnect) {
+      broadcastToRoom(joinedRoom, { type: '__host_left' });
+      for (const [, m] of room.members) {
+        try { m.ws.close(); } catch (e) {}
+      }
+      rooms.delete(joinedRoom);
+      return;
+    }
+
     broadcastToRoom(joinedRoom, { type: '__left', id: myId, count: room.members.size }, myId);
     if (room.members.size === 0) rooms.delete(joinedRoom);
   });
@@ -770,3 +873,14 @@ setInterval(() => {
 server.listen(PORT, () => {
   console.log(`Rewind & CCD Authoritative Server listening on port ${PORT}`);
 });
+
+// --- 終了時にプロフィールDBの未保存分を確実にフラッシュする ---
+// Render等のホスティング環境ではデプロイ更新・再起動時にSIGTERMが送られる。
+// デバウンス中（直近2秒以内）の変更が失われないよう、終了前に同期保存する。
+function gracefulShutdown(signal) {
+  console.log(`[server] ${signal} を受信、プロフィールDBを保存して終了します...`);
+  flushProfileSaveNow();
+  process.exit(0);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
