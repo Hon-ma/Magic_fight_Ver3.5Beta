@@ -940,6 +940,12 @@
     // --- レート戦の試合内状態 ---
     let isRateMatch = false;      // 現在の部屋がレート戦かどうか
     let isRateMatchOver = false;  // このマッチが既に決着しているか（多重終了防止）
+    // バグ修正: 白の勲章「初回スポーン含めリスポーン時ULT+10%」が、
+    // スタートボタン押下時のresetSpawn → __joined受信時のresetSpawn（→さらに
+    // __stage_update等）と、1回の参戦フローの中でresetSpawnが複数回呼ばれることで
+    // 二重・三重にボーナスが乗ってしまっていたため、
+    // 「このマッチでの初回スポーン分はまだ未付与か」を明示的に管理する。
+    let pendingFirstSpawnUltBonus = true;
     let myKills = 0;
     let myDeaths = 0;
 
@@ -2105,9 +2111,15 @@
       nextShotExHoming = false;
 
       // Ver5: 白の勲章（初回スポーン含め、リスポーン時ULTチャージ+10%）
-      const respawnUltBonus = medalRespawnUltBonus();
-      if (respawnUltBonus > 0) {
-        ultPercent = Math.min(200, ultPercent + respawnUltBonus);
+      // バグ修正: 1回の参戦フロー中にresetSpawnが複数回呼ばれても、
+      // 「本当の死亡リスポーン」か「このマッチで初めてのスポーン」の時だけ1回付与する。
+      const shouldGrantUltBonus = isDeathRespawn || pendingFirstSpawnUltBonus;
+      if (shouldGrantUltBonus) {
+        const respawnUltBonus = medalRespawnUltBonus();
+        if (respawnUltBonus > 0) {
+          ultPercent = Math.min(200, ultPercent + respawnUltBonus);
+        }
+        pendingFirstSpawnUltBonus = false;
       }
 
       respawnInvincibleTimer = giveInvincible ? 5.0 : 0.0;
@@ -2609,6 +2621,18 @@
       if (data.type === '__profile_result') {
         if (data.ok && data.profile) {
           myProfile = data.profile;
+          // バグ修正: サーバー権威のレート（プロフィール上のレート）を
+          // ロビー表示・対戦時送信用の myRate / localStorage にも同期する。
+          // これをしないと、localStorageが古い/別ブラウザ/クリア後などの場合に
+          // プロフィール画面の表示レートと、ロビーのレート表示・実際の対戦基準レートが
+          // ズレたままになってしまう。
+          if (Number.isFinite(myProfile.rate)) {
+            myRate = myProfile.rate;
+            saveData({ rate: myRate });
+            const rateDisplay = document.getElementById('rate-display');
+            if (rateDisplay) rateDisplay.innerText = String(myRate);
+            updateRateHud();
+          }
           renderProfileUI();
         }
         return;
@@ -2874,6 +2898,9 @@
           document.getElementById('rate-result-overlay').style.display = 'none';
           document.getElementById('death-overlay').style.display = 'none';
           addBattleLog(`<span style="color:#f1c40f">★ 次のレート戦が開始されました！</span>`);
+          // バグ修正: 再戦も新たなレート戦の「初回スポーン」に該当するため、
+          // 白の勲章のULTチャージボーナスを1回だけ再度付与できるようにする。
+          pendingFirstSpawnUltBonus = true;
           resetSpawn(true, false);
           // ブラウザの仕様上、ユーザー操作なしでrequestPointerLockは呼べないため、
           // resume-overlay（クリックで再ロック）をpointerlockchangeの通常フローに任せる。
@@ -3447,6 +3474,9 @@
       myDeaths = 0;
       isRateMatch = false;
       isRateMatchOver = false;
+      // バグ修正: 新しい参戦フローの開始点なので、白の勲章の初回スポーンボーナスを
+      // このマッチで1回だけ付与できる状態に戻す。
+      pendingFirstSpawnUltBonus = true;
 
       if (gameModeChoice === 'solo') {
         buildStage('training');
