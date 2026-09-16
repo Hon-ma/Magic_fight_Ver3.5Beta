@@ -2083,28 +2083,47 @@
     function resetSpawn(giveInvincible = true, isDeathRespawn = false) {
       let s = { x: 0, z: 0 };
       if (safeSpawns.length > 0) {
-        const shuffled = [...safeSpawns].sort(() => Math.random() - 0.5);
-        let foundSafe = false;
-        for (const candidate of shuffled) {
+        // --- バグ修正: レート戦などでスポーン位置が他プレイヤーと被る問題への対処 ---
+        // 以前は各クライアントが Math.random() で独立にシャッフルした候補から
+        // 最初に衝突判定が通ったものを選んでいたため、双方が同じ（あるいは近接した）
+        // 候補を選んでしまうことがあった（特に候補数が少ないステージ・1vs1のレート戦で顕著）。
+        // 既に見えているリモートプレイヤーの現在位置からできるだけ離れた候補を
+        // 優先的に選ぶことで、初期スポーンの重複・近接を避ける。
+        const otherPositions = Object.values(remotePlayers)
+          .filter(rp => rp && rp.hasPos && rp.group)
+          .map(rp => ({ x: rp.group.position.x, z: rp.group.position.z }));
+
+        function minDistToOthers(candidate) {
+          if (otherPositions.length === 0) return Infinity;
+          let minD = Infinity;
+          for (const op of otherPositions) {
+            const dx = candidate.x - op.x;
+            const dz = candidate.z - op.z;
+            const d = Math.sqrt(dx * dx + dz * dz);
+            if (d < minD) minD = d;
+          }
+          return minD;
+        }
+
+        function isCandidateSafe(candidate) {
           const testBox = new THREE.Box3();
           testBox.min.set(candidate.x - playerRadius * 1.5, 0.5, candidate.z - playerRadius * 1.5);
           testBox.max.set(candidate.x + playerRadius * 1.5, 3.5, candidate.z + playerRadius * 1.5);
-          let collided = false;
           for (const box of colliders) {
-            if (box.intersectsBox(testBox)) {
-              collided = true;
-              break;
-            }
+            if (box.intersectsBox(testBox)) return false;
           }
-          if (!collided) {
-            s = candidate;
-            foundSafe = true;
-            break;
-          }
+          return true;
         }
-        if (!foundSafe) {
-          s = shuffled[0];
-        }
+
+        // 障害物と衝突しない候補だけを、他プレイヤーから遠い順に並べる。
+        // 同点（他プレイヤーがいない等）の場合のみランダム性を残す。
+        const safeCandidates = safeSpawns.filter(isCandidateSafe);
+        const pool = safeCandidates.length > 0 ? safeCandidates : safeSpawns;
+        const ranked = [...pool]
+          .map(c => ({ c, d: minDistToOthers(c), r: Math.random() }))
+          .sort((a, b) => (b.d - a.d) || (a.r - b.r));
+
+        s = ranked.length > 0 ? ranked[0].c : { x: 0, z: 0 };
       }
 
       playerPos.set(s.x, 2.5, s.z);
@@ -2138,6 +2157,23 @@
         upgradeLevel = 1;
       }
       nextShotExHoming = false;
+
+      // --- バグ修正: 新しい試合（初回スポーン／レート戦の再戦）開始時に
+      //     前の試合のULTゲージや強化状態が引き継がれてしまう問題への対処 ---
+      // pendingFirstSpawnUltBonus は「このresetSpawn呼び出しが、死亡リスポーンではなく
+      // “新しい試合の開始” であること」を示すフラグとして __joined / __rematch_start の
+      // 受信直後に true にセットされている。このタイミングでのみ、
+      // 試合をまたいで持ち越すべきでない状態（ULTゲージ・ワープ持続・雷速上昇など）を
+      // 明示的に0クリアする。死亡リスポーン（isDeathRespawn === true）では
+      // 従来通りULTゲージ等は維持し、この処理は行わない。
+      const isNewMatchStart = !isDeathRespawn && pendingFirstSpawnUltBonus;
+      if (isNewMatchStart) {
+        ultPercent = 0.0;
+        warpExpireTimer = 0;
+        thunderSpeedTimer = 0;
+        thunderSpeedMultiplier = 1.0;
+        nextShotExHoming = false;
+      }
 
       // Ver5: 白の勲章（初回スポーン含め、リスポーン時ULTチャージ+10%）
       // バグ修正: 1回の参戦フロー中にresetSpawnが複数回呼ばれても、
@@ -2921,6 +2957,25 @@
           return;
         }
 
+        // --- バグ修正: ホスト自動引き継ぎ ---
+        // ホストが退出した際、部屋に残っている中で最も早く参加した人に
+        // サーバー側でホスト権限が自動的に移譲される。
+        // 自分が新ホストに選ばれた場合はここで通知が届くので、
+        // isHost フラグとUI（再戦ボタンの表示権限など）を更新する。
+        if (data.type === '__host_migrated') {
+          isHost = true;
+          addBattleLog(`<span style="color:#f1c40f">★ ホストが退出したため、あなたが新しいホストになりました。</span>`);
+          document.getElementById('rate-rematch-btn').style.display = (isRateMatch && isRateMatchOver) ? 'inline-block' : 'none';
+          setNetStatus('あなたが新しいホストです');
+          return;
+        }
+
+        // 自分以外の誰かが新ホストになったことの周知（表示のみ、isHostは変更しない）
+        if (data.type === '__host_changed') {
+          addBattleLog(`<span style="color:#f1c40f">★ ホストが退出したため、新しいホストが選出されました。</span>`);
+          return;
+        }
+
         if (data.type === '__rate_match_result') {
           handleRateMatchResult(data);
           return;
@@ -3042,6 +3097,11 @@
           if (respawnInvincibleTimer > 0) {
             damage = 0;
             createExplosion(playerPos, 0xf1c40f);
+            // 診断ログ: 無敵時間中の被弾を記録しておく。
+            // 「無敵時間が終わったはずなのにダメージを受けない」再現時、
+            // devtoolsコンソールで respawnInvincibleTimer の値と、
+            // その時点までの経過フレーム数を確認できるようにする。
+            console.log(`[invincible-hit] respawnInvincibleTimer=${respawnInvincibleTimer.toFixed(2)}s rawDmg=${rawDamage} isRateMatchOver=${isRateMatchOver} isDead=${isDead}`);
           } else {
             if (fullShieldTimer > 0) {
               damage *= 0.4;
@@ -3221,7 +3281,13 @@
 
     function applyDamage(amount, attackerId, isCrit = false, isReflect = false) {
       if (myHp <= 0 || isDead || respawnInvincibleTimer > 0) return;
-      if (isRateMatchOver) return;
+      if (isRateMatchOver) {
+        // 診断ログ: 「ダメージを一切受けなくなる」症状の切り分け用。
+        // ここで止まっている場合は isRateMatchOver が意図せず true のまま
+        // 残っていることが原因なので、devtoolsコンソールで確認できる。
+        console.log(`[blocked-by-matchover] amount=${amount} isRateMatch=${isRateMatch}`);
+        return;
+      }
 
       let finalDmg = amount;
 
@@ -4320,9 +4386,13 @@
       }
 
       if (respawnInvincibleTimer > 0) {
+        // 安全弁: 本来resetSpawnで5.0を超える値がセットされることはないはずだが、
+        // 何らかの原因で異常値になっていても被害を長引かせないよう上限をクランプする。
+        if (respawnInvincibleTimer > 5.0) respawnInvincibleTimer = 5.0;
         respawnInvincibleTimer -= delta;
         document.getElementById('invincible-overlay').style.opacity = '1';
         if (respawnInvincibleTimer <= 0) {
+          respawnInvincibleTimer = 0;
           document.getElementById('invincible-overlay').style.opacity = '0';
           document.getElementById('info').innerText = '戦闘中';
         }
