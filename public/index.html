@@ -206,6 +206,114 @@
     .rr-row .rr-delta.neg { color: #ff4757; }
     #rate-result-box .btn { margin: 6px; }
 
+    /* ================================================================
+       Ver5: プロフィール画面 ＆ 勲章タブ ＆ セットコメント関連
+       ================================================================ */
+    #profile-btn {
+      position: absolute; top: 16px; left: 16px; z-index: 31;
+      padding: 9px 16px; background: rgba(15, 20, 30, 0.75); border: 2px solid #00cec9;
+      border-radius: 10px; color: #81ecec; font-size: 13px; font-weight: bold; cursor: pointer;
+      backdrop-filter: blur(4px); transition: 0.15s;
+    }
+    #profile-btn:hover { background: rgba(0, 206, 201, 0.2); transform: translateY(-1px); }
+
+    #profile-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(5, 8, 12, 0.94); display: none; align-items: center; justify-content: center;
+      z-index: 45; color: #fff; padding: 20px; overflow-y: auto;
+    }
+    #profile-box {
+      width: 100%; max-width: 720px; max-height: 88vh; overflow-y: auto;
+      background: rgba(20, 26, 36, 0.98); border: 2px solid #00cec9; border-radius: 14px;
+      padding: 26px; box-shadow: 0 8px 34px rgba(0,0,0,0.6);
+    }
+    #profile-box h2 { color: #00cec9; font-size: 22px; margin-bottom: 4px; text-shadow: 0 0 12px #00cec9; }
+    .profile-tabs { display: flex; gap: 8px; margin: 16px 0 14px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+    .profile-tab {
+      padding: 9px 16px; font-size: 13px; font-weight: bold; color: #b2bec3; cursor: pointer;
+      border-bottom: 3px solid transparent; transition: 0.15s;
+    }
+    .profile-tab.active { color: #00cec9; border-bottom-color: #00cec9; }
+    .profile-tab:hover { color: #81ecec; }
+    .profile-pane { display: none; }
+    .profile-pane.active { display: block; }
+
+    .profile-header-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .profile-header-row .input-group { min-width: 160px; }
+    .profile-stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 16px;
+    }
+    .profile-stat-card {
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(0,206,201,0.3); border-radius: 10px;
+      padding: 12px; text-align: center;
+    }
+    .profile-stat-card .val { font-size: 22px; font-weight: bold; color: #00cec9; }
+    .profile-stat-card .label { font-size: 11px; color: #b2bec3; margin-top: 2px; }
+
+    .set-comment-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+    .set-comment-slot { display: flex; flex-direction: column; gap: 3px; }
+    .set-comment-slot label { font-size: 11px; color: #ffeaa7; font-weight: bold; }
+    .set-comment-slot input {
+      padding: 8px; font-size: 12.5px; border-radius: 6px; border: 2px solid rgba(255,234,167,0.4);
+      background: #1e272e; color: #fff; outline: none;
+    }
+    .set-comment-slot input:focus { border-color: #ffeaa7; }
+
+    .medal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+    .medal-card {
+      position: relative; background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 12px; cursor: pointer; transition: 0.15s;
+    }
+    .medal-card.locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.8); }
+    .medal-card.selected { border-color: #f1c40f; box-shadow: 0 0 12px rgba(241,196,15,0.5); }
+    .medal-card:not(.locked):hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.4); }
+    .medal-card .name { font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+    .medal-card .cond { font-size: 10.5px; color: #b2bec3; margin-top: 4px; }
+    .medal-card .effect { font-size: 11px; color: #55efc4; margin-top: 4px; font-weight: bold; }
+    .medal-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .medal-count-badge {
+      position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: bold;
+      background: #f1c40f; color: #111; padding: 1px 7px; border-radius: 10px; display: none;
+    }
+    .medal-equipped-note { font-size: 12px; color: #ffeaa7; margin-top: 10px; text-align: center; }
+
+    #profile-close-btn { margin-top: 18px; }
+
+    /* セットコメントログ（通常ログと色を分けて識別しやすくする） */
+    .log-item.setcomment {
+      color: #ffeaa7; border-left: 3px solid #f1c40f; padding-left: 8px;
+      background: rgba(241, 196, 15, 0.08); font-weight: bold;
+    }
+
+    /* 勲章獲得ログ */
+    .log-item.medal {
+      font-weight: bold; border-left: 3px solid #a29bfe; padding-left: 8px;
+      background: rgba(162, 155, 254, 0.08);
+    }
+
+    /* 0キー長押しでのセットコメント一覧表示 */
+    #setcomment-overlay {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(10, 14, 20, 0.92); border: 2px solid #f1c40f; border-radius: 12px;
+      padding: 16px 20px; z-index: 25; display: none; min-width: 260px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+    }
+    #setcomment-overlay .sc-title { font-size: 13px; font-weight: bold; color: #ffeaa7; margin-bottom: 8px; text-align: center; }
+    #setcomment-overlay .sc-row { display: flex; gap: 8px; font-size: 12.5px; padding: 3px 0; color: #dfe6e9; }
+    #setcomment-overlay .sc-key { color: #f1c40f; font-weight: bold; width: 18px; flex-shrink: 0; }
+
+    /* ミニ勲章タブ（必殺技選択画面内） */
+    .ult-section-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+    .ult-section-tab {
+      padding: 6px 14px; font-size: 12px; font-weight: bold; border-radius: 8px 8px 0 0;
+      background: rgba(255,255,255,0.05); color: #b2bec3; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); border-bottom: none;
+    }
+    .ult-section-tab.active { background: rgba(0,206,201,0.15); color: #00cec9; }
+    #medal-select-pane { display: none; width: 100%; }
+    #medal-select-pane.active { display: block; }
+    #ult-select-pane { display: none; width: 100%; }
+    #ult-select-pane.active { display: block; }
+
     #esc-notice {
       position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
       background: rgba(231, 76, 60, 0.85); color: #fff; padding: 6px 18px;
@@ -401,6 +509,60 @@
   <div id="esc-notice">ESCをもう一度押すとロビーへ退出</div>
   <div id="ex-notification">🌈 EX ULT READY!! 【E】で超必殺技！</div>
 
+  <!-- Ver5: プロフィール画面 -->
+  <div id="profile-overlay">
+    <div id="profile-box">
+      <h2>👤 プロフィール</h2>
+      <div class="profile-header-row">
+        <div class="input-group" style="flex:1;">
+          <label>プレイヤー名</label>
+          <input type="text" id="profile-name-input" maxlength="10">
+        </div>
+        <div class="input-group" style="flex:1;">
+          <label>現在のレート</label>
+          <div id="profile-rate-display" class="rate-display-box">1000</div>
+        </div>
+      </div>
+
+      <div class="profile-tabs">
+        <div class="profile-tab active" data-pane="stats">📊 戦績</div>
+        <div class="profile-tab" data-pane="comments">💬 セットコメント</div>
+        <div class="profile-tab" data-pane="medals">🎖️ 勲章</div>
+      </div>
+
+      <div class="profile-pane active" id="profile-pane-stats">
+        <div class="profile-stats-grid">
+          <div class="profile-stat-card"><div class="val" id="stat-free-battles">0</div><div class="label">フリーバトル回数</div></div>
+          <div class="profile-stat-card"><div class="val" id="stat-rate-battles">0</div><div class="label">レート戦回数</div></div>
+          <div class="profile-stat-card"><div class="val" id="stat-rate-wins">0</div><div class="label">レート戦勝利数</div></div>
+          <div class="profile-stat-card"><div class="val" id="stat-rate-winrate">0%</div><div class="label">レート戦勝率</div></div>
+          <div class="profile-stat-card"><div class="val" id="stat-total-distance">0m</div><div class="label">総移動距離</div></div>
+        </div>
+      </div>
+
+      <div class="profile-pane" id="profile-pane-comments">
+        <div class="section-title" style="margin-bottom:0;">1〜9キーを2連続押しで発言（他ログと区別して黄色で表示）</div>
+        <div class="set-comment-grid" id="set-comment-grid"></div>
+      </div>
+
+      <div class="profile-pane" id="profile-pane-medals">
+        <div class="section-title" style="margin-bottom:0;">最大2つまで装備（重複可）。達成条件を満たすと解放されます。</div>
+        <div class="medal-grid" id="profile-medal-grid"></div>
+        <div class="medal-equipped-note" id="profile-medal-equipped-note"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn back" id="profile-close-btn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ver5: 試合中に0キー長押しで表示するセットコメント一覧 -->
+  <div id="setcomment-overlay">
+    <div class="sc-title">📋 セットコメント一覧（1〜9キーを2連続押しで発言）</div>
+    <div id="setcomment-overlay-list"></div>
+  </div>
+
   <div id="death-overlay">
     <h2>YOU WERE DEFEATED</h2>
     <p id="death-countdown">リスポーンまで 3 秒</p>
@@ -460,6 +622,9 @@
     <div class="subtitle">★通常弾5タイプ選択 ＆ 必殺技200%チャージ＋サブスタイル機能！</div>
 
     <div id="step-1" class="step-container">
+      <!-- Ver5: プロフィールボタン（最初の画面のみ表示） -->
+      <button id="profile-btn">👤 プロフィール</button>
+
       <div class="room-box">
         <label>合言葉（ルームID）</label>
         <input type="text" id="room-input" value="arena888" maxlength="15">
@@ -552,6 +717,11 @@
       <div class="section-title">
         <span>② 必殺技スタイルを選択 (200%でEX超強化)</span>
       </div>
+      <div class="ult-section-tabs">
+        <div class="ult-section-tab active" id="ult-tab-skills">必殺技一覧</div>
+        <div class="ult-section-tab" id="ult-tab-medals">🎖️ 勲章</div>
+      </div>
+      <div id="ult-select-pane" class="active">
       <div class="char-grid">
         <div class="char-card selected" data-ult="beam">
           <div class="name">① メガビーム <span class="cost">20%</span></div>
@@ -598,6 +768,12 @@
           <div class="desc">全敵に落雷！地上10 / 空中33+叩落+弱体+硬直。</div>
           <div class="ex-desc">【EX】地上敵にも空中と同じ大威力・全効果を発揮！</div>
         </div>
+      </div>
+      </div>
+      <div id="medal-select-pane">
+        <div class="section-title" style="margin-bottom:8px;">最大2つまで装備（重複可）。プロフィール画面と共通の設定です。</div>
+        <div class="medal-grid" id="ult-screen-medal-grid"></div>
+        <div class="medal-equipped-note" id="ult-screen-medal-equipped-note"></div>
       </div>
 
       <!-- サブ能力選択エリア (Aタイプ / Bタイプ) -->
@@ -663,6 +839,75 @@
     const SAVE_KEY = 'magicFightSaveData_v1';
     const DEFAULT_SAVED_DATA = { playerName: '魔導士A', rate: 1000 };
 
+    // ================================================================
+    // --- Ver5: プレイヤー識別用クライアントID（ブラウザ発行UUID） ---
+    // サーバー側のプロフィール（セットコメント・勲章・戦績）はこのIDで紐付けられる。
+    // ================================================================
+    const CLIENT_ID_KEY = 'magicFightClientId_v1';
+    function getOrCreateClientId() {
+      try {
+        let id = localStorage.getItem(CLIENT_ID_KEY);
+        if (!id) {
+          id = (crypto && crypto.randomUUID) ? crypto.randomUUID()
+            : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+              });
+          localStorage.setItem(CLIENT_ID_KEY, id);
+        }
+        return id;
+      } catch (e) {
+        return 'anon_' + Math.random().toString(36).slice(2, 10);
+      }
+    }
+    const MY_CLIENT_ID = getOrCreateClientId();
+
+    // ================================================================
+    // --- Ver5: 勲章マスターデータ ＆ プロフィール状態 ---
+    // ================================================================
+    const MEDAL_MASTER = {
+      red:    { name: '赤の勲章', color: '#ff4757', cond: 'レート戦で敗北する',                          effect: '最大HP+10' },
+      blue:   { name: '青の勲章', color: '#0984e3', cond: 'レート戦で勝利する',                          effect: '最大MP+15' },
+      yellow: { name: '黄の勲章', color: '#f1c40f', cond: '1回のレート戦で50回ジャンプする',              effect: 'ジャンプ力1.15倍' },
+      green:  { name: '緑の勲章', color: '#2ecc71', cond: '総移動距離3000m',                             effect: '移動速度1.15倍' },
+      orange: { name: '橙の勲章', color: '#e17055', cond: 'レート戦でEX ULTを使う',                       effect: 'MP回復速度1.15倍' },
+      purple: { name: '紫の勲章', color: '#a55eea', cond: '合計被ダメージ99以内でレート戦に勝利する',       effect: '通常弾速度1.15倍' },
+      white:  { name: '白の勲章', color: '#dfe6e9', cond: 'レート1100',                                  effect: '(初回スポーン含め)リスポーン時ULT+10%チャージ' }
+    };
+
+    // サーバーから取得した自分のプロフィール（未取得時はnull）
+    let myProfile = null;
+
+    function defaultLocalProfile() {
+      return {
+        clientId: MY_CLIENT_ID,
+        name: savedData.playerName,
+        rate: myRate,
+        stats: { freeBattles: 0, rateBattles: 0, rateWins: 0, rateLosses: 0 },
+        setComments: Array(9).fill(null),
+        medalsUnlocked: Object.fromEntries(Object.keys(MEDAL_MASTER).map(id => [id, false])),
+        medalsEquipped: [],
+        progress: { totalDistanceM: 0, bestRateMatchJumps: 0 }
+      };
+    }
+
+    // 現在装備中の勲章から効果倍率を計算するヘルパー群
+    // （重複可なので、同じ勲章を2つ選ぶと効果が重ね掛けされる）
+    function getEquippedMedals() {
+      return (myProfile && Array.isArray(myProfile.medalsEquipped)) ? myProfile.medalsEquipped : [];
+    }
+    function countEquipped(medalId) {
+      return getEquippedMedals().filter(id => id === medalId).length;
+    }
+    function medalBonusMaxHp() { return countEquipped('red') * 10; }
+    function medalBonusMaxMp() { return countEquipped('blue') * 15; }
+    function medalJumpMultiplier() { return Math.pow(1.15, countEquipped('yellow')); }
+    function medalMoveSpeedMultiplier() { return Math.pow(1.15, countEquipped('green')); }
+    function medalMpRegenMultiplier() { return Math.pow(1.15, countEquipped('orange')); }
+    function medalBulletSpeedMultiplier() { return Math.pow(1.15, countEquipped('purple')); }
+    function medalRespawnUltBonus() { return countEquipped('white') * 10; }
+
     function loadSavedData() {
       try {
         const raw = localStorage.getItem(SAVE_KEY);
@@ -705,6 +950,232 @@
       if (nameInput) nameInput.value = savedData.playerName;
       const rateDisplay = document.getElementById('rate-display');
       if (rateDisplay) rateDisplay.innerText = String(savedData.rate);
+    }
+
+    // ================================================================
+    // --- Ver5: プロフィール画面 ＆ セットコメント ＆ 勲章タブ UI ---
+    // ================================================================
+
+    function renderProfileUI() {
+      if (!myProfile) return;
+
+      // ヘッダー（名前・レート）
+      const nameInput = document.getElementById('profile-name-input');
+      if (nameInput && document.activeElement !== nameInput) nameInput.value = myProfile.name || savedData.playerName;
+      const rateDisplay = document.getElementById('profile-rate-display');
+      if (rateDisplay) rateDisplay.innerText = String(myProfile.rate ?? myRate);
+
+      // 戦績
+      const s = myProfile.stats || { freeBattles: 0, rateBattles: 0, rateWins: 0, rateLosses: 0 };
+      const winRate = s.rateBattles > 0 ? Math.round((s.rateWins / s.rateBattles) * 100) : 0;
+      const setText = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
+      setText('stat-free-battles', String(s.freeBattles || 0));
+      setText('stat-rate-battles', String(s.rateBattles || 0));
+      setText('stat-rate-wins', String(s.rateWins || 0));
+      setText('stat-rate-winrate', `${winRate}%`);
+      const distM = Math.round((myProfile.progress && myProfile.progress.totalDistanceM) || 0);
+      setText('stat-total-distance', `${distM}m`);
+
+      renderSetCommentGrid();
+      renderMedalGrid('profile-medal-grid', 'profile-medal-equipped-note');
+      renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
+    }
+
+    // --- セットコメント編集欄（プロフィール画面内） ---
+    function renderSetCommentGrid() {
+      const grid = document.getElementById('set-comment-grid');
+      if (!grid || !myProfile) return;
+      grid.innerHTML = '';
+      const comments = myProfile.setComments || Array(9).fill(null);
+      for (let i = 0; i < 9; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'set-comment-slot';
+        const label = document.createElement('label');
+        label.innerText = `${i + 1}キー`;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = 20;
+        input.placeholder = '未設定';
+        input.value = comments[i] || '';
+        input.dataset.slotIndex = String(i);
+        input.addEventListener('change', () => saveSetCommentsFromUI());
+        slot.appendChild(label);
+        slot.appendChild(input);
+        grid.appendChild(slot);
+      }
+    }
+
+    function saveSetCommentsFromUI() {
+      const grid = document.getElementById('set-comment-grid');
+      if (!grid) return;
+      const inputs = grid.querySelectorAll('input');
+      const comments = Array(9).fill(null);
+      inputs.forEach(inp => {
+        const idx = Number(inp.dataset.slotIndex);
+        const v = inp.value.trim();
+        comments[idx] = v.length > 0 ? v.slice(0, 20) : null;
+      });
+      if (myProfile) myProfile.setComments = comments;
+      sendProfileMessage({ type: '__profile_set_comments', clientId: MY_CLIENT_ID, comments });
+    }
+
+    // --- 勲章グリッド（プロフィール画面＆必殺技選択画面の両方で共通利用） ---
+    function renderMedalGrid(gridElId, noteElId) {
+      const grid = document.getElementById(gridElId);
+      if (!grid) return;
+      grid.innerHTML = '';
+      if (!myProfile) return;
+
+      const unlocked = myProfile.medalsUnlocked || {};
+      const equipped = myProfile.medalsEquipped || [];
+
+      for (const medalId of Object.keys(MEDAL_MASTER)) {
+        const meta = MEDAL_MASTER[medalId];
+        const isUnlocked = !!unlocked[medalId];
+        const equipCount = equipped.filter(id => id === medalId).length;
+
+        const card = document.createElement('div');
+        card.className = 'medal-card' + (isUnlocked ? '' : ' locked') + (equipCount > 0 ? ' selected' : '');
+        card.dataset.medal = medalId;
+
+        card.innerHTML = `
+          <div class="name"><span class="medal-swatch" style="background:${meta.color}"></span>${meta.name}${isUnlocked ? '' : ' 🔒'}</div>
+          <div class="cond">条件：${meta.cond}</div>
+          <div class="effect">効果：${isUnlocked ? meta.effect : '？？？'}</div>
+          <div class="medal-count-badge" style="display:${equipCount > 0 ? 'block' : 'none'}">×${equipCount}</div>
+        `;
+
+        if (isUnlocked) {
+          card.addEventListener('click', () => toggleMedalEquip(medalId, gridElId, noteElId));
+        }
+        grid.appendChild(card);
+      }
+
+      const note = document.getElementById(noteElId);
+      if (note) {
+        note.innerText = equipped.length > 0
+          ? `装備中: ${equipped.map(id => MEDAL_MASTER[id].name).join(' + ')}（${equipped.length}/2）`
+          : '勲章は未装備です（クリックして装備、最大2つ・重複可）';
+      }
+    }
+
+    function toggleMedalEquip(medalId, gridElId, noteElId) {
+      if (!myProfile) return;
+      let equipped = [...(myProfile.medalsEquipped || [])];
+
+      // 既に2つ選ばれている状態で同じ勲章をクリックした場合は1つ取り除く（重複解除の直感的な操作）
+      const idxLast = equipped.lastIndexOf(medalId);
+      if (equipped.length >= 2) {
+        if (idxLast >= 0) {
+          equipped.splice(idxLast, 1);
+        } else {
+          // 2枠とも埋まっていて別の勲章を選んだ場合は何もしない（先に外してもらう）
+          addBattleLog('<span style="color:#ff4757">勲章は最大2つまでです。先に装備を外してください。</span>');
+          return;
+        }
+      } else {
+        equipped.push(medalId);
+      }
+
+      myProfile.medalsEquipped = equipped;
+      renderMedalGrid('profile-medal-grid', 'profile-medal-equipped-note');
+      renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
+      sendProfileMessage({ type: '__profile_equip_medals', clientId: MY_CLIENT_ID, medals: equipped });
+    }
+
+    // --- プロフィール画面の開閉・タブ切り替え ---
+    function openProfileOverlay() {
+      document.getElementById('profile-overlay').style.display = 'flex';
+      requestMyProfile();
+    }
+    function closeProfileOverlay() {
+      document.getElementById('profile-overlay').style.display = 'none';
+    }
+
+    document.getElementById('profile-btn').addEventListener('click', openProfileOverlay);
+    document.getElementById('profile-close-btn').addEventListener('click', closeProfileOverlay);
+
+    document.querySelectorAll('.profile-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.profile-pane').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(`profile-pane-${tab.dataset.pane}`).classList.add('active');
+      });
+    });
+
+    document.getElementById('profile-name-input').addEventListener('change', (e) => {
+      const newName = e.target.value.trim().slice(0, 10) || DEFAULT_SAVED_DATA.playerName;
+      e.target.value = newName;
+      saveData({ playerName: newName });
+      applySavedDataToUI();
+      if (myProfile) myProfile.name = newName;
+      sendProfileMessage({ type: '__profile_sync_name', clientId: MY_CLIENT_ID, name: newName });
+    });
+
+    // --- 必殺技選択画面内の「勲章」タブ切り替え ---
+    document.getElementById('ult-tab-skills').addEventListener('click', () => {
+      document.getElementById('ult-tab-skills').classList.add('active');
+      document.getElementById('ult-tab-medals').classList.remove('active');
+      document.getElementById('ult-select-pane').classList.add('active');
+      document.getElementById('medal-select-pane').classList.remove('active');
+    });
+    document.getElementById('ult-tab-medals').addEventListener('click', () => {
+      document.getElementById('ult-tab-medals').classList.add('active');
+      document.getElementById('ult-tab-skills').classList.remove('active');
+      document.getElementById('medal-select-pane').classList.add('active');
+      document.getElementById('ult-select-pane').classList.remove('active');
+      // 必殺技選択画面に来るまでにプロフィール未取得のケースをカバー
+      if (!myProfile) requestMyProfile(); else renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
+    });
+
+    // ================================================================
+    // --- Ver5: セットコメント（1〜9キー2連続押し発言 ＆ 0キー長押し一覧） ---
+    // ================================================================
+    const SET_COMMENT_DOUBLE_PRESS_MS = 400; // この時間内に同じキーを2回押すと発言
+    const SET_COMMENT_HOLD_MS = 400;          // 0キーをこの時間以上押し続けると一覧表示
+    let lastDigitKeyPressed = null;
+    let lastDigitKeyTime = 0;
+    let zeroKeyDownTime = 0;
+    let zeroKeyHoldTimer = null;
+    let setCommentOverlayShown = false;
+
+    const DIGIT_KEY_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9'];
+
+    function trySendSetComment(slotIndex) {
+      if (!myProfile || !myProfile.setComments) return;
+      const text = myProfile.setComments[slotIndex];
+      if (!text) {
+        addBattleLog(`<span style="color:#b2bec3">${slotIndex + 1}キーにはセットコメントが未設定です（プロフィール画面で設定できます）</span>`, 'setcomment');
+        return;
+      }
+      const html = `<span style="color:#f1c40f">📣 ${playerName}</span>: ${escapeHtml(text)}`;
+      addBattleLog(html, 'setcomment');
+      broadcastMsg({ type: 'setcomment_log', html });
+    }
+
+    function renderSetCommentOverlayList() {
+      const list = document.getElementById('setcomment-overlay-list');
+      if (!list) return;
+      list.innerHTML = '';
+      const comments = (myProfile && myProfile.setComments) ? myProfile.setComments : Array(9).fill(null);
+      for (let i = 0; i < 9; i++) {
+        const row = document.createElement('div');
+        row.className = 'sc-row';
+        row.innerHTML = `<span class="sc-key">${i + 1}</span><span>${comments[i] ? escapeHtml(comments[i]) : '（未設定）'}</span>`;
+        list.appendChild(row);
+      }
+    }
+
+    function showSetCommentOverlay() {
+      if (setCommentOverlayShown) return;
+      setCommentOverlayShown = true;
+      renderSetCommentOverlayList();
+      document.getElementById('setcomment-overlay').style.display = 'block';
+    }
+    function hideSetCommentOverlay() {
+      setCommentOverlayShown = false;
+      document.getElementById('setcomment-overlay').style.display = 'none';
     }
 
     // --- 通常弾マスターデータ ---
@@ -1489,6 +1960,9 @@
     let playerName = "魔導士A";
     let myHp = 100;
     let myMp = 100;
+    // Ver5: 勲章による最大HP/MP補正（赤の勲章=最大HP+10、青の勲章=最大MP+15）
+    function getMaxHp() { return 100 + medalBonusMaxHp(); }
+    function getMaxMp() { return 100 + medalBonusMaxMp(); }
     let ultPercent = 0.0;
     let isOverheated = false;
     let isGuarding = false;
@@ -1603,8 +2077,8 @@
       pitch = 0;
       velocityY = 0;
       playerKnockbackVel.set(0, 0, 0);
-      myHp = 100;
-      myMp = 100;
+      myHp = getMaxHp();
+      myMp = getMaxMp();
       isDead = false;
       isOverheated = false;
       isGuarding = false;
@@ -1630,6 +2104,12 @@
       }
       nextShotExHoming = false;
 
+      // Ver5: 白の勲章（初回スポーン含め、リスポーン時ULTチャージ+10%）
+      const respawnUltBonus = medalRespawnUltBonus();
+      if (respawnUltBonus > 0) {
+        ultPercent = Math.min(200, ultPercent + respawnUltBonus);
+      }
+
       respawnInvincibleTimer = giveInvincible ? 5.0 : 0.0;
 
       beamCharging = false;
@@ -1650,18 +2130,33 @@
       document.getElementById('mp-label').innerText = 'MP (MANA)';
       document.getElementById('mp-label').style.color = '#fff';
       document.getElementById('info').innerText = giveInvincible ? '無敵時間中 (5.0s)' : '戦闘中';
+
+      // 【操作不能バグ対策】
+      // 死亡演出～リスポーンの間にタブ切り替えやフォーカス喪失などでポインターロックが
+      // 解除されているのに isDead が false に戻るタイミングで pointerlockchange が
+      // 発火しない場合、isLocked が false のまま resume-overlay も出ず操作不能になる。
+      // リスポーン時に実際のロック状態を必ず再同期し、外れていれば resume-overlay を出す。
+      isLocked = document.pointerLockElement === document.body;
+      if (!isLocked && isGameStarted) {
+        document.getElementById('resume-overlay').style.display = 'flex';
+      } else {
+        document.getElementById('resume-overlay').style.display = 'none';
+      }
     }
 
     function updateHudBars() {
+      const maxHp = getMaxHp();
+      const maxMp = getMaxMp();
+
       const hpBar = document.getElementById('hp-bar');
-      const hpPct = Math.max(0, Math.min(100, myHp));
-      hpBar.style.width = `${hpPct}%`;
-      document.getElementById('hp-text').innerText = `${Math.ceil(hpPct)} / 100`;
+      const hpClamped = Math.max(0, Math.min(maxHp, myHp));
+      hpBar.style.width = `${(hpClamped / maxHp) * 100}%`;
+      document.getElementById('hp-text').innerText = `${Math.ceil(hpClamped)} / ${maxHp}`;
 
       const mpBar = document.getElementById('mp-bar');
-      const mpPct = Math.max(0, Math.min(100, myMp));
-      mpBar.style.width = `${mpPct}%`;
-      document.getElementById('mp-text').innerText = `${Math.ceil(mpPct)} / 100`;
+      const mpClamped = Math.max(0, Math.min(maxMp, myMp));
+      mpBar.style.width = `${(mpClamped / maxMp) * 100}%`;
+      document.getElementById('mp-text').innerText = `${Math.ceil(mpClamped)} / ${maxMp}`;
 
       if (!isOverheated) {
         mpBar.classList.remove('overheat');
@@ -1733,6 +2228,7 @@
 
       const myResult = (data.results || []).find(r => r.id === myPeerId);
       const others = (data.results || []).filter(r => r.id !== myPeerId);
+      const opponentDisconnected = !!data.disconnectedId && data.disconnectedId !== myPeerId;
 
       document.getElementById('death-overlay').style.display = 'none';
 
@@ -1768,12 +2264,22 @@
         updateRateHud();
       }
 
+      // Ver5: レート戦決着で戦績・勲章解放状況が更新されるため、プロフィールを再取得しておく
+      // （newlyUnlockedMedalsの個別通知は別途 __medal_unlocked_batch で届く）
+      requestMyProfile();
+
       document.getElementById('rate-rematch-btn').style.display = isHost ? 'inline-block' : 'none';
       document.getElementById('rate-result-overlay').style.display = 'flex';
 
-      addBattleLog(isWin
-        ? `<span style="color:#55efc4">★★★ レート戦に勝利！ ★★★</span>`
-        : `<span style="color:#ff4757">レート戦に敗北…</span>`);
+      if (data.disconnectedId === myPeerId) {
+        addBattleLog(`<span style="color:#ff4757">通信が切断されたため、反則負けとなりました（ペナルティ適用）…</span>`);
+      } else if (opponentDisconnected) {
+        addBattleLog(`<span style="color:#55efc4">★★★ 相手の切断により、レート戦に勝利！ ★★★</span>`);
+      } else {
+        addBattleLog(isWin
+          ? `<span style="color:#55efc4">★★★ レート戦に勝利！ ★★★</span>`
+          : `<span style="color:#ff4757">レート戦に敗北…</span>`);
+      }
     }
 
     document.getElementById('rate-rematch-btn').addEventListener('click', () => {
@@ -2061,6 +2567,74 @@
       sendToServer(payload);
     }
 
+    // ================================================================
+    // --- Ver5: プロフィール通信 ---
+    // スタート画面（試合外）ではメインの ws が存在しないため専用の軽量接続を使い、
+    // 試合中はメインの ws（sendToServer）をそのまま使う。
+    // ================================================================
+    let profileWs = null;
+
+    function getActiveProfileSocket() {
+      // 試合中はメインのwsが有効ならそれを使う（往復を減らすため）
+      if (ws && ws.readyState === WebSocket.OPEN) return ws;
+      return (profileWs && profileWs.readyState === WebSocket.OPEN) ? profileWs : null;
+    }
+
+    function sendProfileMessage(payload, onNoConnection) {
+      const sock = getActiveProfileSocket();
+      if (sock) {
+        try { sock.send(JSON.stringify(payload)); return; } catch (e) {}
+      }
+      // メインwsも専用wsも無い場合は、専用の軽量接続を新規に張ってから送る
+      let socket;
+      try {
+        socket = new WebSocket(RELAY_SERVER_URL);
+      } catch (e) {
+        if (onNoConnection) onNoConnection();
+        return;
+      }
+      profileWs = socket;
+      socket.addEventListener('open', () => {
+        try { socket.send(JSON.stringify(payload)); } catch (e) {}
+      });
+      socket.addEventListener('message', (event) => {
+        let data;
+        try { data = JSON.parse(event.data); } catch (e) { return; }
+        handleProfileServerMessage(data);
+      });
+      socket.addEventListener('error', () => { if (onNoConnection) onNoConnection(); });
+    }
+
+    function handleProfileServerMessage(data) {
+      if (data.type === '__profile_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderProfileUI();
+        }
+        return;
+      }
+      if (data.type === '__medal_unlocked' || data.type === '__medal_unlocked_batch') {
+        const medals = data.type === '__medal_unlocked_batch' ? data.medals : [data.medal];
+        for (const medalId of medals) {
+          if (myProfile && myProfile.medalsUnlocked) myProfile.medalsUnlocked[medalId] = true;
+          const meta = MEDAL_MASTER[medalId];
+          if (meta) {
+            addBattleLog(`<span style="color:${meta.color}">🎖️ 勲章「${meta.name}」を獲得しました！</span>`, 'medal');
+          }
+        }
+        renderProfileUI();
+        return;
+      }
+    }
+
+    function requestMyProfile() {
+      sendProfileMessage({ type: '__profile_request', clientId: MY_CLIENT_ID }, () => {
+        // サーバーに接続できない場合はローカルの仮プロフィールで表示だけ行う
+        if (!myProfile) myProfile = defaultLocalProfile();
+        renderProfileUI();
+      });
+    }
+
     // --- 部屋プレビュー（「合言葉で部屋に入る」選択時に部屋の詳細を確認） ---
     let previewWs = null;
     let previewRequestSeq = 0;
@@ -2198,7 +2772,8 @@
           isHost: isHost,
           stage: stageToSend,
           mode: selectedBattleMode,
-          rate: myRate
+          rate: myRate,
+          clientId: MY_CLIENT_ID
         });
 
         if (pingIntervalTimer) clearInterval(pingIntervalTimer);
@@ -2267,6 +2842,12 @@
           return;
         }
 
+        if (data.type === '__rate_room_busy') {
+          alert('この部屋はレート戦中です！');
+          leaveGame();
+          return;
+        }
+
         if (data.type === '__joined_other') {
           addBattleLog(`新たな挑戦者が参戦しました！ (参加人数: ${data.count}人)`);
           setNetStatus(`接続中: ${data.count}人`);
@@ -2297,6 +2878,18 @@
           // ブラウザの仕様上、ユーザー操作なしでrequestPointerLockは呼べないため、
           // resume-overlay（クリックで再ロック）をpointerlockchangeの通常フローに任せる。
           document.getElementById('resume-overlay').style.display = 'flex';
+          return;
+        }
+
+        // Ver5: プロフィール関連メッセージ（プロフィール結果・勲章獲得通知）はメインwsでも受け取り得る
+        if (data.type === '__profile_result' || data.type === '__medal_unlocked' || data.type === '__medal_unlocked_batch') {
+          handleProfileServerMessage(data);
+          return;
+        }
+
+        // Ver5: セットコメントの共有ログ（他プレイヤーからの中継分）
+        if (data.type === 'setcomment_log') {
+          addBattleLog(data.html, 'setcomment');
           return;
         }
 
@@ -2454,7 +3047,7 @@
             addBattleLog(`<span style="color:#f1c40f">★ 撃破！ (${myKills}/3キル)</span>`);
           }
           const healBonus = (selectedUltType === 'heal' && selectedUltSubtype === 'B') ? 50 : 30;
-          myHp = Math.min(100, myHp + healBonus);
+          myHp = Math.min(getMaxHp(), myHp + healBonus);
           updateHudBars();
           addBattleLog(`<span style="color:#2ecc71">★ 敵撃破ボーナス: HP+${healBonus} 回復！</span>`);
         }
@@ -2575,16 +3168,23 @@
 
       if (autoHealTimer > 0) {
         if (myHp - finalDmg <= 0) {
+          const actualDmg = myHp - 1; // オートヒール不死身：実質HP1まで減った分だけが「受けたダメージ」
           myHp = 1;
           spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
           updateHudBars();
           addBattleLog(`<span style="color:#ff4757">★ オートヒール不死身発動！HP1で耐えた！</span>`);
+          // Ver5: 紫の勲章（合計被ダメージ99以内でレート戦勝利）判定用に実際の減少分を報告
+          if (isRateMatch && actualDmg > 0) sendToServer({ type: '__report_damage_taken', amount: actualDmg });
           return;
         }
       }
 
       myHp -= finalDmg;
       spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
+
+      // Ver5: 紫の勲章（合計被ダメージ99以内でレート戦勝利）判定用に、
+      // シールド・ガード等の軽減を反映した「実際に受けたダメージ」をサーバーへ報告する
+      if (isRateMatch && finalDmg > 0) sendToServer({ type: '__report_damage_taken', amount: finalDmg });
 
       if (selectedUltType === 'shield' && selectedUltSubtype === 'B' && finalDmg > 0) {
         addUltCharge(finalDmg * 0.5, false);
@@ -2832,6 +3432,10 @@
       closeRoomPreview();
       saveData({ playerName });
 
+      // Ver5: 勲章効果（最大HP/MP・リスポーンULTチャージ等）を正しく適用するため、
+      // 試合開始前に必ず自分のプロフィールを取得しておく。
+      if (!myProfile) requestMyProfile();
+
       ultPercent = 0.0;
       warpExpireTimer = 0;
       upgradeLevel = 1;
@@ -2889,15 +3493,49 @@
         }
         tryActivateUltimate();
       }
+
+      // --- Ver5: セットコメント（1〜9キー2連続押しで発言） ---
+      if (isGameStarted && isLocked && !isDead && DIGIT_KEY_CODES.includes(e.code) && !e.repeat) {
+        const now = Date.now();
+        const slotIndex = DIGIT_KEY_CODES.indexOf(e.code);
+        if (lastDigitKeyPressed === e.code && (now - lastDigitKeyTime) <= SET_COMMENT_DOUBLE_PRESS_MS) {
+          trySendSetComment(slotIndex);
+          lastDigitKeyPressed = null;
+          lastDigitKeyTime = 0;
+        } else {
+          lastDigitKeyPressed = e.code;
+          lastDigitKeyTime = now;
+        }
+      }
+
+      // --- Ver5: 0キー長押しでセットコメント一覧を表示（試合中いつでも確認可） ---
+      if (isGameStarted && isLocked && e.code === 'Digit0' && !e.repeat) {
+        zeroKeyDownTime = Date.now();
+        if (zeroKeyHoldTimer) clearTimeout(zeroKeyHoldTimer);
+        zeroKeyHoldTimer = setTimeout(() => {
+          if (keys['Digit0']) showSetCommentOverlay();
+        }, SET_COMMENT_HOLD_MS);
+      }
     });
 
-    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+      if (e.code === 'Digit0') {
+        if (zeroKeyHoldTimer) { clearTimeout(zeroKeyHoldTimer); zeroKeyHoldTimer = null; }
+        hideSetCommentOverlay();
+      }
+    });
 
     window.addEventListener('mousedown', (e) => {
       if (!isLocked || isDead) return;
       mouseButtonsState = e.buttons;
       if (e.button === 0) leftDownTime = Date.now();
     });
+
+    const SHOOT_COOLDOWN_MS = 150;
+    // スーパーマジック(MP無限)中は連射が実質無制限になってしまうため、
+    // 約3.5発/秒（≒285.7ms間隔）に頭打ちさせる専用クールダウン。
+    const SUPER_MAGIC_SHOOT_COOLDOWN_MS = 1000 / 3.5;
 
     window.addEventListener('mouseup', (e) => {
       if (!isLocked || isDead) return;
@@ -2906,7 +3544,8 @@
         const pressDuration = Date.now() - leftDownTime;
         if (pressDuration < 170 && !beamFiring && !beamCharging) {
           const now = Date.now();
-          if (now - lastShootTime >= 150) {
+          const cooldown = (superMagicTimer > 0) ? SUPER_MAGIC_SHOOT_COOLDOWN_MS : SHOOT_COOLDOWN_MS;
+          if (now - lastShootTime >= cooldown) {
             const bMeta = bulletMasterData[selectedBulletType];
             const neededMp = bMeta ? bMeta.mpCost : 25;
             if (!isOverheated && (myMp >= (neededMp * 0.5) || superMagicTimer > 0)) {
@@ -2950,6 +3589,8 @@
 
       let speed = bMeta ? bMeta.speed : 44;
       if (isExSuperHoming) speed = 36;
+      // Ver5: 紫の勲章（通常弾速度1.15倍）。EX超誘導弾は特殊弾速のため対象外
+      if (!isExSuperHoming) speed *= medalBulletSpeedMultiplier();
       const vx = dir.x * speed, vy = dir.y * speed, vz = dir.z * speed;
 
       if (nextShotExHoming) {
@@ -3054,6 +3695,8 @@
       if (isEx) {
         triggerRainbowFlash();
         broadcastLog(`<span style="color:#fd79a8">★★★ ${playerName} が 【EX ${ultName}】 を発動！！ ★★★</span>`, 'ex');
+        // Ver5: 橙の勲章（レート戦でEX ULTを使う）判定用にサーバーへ報告
+        if (isRateMatch) sendToServer({ type: '__report_ex_ult_used' });
       } else {
         broadcastLog(`<span style="color:#00cec9">${playerName}</span> が <span style="color:#f1c40f">${ultName}</span> を発動！`, 'ult');
       }
@@ -3073,7 +3716,7 @@
       } else if (selectedUltType === 'curse') {
         activateCurseShock(isEx);
       } else if (selectedUltType === 'super') {
-        myMp = 100; isOverheated = false;
+        myMp = getMaxMp(); isOverheated = false;
         document.getElementById('mp-bar').classList.remove('overheat');
         document.getElementById('mp-label').innerText = 'MP (MANA)';
         document.getElementById('mp-label').style.color = '#fff';
@@ -3101,7 +3744,7 @@
             addBattleLog(`<span style="color:#a29bfe">★ グレードアップ進化！第${upgradeLevel}段階へ到達！</span>`, 'upgrade');
           }
         } else {
-          myMp = 100;
+          myMp = getMaxMp();
           if (isOverheated) {
             isOverheated = false;
             document.getElementById('mp-bar').classList.remove('overheat');
@@ -3109,7 +3752,7 @@
             document.getElementById('mp-label').style.color = '#fff';
           }
           if (selectedUltSubtype === 'A') {
-            myHp = Math.min(100, myHp + 15);
+            myHp = Math.min(getMaxHp(), myHp + 15);
             updateHudBars();
             addBattleLog(`<span style="color:#55efc4">★ グレードアップ効果: HP+15 回復！</span>`);
           }
@@ -3235,7 +3878,7 @@
       }
 
       if (isEx) {
-        myMp = 100;
+        myMp = getMaxMp();
         if (isOverheated) {
           isOverheated = false;
           document.getElementById('mp-bar').classList.remove('overheat');
@@ -3402,8 +4045,8 @@
 
       if (selectedUltType === 'curse' && selectedUltSubtype === 'A' && hitCurseCount > 0) {
         const mpGain = hitCurseCount * 50;
-        myMp = Math.min(100, myMp + mpGain);
-        if (isOverheated && myMp >= 100) {
+        myMp = Math.min(getMaxMp(), myMp + mpGain);
+        if (isOverheated && myMp >= getMaxMp()) {
           isOverheated = false;
           document.getElementById('mp-bar').classList.remove('overheat');
           document.getElementById('mp-label').innerText = 'MP (MANA)';
@@ -3568,6 +4211,10 @@
     // --- 11. メインループ ---
     const clock = new THREE.Clock();
     let networkTimer = 0;
+    // Ver5: 総移動距離をまとめて一定間隔でサーバーへ報告するためのバッファ
+    let pendingDistanceReport = 0;
+    let distanceReportTimer = 0;
+    const DISTANCE_REPORT_INTERVAL_S = 2.0;
     const ccdRaycaster = new THREE.Raycaster();
 
     function animate() {
@@ -3616,7 +4263,7 @@
 
       if (autoHealTimer > 0) {
         autoHealTimer -= delta;
-        myHp = Math.min(100, myHp + 10 * delta);
+        myHp = Math.min(getMaxHp(), myHp + 10 * delta);
         updateHudBars();
       }
 
@@ -3856,8 +4503,9 @@
             myMp = Math.max(0, myMp - 15 * delta);
             if (myMp <= 0) triggerOverheat();
           } else {
-            myMp = Math.min(100, myMp + 10 * delta);
-            if (isOverheated && myMp >= 100) {
+            // Ver5: 橙の勲章（EX ULT使用でMP回復速度1.15倍）を通常のMP自然回復に適用
+            myMp = Math.min(getMaxMp(), myMp + 10 * medalMpRegenMultiplier() * delta);
+            if (isOverheated && myMp >= getMaxMp()) {
               isOverheated = false;
               document.getElementById('mp-bar').classList.remove('overheat');
               document.getElementById('mp-label').innerText = 'MP (MANA)';
@@ -3865,7 +4513,7 @@
             }
           }
         } else {
-          myMp = 100;
+          myMp = getMaxMp();
         }
         updateHudBars();
 
@@ -3895,18 +4543,22 @@
 
         if (moveVec.lengthSq() > 0) {
           moveVec.normalize();
-          let speed = 11;
-          if (isGuarding) speed = 5.5;
+          let speed = 11 * medalMoveSpeedMultiplier();
+          if (isGuarding) speed = 5.5 * medalMoveSpeedMultiplier();
           if (curseDebuffTimer > 0) speed *= 0.5;
-          if (beamFiring) speed = 4.0;
+          if (beamFiring) speed = 4.0 * medalMoveSpeedMultiplier();
           if (superMagicTimer > 0) speed *= 1.5;
           if (thunderSpeedTimer > 0) speed *= thunderSpeedMultiplier;
 
           const targetX = playerPos.x + moveVec.x * speed * delta;
           const targetZ = playerPos.z + moveVec.z * speed * delta;
           const resolved = resolveCollision(targetX, targetZ);
+          const movedDist = Math.hypot(resolved.x - playerPos.x, resolved.z - playerPos.z);
           playerPos.x = resolved.x;
           playerPos.z = resolved.z;
+
+          // Ver5: 緑の勲章（総移動距離3000m）判定用に、まとめて一定間隔でサーバーへ報告
+          pendingDistanceReport += movedDist;
         }
 
         if (playerKnockbackVel.lengthSq() > 0.01) {
@@ -3920,11 +4572,13 @@
 
         const isJumpHeld = !!(keys['Space'] || keys['ShiftLeft'] || keys['ShiftRight']);
         if (isJumpHeld && isGrounded && stunTimer <= 0) {
-          let jPower = 10;
-          if (curseDebuffTimer > 0) jPower = 7;
-          if (beamFiring) jPower = 5;
+          let jPower = 10 * medalJumpMultiplier();
+          if (curseDebuffTimer > 0) jPower = 7 * medalJumpMultiplier();
+          if (beamFiring) jPower = 5 * medalJumpMultiplier();
           velocityY = jPower;
           isGrounded = false;
+          // Ver5: 黄の勲章（1回のレート戦で50回ジャンプする）判定用にサーバーへ報告
+          if (isRateMatch) sendToServer({ type: '__report_jump' });
         }
 
         const prevY = playerPos.y;
@@ -3967,6 +4621,14 @@
             isInvisible: invisibilityTimer > 0,
             isDead: isDead
           });
+
+          // Ver5: 緑の勲章（総移動距離3000m）判定用に、まとめた移動距離を定期送信
+          distanceReportTimer += 0.033;
+          if (distanceReportTimer >= DISTANCE_REPORT_INTERVAL_S && pendingDistanceReport > 0) {
+            distanceReportTimer = 0;
+            sendToServer({ type: '__report_distance', meters: pendingDistanceReport });
+            pendingDistanceReport = 0;
+          }
           if (beamFiring) {
             const chestPos = new THREE.Vector3(playerPos.x, playerPos.y + 1.2, playerPos.z);
             const bQuat = myBeam.quaternion;
@@ -4290,6 +4952,8 @@
     resetSpawn(false);
     updateSubtypePanelUI();
     applySavedDataToUI();
+    // Ver5: ページ読み込み時点で自分のプロフィール（勲章・セットコメント・戦績）を先読みしておく
+    requestMyProfile();
     animate();
   </script>
 </body>
