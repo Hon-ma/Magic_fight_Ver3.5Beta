@@ -649,7 +649,7 @@
       <div class="input-row">
         <div class="input-group">
           <label>プレイヤー名</label>
-          <input type="text" id="name-input" maxlength="10" value="魔導士A">
+          <div id="name-input-display" class="rate-display-box" style="cursor:pointer;" title="クリックでプロフィール画面へ">魔導士A</div>
         </div>
         <div class="input-group">
           <label>現在のレート</label>
@@ -960,8 +960,9 @@
     function applySavedDataToUI() {
       savedData = loadSavedData();
       myRate = savedData.rate;
-      const nameInput = document.getElementById('name-input');
-      if (nameInput) nameInput.value = savedData.playerName;
+      // プレイヤー名はプロフィール画面のみで編集可能。ここは表示のみ（クリックでプロフィールへ）。
+      const nameDisplay = document.getElementById('name-input-display');
+      if (nameDisplay) nameDisplay.innerText = (myProfile && myProfile.name) || savedData.playerName;
       const rateDisplay = document.getElementById('rate-display');
       if (rateDisplay) rateDisplay.innerText = String(savedData.rate);
     }
@@ -1119,6 +1120,8 @@
 
     document.getElementById('profile-btn').addEventListener('click', openProfileOverlay);
     document.getElementById('profile-close-btn').addEventListener('click', closeProfileOverlay);
+    const nameInputDisplayEl = document.getElementById('name-input-display');
+    if (nameInputDisplayEl) nameInputDisplayEl.addEventListener('click', openProfileOverlay);
 
     document.querySelectorAll('.profile-tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -1133,8 +1136,8 @@
       const newName = e.target.value.trim().slice(0, 10) || DEFAULT_SAVED_DATA.playerName;
       e.target.value = newName;
       saveData({ playerName: newName });
-      applySavedDataToUI();
       if (myProfile) myProfile.name = newName;
+      applySavedDataToUI();
       sendProfileMessage({ type: '__profile_sync_name', clientId: MY_CLIENT_ID, name: newName });
     });
 
@@ -2698,6 +2701,14 @@
             if (rateDisplay) rateDisplay.innerText = String(myRate);
             updateRateHud();
           }
+          // バグ修正: 名前も同様にサーバー権威のプロフィール名をローカルへ同期する。
+          // これをしないと、対戦セットアップ画面の名前表示が古いまま
+          // （localStorage側の値）になり、実際に対戦へ送られる playerName と
+          // プロフィール画面の名前がズレる原因になっていた。
+          if (typeof myProfile.name === 'string' && myProfile.name) {
+            saveData({ playerName: myProfile.name });
+          }
+          applySavedDataToUI();
           renderProfileUI();
         }
         return;
@@ -3557,10 +3568,10 @@
     });
 
     document.getElementById('start-btn').addEventListener('click', () => {
-      playerName = document.getElementById('name-input').value.trim() || '魔導士';
+      // プレイヤー名はプロフィール画面で設定した名前を唯一の情報源として使う。
+      playerName = (myProfile && myProfile.name) || savedData.playerName || '魔導士';
       const room = document.getElementById('room-input').value.trim() || 'arena888';
       closeRoomPreview();
-      saveData({ playerName });
 
       // Ver5: 勲章効果（最大HP/MP・リスポーンULTチャージ等）を正しく適用するため、
       // 試合開始前に必ず自分のプロフィールを取得しておく。
