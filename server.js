@@ -3,6 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const { Redis } = require('@upstash/redis');
 
 const PORT = process.env.PORT || 3000;
 const MAX_MEMBERS_PER_ROOM = 4;
@@ -29,6 +30,20 @@ const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'))
 // ================================================================
 const PROFILE_DB_PATH = path.join(__dirname, 'profiles.json');
 const PROFILE_SAVE_DEBOUNCE_MS = 2000;
+const REDIS_PROFILE_KEY = 'magicfight:profiles';
+
+// Upstash Redis（REST API方式・接続維持不要でRenderのスリープと相性が良い）。
+// 環境変数が無い場合はnullのままにし、ローカルファイル保存のみで動作させる
+// （開発環境やUpstash未設定時のフォールバック）。
+const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+  ? new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+  : null;
+if (!redis) {
+  console.warn('[profiles] UPSTASH_REDIS_REST_URL/TOKEN が未設定のため、ローカルファイル保存のみで動作します。');
+}
 
 const MEDAL_IDS = ['red', 'blue', 'yellow', 'green', 'orange', 'purple', 'white'];
 
@@ -62,37 +77,73 @@ function defaultProfile(clientId) {
 }
 
 let profileDB = {};
-try {
-  if (fs.existsSync(PROFILE_DB_PATH)) {
-    const raw = fs.readFileSync(PROFILE_DB_PATH, 'utf8');
-    profileDB = JSON.parse(raw);
-  }
-} catch (e) {
-  console.error('[profiles] 読み込み失敗、空DBで起動します:', e.message);
-  // 破損したファイルは上書き保存で失われないよう、調査・復旧用にリネーム退避しておく。
+
+// ローカルファイルからの読み込み（Upstash未設定時 or Upstash読み込み失敗時のフォールバック）
+function loadProfileDBFromLocalFile() {
   try {
     if (fs.existsSync(PROFILE_DB_PATH)) {
-      const backupPath = `${PROFILE_DB_PATH}.corrupt-${Date.now()}`;
-      fs.renameSync(PROFILE_DB_PATH, backupPath);
-      console.error(`[profiles] 破損ファイルを退避しました: ${backupPath}`);
+      const raw = fs.readFileSync(PROFILE_DB_PATH, 'utf8');
+      return JSON.parse(raw);
     }
-  } catch (renameErr) {
-    console.error('[profiles] 破損ファイルの退避に失敗:', renameErr.message);
+  } catch (e) {
+    console.error('[profiles] ローカルファイル読み込み失敗:', e.message);
+    // 破損したファイルは上書き保存で失われないよう、調査・復旧用にリネーム退避しておく。
+    try {
+      if (fs.existsSync(PROFILE_DB_PATH)) {
+        const backupPath = `${PROFILE_DB_PATH}.corrupt-${Date.now()}`;
+        fs.renameSync(PROFILE_DB_PATH, backupPath);
+        console.error(`[profiles] 破損ファイルを退避しました: ${backupPath}`);
+      }
+    } catch (renameErr) {
+      console.error('[profiles] 破損ファイルの退避に失敗:', renameErr.message);
+    }
   }
-  profileDB = {};
+  return {};
+}
+
+// サーバー起動時に一度だけ呼ぶ。Upstashがあればそちらを正として読み込み、
+// 失敗時やUpstash未設定時はローカルファイルにフォールバックする。
+// index.jsの最後でこれをawaitしてからHTTPサーバーをlistenする。
+async function loadProfileDBOnStartup() {
+  if (redis) {
+    try {
+      const remote = await redis.get(REDIS_PROFILE_KEY);
+      if (remote && typeof remote === 'object') {
+        profileDB = remote;
+        console.log(`[profiles] Upstashから読み込み完了（${Object.keys(profileDB).length}件）`);
+        return;
+      }
+      console.log('[profiles] Upstashにデータなし。新規DBとして開始します。');
+      profileDB = {};
+      return;
+    } catch (e) {
+      console.error('[profiles] Upstash読み込み失敗、ローカルファイルにフォールバックします:', e.message);
+    }
+  }
+  profileDB = loadProfileDBFromLocalFile();
 }
 
 let profileSaveTimer = null;
 // 一時ファイルに書いてからrenameすることで、書き込み途中のプロセス強制終了時に
 // profiles.json自体が中途半端な（JSONとして壊れた）状態になるのを防ぐ。
-function writeProfileDBToDisk() {
+// Upstash設定時はこちらは「保険」として並行して残す（Upstash側がメイン）。
+function writeProfileDBToLocalFile() {
   try {
     const tmpPath = `${PROFILE_DB_PATH}.tmp-${process.pid}`;
     fs.writeFileSync(tmpPath, JSON.stringify(profileDB), 'utf8');
     fs.renameSync(tmpPath, PROFILE_DB_PATH);
   } catch (e) {
-    console.error('[profiles] 保存失敗:', e.message);
+    console.error('[profiles] ローカル保存失敗:', e.message);
   }
+}
+// Upstashへの保存。呼び出し元は同期関数のままでよいよう、Promiseは内部で処理し
+// 例外を外に投げない（投げっぱなしで呼ばれても落ちないようにする）。
+function writeProfileDBToDisk() {
+  writeProfileDBToLocalFile(); // ローカルにも常に保険で保存しておく
+  if (!redis) return;
+  redis.set(REDIS_PROFILE_KEY, profileDB).catch((e) => {
+    console.error('[profiles] Upstash保存失敗（ローカルファイルには保存済み）:', e.message);
+  });
 }
 function flushProfileSaveNow() {
   if (profileSaveTimer) {
@@ -875,16 +926,39 @@ setInterval(() => {
   });
 }, 25000);
 
-server.listen(PORT, () => {
-  console.log(`Rewind & CCD Authoritative Server listening on port ${PORT}`);
+// Upstashからプロフィールデータを読み込み終えてからlistenを開始する。
+// こうしないと、起動直後のアクセスが「空のprofileDB」を見てしまう可能性がある。
+loadProfileDBOnStartup().then(() => {
+  server.listen(PORT, () => {
+    console.log(`Rewind & CCD Authoritative Server listening on port ${PORT}`);
+  });
+}).catch((e) => {
+  console.error('[profiles] 起動時読み込みで致命的エラー、空DBで起動します:', e.message);
+  server.listen(PORT, () => {
+    console.log(`Rewind & CCD Authoritative Server listening on port ${PORT}`);
+  });
 });
 
 // --- 終了時にプロフィールDBの未保存分を確実にフラッシュする ---
 // Render等のホスティング環境ではデプロイ更新・再起動時にSIGTERMが送られる。
-// デバウンス中（直近2秒以内）の変更が失われないよう、終了前に同期保存する。
-function gracefulShutdown(signal) {
+// デバウンス中（直近2秒以内）の変更が失われないよう、終了前に保存を完了させる。
+// Upstashへの書き込みは非同期のため、完了を待ってからプロセスを終了する
+// （待たずにexitすると、書き込み中にプロセスが切られてデータが失われる恐れがある）。
+async function gracefulShutdown(signal) {
   console.log(`[server] ${signal} を受信、プロフィールDBを保存して終了します...`);
-  flushProfileSaveNow();
+  if (profileSaveTimer) {
+    clearTimeout(profileSaveTimer);
+    profileSaveTimer = null;
+  }
+  writeProfileDBToLocalFile();
+  if (redis) {
+    try {
+      await redis.set(REDIS_PROFILE_KEY, profileDB);
+      console.log('[profiles] Upstashへの終了時保存が完了しました。');
+    } catch (e) {
+      console.error('[profiles] 終了時のUpstash保存に失敗（ローカルファイルには保存済み）:', e.message);
+    }
+  }
   process.exit(0);
 }
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
