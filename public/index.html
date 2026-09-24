@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Magic Fight</title>
+  <meta name="game-version" content="Ver6">
+  <title>3D Magic Fight - Ver6</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body { overflow: hidden; background: #0a0c10; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -207,7 +208,7 @@
     #rate-result-box .btn { margin: 6px; }
 
     /* ================================================================
-       Ver5: プロフィール画面 ＆ 勲章タブ ＆ セットコメント関連
+       Ver5: プロフィール画面 ＆ セットコメント関連
        ================================================================ */
     #profile-btn {
       position: absolute; top: 16px; left: 16px; z-index: 31;
@@ -222,6 +223,292 @@
       background: rgba(5, 8, 12, 0.94); display: none; align-items: center; justify-content: center;
       z-index: 45; color: #fff; padding: 20px; overflow-y: auto;
     }
+
+    /* ================================================================
+       Phase2: ショップ画面（通常弾・ULT・戦術タイプの買い切り購入）
+       ================================================================ */
+    #shop-btn {
+      position: absolute; top: 16px; left: 158px; z-index: 31;
+      padding: 9px 16px; background: rgba(15, 20, 30, 0.75); border: 2px solid #ffd93d;
+      border-radius: 10px; color: #ffe89a; font-size: 13px; font-weight: bold; cursor: pointer;
+      backdrop-filter: blur(4px); transition: 0.15s;
+    }
+    #shop-btn:hover { background: rgba(255, 217, 61, 0.2); transform: translateY(-1px); }
+
+    #shop-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(5, 8, 12, 0.94); display: none; align-items: center; justify-content: center;
+      z-index: 46; color: #fff; padding: 20px; overflow-y: auto;
+    }
+    #shop-box {
+      width: 100%; max-width: 760px; max-height: 88vh; overflow-y: auto;
+      background: rgba(20, 26, 36, 0.98); border: 2px solid #ffd93d; border-radius: 14px;
+      padding: 26px; box-shadow: 0 8px 34px rgba(0,0,0,0.6);
+    }
+    #shop-box h2 { color: #ffd93d; font-size: 22px; margin-bottom: 4px; text-shadow: 0 0 12px #ffd93d; }
+    #shop-coin-row {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(255, 217, 61, 0.1); border: 1px solid rgba(255, 217, 61, 0.35);
+      border-radius: 10px; padding: 10px 16px; margin-top: 14px; font-size: 14px;
+    }
+    #shop-coin-value { font-size: 20px; font-weight: bold; color: #ffd93d; }
+    .shop-tabs { display: flex; gap: 8px; margin: 16px 0 14px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+    .shop-tab {
+      padding: 8px 14px; font-size: 13px; color: #b2bec3; cursor: pointer;
+      border-bottom: 2px solid transparent; transition: 0.15s;
+    }
+    .shop-tab.active { color: #ffd93d; border-bottom-color: #ffd93d; }
+    .shop-tab:hover { color: #ffe89a; }
+    .shop-pane { display: none; }
+    .shop-pane.active { display: block; }
+    .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; }
+    .shop-item {
+      background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .shop-item.owned { border-color: #55efc4; background: rgba(85, 239, 196, 0.08); }
+    .shop-item.blocked { opacity: 0.55; }
+    .shop-item .si-name { font-size: 13px; font-weight: bold; color: #ffeaa7; }
+    .shop-item .si-desc { font-size: 10.5px; color: #b2bec3; line-height: 1.35; flex-grow: 1; }
+    .shop-item .si-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .shop-item .si-price { font-size: 12px; color: #ffd93d; font-weight: bold; }
+    .shop-item .si-owned-tag { font-size: 11.5px; color: #55efc4; font-weight: bold; }
+    .shop-buy-btn {
+      padding: 6px 14px; border-radius: 7px; border: none; cursor: pointer;
+      background: #ffd93d; color: #2d3436; font-weight: bold; font-size: 12px; transition: 0.15s;
+    }
+    .shop-buy-btn:hover:not(:disabled) { background: #ffe89a; }
+    .shop-buy-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; cursor: not-allowed; }
+    .shop-note { font-size: 11.5px; color: #b2bec3; margin-bottom: 12px; line-height: 1.5; }
+    #shop-message { min-height: 20px; font-size: 13px; font-weight: bold; margin-top: 12px; text-align: center; }
+    #shop-message.ok { color: #55efc4; }
+    #shop-message.ng { color: #ff7675; }
+    .shop-random-box {
+      background: rgba(162, 155, 254, 0.1); border: 1.5px solid #a29bfe; border-radius: 10px;
+      padding: 14px 16px; margin-bottom: 14px; display: flex; justify-content: space-between;
+      align-items: center; gap: 12px;
+    }
+    .shop-random-box .srb-title { font-size: 13px; font-weight: bold; color: #a29bfe; }
+    .shop-random-box .srb-desc { font-size: 10.5px; color: #b2bec3; margin-top: 3px; }
+
+    /* 選択画面での未所持ロック表示 */
+    .bullet-card.locked, .char-card.locked, .subtype-card.locked {
+      opacity: 0.4; cursor: not-allowed; filter: grayscale(0.85);
+    }
+    .bullet-card.locked:hover, .char-card.locked:hover, .subtype-card.locked:hover {
+      transform: none; border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05);
+    }
+    .lock-tag { font-size: 9px; background: #636e72; color: #dfe6e9; padding: 1px 5px; border-radius: 6px; }
+
+    /* ================================================================
+       Phase3: ガチャ画面（破片ガチャ・万能破片・所持在庫）
+       ================================================================ */
+    #gacha-btn {
+      position: absolute; top: 16px; left: 300px; z-index: 31;
+      padding: 9px 16px; background: rgba(15, 20, 30, 0.75); border: 2px solid #a29bfe;
+      border-radius: 10px; color: #cdb9fe; font-size: 13px; font-weight: bold; cursor: pointer;
+      backdrop-filter: blur(4px); transition: 0.15s;
+    }
+    #gacha-btn:hover { background: rgba(162, 155, 254, 0.2); transform: translateY(-1px); }
+
+    #gacha-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(5, 8, 12, 0.94); display: none; align-items: center; justify-content: center;
+      z-index: 47; color: #fff; padding: 20px; overflow-y: auto;
+    }
+    #gacha-box {
+      width: 100%; max-width: 760px; max-height: 88vh; overflow-y: auto;
+      background: rgba(20, 26, 36, 0.98); border: 2px solid #a29bfe; border-radius: 14px;
+      padding: 26px; box-shadow: 0 8px 34px rgba(0,0,0,0.6);
+    }
+    #gacha-box h2 { color: #a29bfe; font-size: 22px; margin-bottom: 4px; text-shadow: 0 0 12px #a29bfe; }
+    #gacha-coin-row {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(162, 155, 254, 0.1); border: 1px solid rgba(162, 155, 254, 0.35);
+      border-radius: 10px; padding: 10px 16px; margin-top: 14px; font-size: 14px;
+    }
+    #gacha-coin-value { font-size: 20px; font-weight: bold; color: #a29bfe; }
+    #gacha-pity-row {
+      margin-top: 10px; font-size: 11.5px; color: #b2bec3;
+    }
+    #gacha-pity-bar-outer {
+      width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-top: 4px; overflow: hidden;
+    }
+    #gacha-pity-bar-inner {
+      height: 100%; background: linear-gradient(90deg, #a29bfe, #fd79a8); border-radius: 4px; transition: width 0.3s;
+    }
+    .gacha-pull-row { display: flex; gap: 10px; margin: 16px 0; }
+    .gacha-pull-btn {
+      flex: 1; padding: 12px; border-radius: 10px; border: none; cursor: pointer;
+      background: #a29bfe; color: #1e1b2e; font-weight: bold; font-size: 14px; transition: 0.15s;
+    }
+    .gacha-pull-btn:hover:not(:disabled) { background: #cdb9fe; }
+    .gacha-pull-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; cursor: not-allowed; }
+    #gacha-message { min-height: 20px; font-size: 13px; font-weight: bold; margin-bottom: 10px; text-align: center; }
+    #gacha-message.ok { color: #55efc4; }
+    #gacha-message.ng { color: #ff7675; }
+
+    #gacha-result-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; max-height: 220px; overflow-y: auto; }
+    .gacha-result-row {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px; padding: 8px 12px; font-size: 12.5px;
+    }
+    .gacha-result-row.rare {
+      border-color: #ffd93d; background: rgba(255, 217, 61, 0.1);
+    }
+    .gacha-result-row .grr-tag {
+      font-size: 9.5px; padding: 1px 6px; border-radius: 6px; background: #636e72; color: #dfe6e9; margin-right: 6px;
+    }
+    .gacha-result-row.rare .grr-tag { background: #ffd93d; color: #2d3436; }
+
+    .gacha-section-title { font-size: 13px; color: #cdb9fe; font-weight: bold; margin: 18px 0 10px; }
+    #gacha-gear-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+    .gacha-gear-item {
+      background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.15);
+      border-radius: 8px; padding: 8px 10px; font-size: 10.5px;
+    }
+    .gacha-gear-item.has-completed { border-color: #55efc4; }
+    .gacha-gear-item .ggi-name { font-weight: bold; color: #ffeaa7; font-size: 11px; margin-bottom: 3px; }
+    .gacha-gear-item .ggi-nums { color: #b2bec3; }
+    .gacha-gear-item .ggi-nums .completed-count { color: #55efc4; font-weight: bold; }
+
+    #gacha-universal-row {
+      display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 12px;
+    }
+    #gacha-universal-value { color: #a29bfe; font-weight: bold; }
+    #gacha-universal-select { padding: 5px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: #1e1b2e; color: #fff; font-size: 11.5px; }
+    #gacha-universal-use-btn {
+      padding: 5px 12px; border-radius: 6px; border: none; cursor: pointer;
+      background: #a29bfe; color: #1e1b2e; font-weight: bold; font-size: 11.5px;
+    }
+    #gacha-universal-use-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; cursor: not-allowed; }
+
+    /* ================================================================
+       Phase4: ギア装備画面（メイン1＋サブ0〜3、装備コスト・キャッシュバック）
+       ================================================================ */
+    #gear-btn {
+      position: absolute; top: 16px; left: 400px; z-index: 31;
+      padding: 9px 16px; background: rgba(15, 20, 30, 0.75); border: 2px solid #55efc4;
+      border-radius: 10px; color: #a4f5df; font-size: 13px; font-weight: bold; cursor: pointer;
+      backdrop-filter: blur(4px); transition: 0.15s;
+    }
+    #gear-btn:hover { background: rgba(85, 239, 196, 0.2); transform: translateY(-1px); }
+
+    #quest-btn {
+      position: absolute; top: 16px; left: 540px; z-index: 31;
+      padding: 9px 16px; background: rgba(15, 20, 30, 0.75); border: 2px solid #74b9ff;
+      border-radius: 10px; color: #a9d8ff; font-size: 13px; font-weight: bold; cursor: pointer;
+      backdrop-filter: blur(4px); transition: 0.15s;
+    }
+    #quest-btn:hover { background: rgba(116, 185, 255, 0.2); transform: translateY(-1px); }
+
+    #quest-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(5, 8, 12, 0.95); display: none; align-items: center; justify-content: center;
+      z-index: 49; color: #fff; padding: 20px; overflow-y: auto;
+    }
+    #quest-box {
+      width: 100%; max-width: 900px; max-height: 90vh; overflow-y: auto;
+      background: rgba(20, 26, 36, 0.98); border: 2px solid #74b9ff; border-radius: 14px;
+      padding: 24px; box-shadow: 0 8px 34px rgba(0,0,0,0.65);
+    }
+    #quest-box h2 { color: #74b9ff; font-size: 22px; margin-bottom: 12px; text-shadow: 0 0 12px #74b9ff; }
+    #quest-login-card {
+      background: rgba(116, 185, 255, 0.08); border: 1.5px solid rgba(116, 185, 255, 0.35);
+      border-radius: 12px; padding: 14px; margin-bottom: 16px;
+    }
+    #quest-login-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+    #quest-login-title { color:#a9d8ff; font-weight:bold; font-size:14px; }
+    #quest-login-status { color:#b2bec3; font-size:11px; }
+    #quest-login-grid { display:grid; grid-template-columns:repeat(7, minmax(70px, 1fr)); gap:7px; }
+    .quest-login-day { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:8px 5px; text-align:center; }
+    .quest-login-day.current { border-color:#74b9ff; box-shadow:0 0 8px rgba(116,185,255,0.25); }
+    .quest-login-day.claimed { border-color:#55efc4; background:rgba(85,239,196,0.08); }
+    .quest-login-day-num { font-weight:bold; font-size:11px; color:#dfe6e9; }
+    .quest-login-day-reward { margin-top:4px; font-size:10px; color:#ffeaa7; line-height:1.35; }
+    #quest-login-message { min-height:18px; margin-top:9px; text-align:center; font-size:12px; font-weight:bold; }
+    #quest-login-message.ok { color:#55efc4; }
+    #quest-login-message.ng { color:#ff7675; }
+    #quest-login-claim-btn { margin-top:10px; width:100%; }
+    .quest-tabs { display:flex; gap:8px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.12); }
+    .quest-tab { padding:8px 14px; font-size:13px; color:#b2bec3; cursor:pointer; border-bottom:2px solid transparent; }
+    .quest-tab.active { color:#74b9ff; border-bottom-color:#74b9ff; }
+    .quest-list { display:none; flex-direction:column; gap:8px; }
+    .quest-list.active { display:flex; }
+    .quest-item { background:rgba(255,255,255,0.04); border:1.5px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px 12px; }
+    .quest-item.completed { border-color:rgba(85,239,196,0.55); background:rgba(85,239,196,0.07); }
+    .quest-item.claimed { opacity:0.58; }
+    .quest-row-top { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .quest-title { font-size:12px; font-weight:bold; color:#ffeaa7; }
+    .quest-reward { font-size:11px; color:#ffd93d; font-weight:bold; white-space:nowrap; }
+    .quest-progress-row { display:flex; align-items:center; gap:8px; margin-top:7px; }
+    .quest-progress-bg { flex:1; height:8px; background:rgba(255,255,255,0.09); border-radius:5px; overflow:hidden; }
+    .quest-progress-fill { height:100%; width:0%; background:linear-gradient(90deg,#74b9ff,#55efc4); }
+    .quest-progress-text { width:85px; text-align:right; font-size:10px; color:#b2bec3; }
+    .quest-claim-btn { margin-top:8px; padding:5px 12px; border-radius:7px; border:none; cursor:pointer; background:#74b9ff; color:#102030; font-weight:bold; font-size:11px; }
+    .quest-claim-btn:disabled { background:rgba(255,255,255,0.12); color:#74808a; cursor:not-allowed; }
+    #quest-message { min-height:20px; text-align:center; margin-top:10px; font-size:12px; font-weight:bold; }
+    #quest-message.ok { color:#55efc4; }
+    #quest-message.ng { color:#ff7675; }
+    #quest-period { font-size:10.5px; color:#74808a; margin-bottom:8px; }
+    @media (max-width: 760px) {
+      #quest-login-grid { grid-template-columns:repeat(4, minmax(70px, 1fr)); }
+    }
+
+    #gear-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(5, 8, 12, 0.94); display: none; align-items: center; justify-content: center;
+      z-index: 48; color: #fff; padding: 20px; overflow-y: auto;
+    }
+    #gear-box {
+      width: 100%; max-width: 820px; max-height: 88vh; overflow-y: auto;
+      background: rgba(20, 26, 36, 0.98); border: 2px solid #55efc4; border-radius: 14px;
+      padding: 26px; box-shadow: 0 8px 34px rgba(0,0,0,0.6);
+    }
+    #gear-box h2 { color: #55efc4; font-size: 22px; margin-bottom: 4px; text-shadow: 0 0 12px #55efc4; }
+    #gear-coin-row {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(85, 239, 196, 0.1); border: 1px solid rgba(85, 239, 196, 0.35);
+      border-radius: 10px; padding: 10px 16px; margin: 14px 0; font-size: 14px;
+    }
+    #gear-coin-value { font-size: 20px; font-weight: bold; color: #55efc4; }
+
+    .gear-section-title { font-size: 13px; color: #a4f5df; font-weight: bold; margin: 16px 0 10px; }
+    #gear-equipped-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .gear-slot-card {
+      width: 150px; min-height: 92px; background: rgba(255,255,255,0.05);
+      border: 2px dashed rgba(255,255,255,0.2); border-radius: 10px; padding: 10px;
+      display: flex; flex-direction: column; justify-content: space-between; font-size: 11px;
+    }
+    .gear-slot-card.filled { border-style: solid; border-color: #55efc4; background: rgba(85, 239, 196, 0.08); }
+    .gear-slot-card .gsc-label { font-size: 9.5px; color: #b2bec3; }
+    .gear-slot-card .gsc-name { font-weight: bold; color: #ffeaa7; font-size: 12px; margin: 4px 0; }
+    .gear-slot-card .gsc-empty { color: #74808a; text-align: center; margin: auto; }
+    .gear-slot-card .gsc-unequip-btn {
+      align-self: flex-end; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer;
+      background: #ff7675; color: #2d3436; font-weight: bold; font-size: 10px;
+    }
+    .gear-slot-card .gsc-unequip-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; cursor: not-allowed; }
+
+    #gear-inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+    .gear-inv-item {
+      background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 10px 12px; font-size: 11px; display: flex; flex-direction: column; gap: 5px;
+    }
+    .gear-inv-item.subonly { border-left: 3px solid #fd79a8; }
+    .gear-inv-item .gii-name { font-weight: bold; color: #ffeaa7; font-size: 12px; }
+    .gii-desc-main, .gii-desc-sub { color: #b2bec3; font-size: 9.5px; line-height: 1.4; }
+    .gii-count { color: #55efc4; font-weight: bold; font-size: 10.5px; }
+    .gii-btn-row { display: flex; gap: 6px; margin-top: 3px; }
+    .gii-equip-btn {
+      flex: 1; padding: 5px 8px; border-radius: 6px; border: none; cursor: pointer;
+      background: #55efc4; color: #1e1b2e; font-weight: bold; font-size: 10.5px;
+    }
+    .gii-equip-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; cursor: not-allowed; }
+    #gear-message { min-height: 20px; font-size: 13px; font-weight: bold; margin: 12px 0; text-align: center; }
+    #gear-message.ok { color: #55efc4; }
+    #gear-message.ng { color: #ff7675; }
     #profile-box {
       width: 100%; max-width: 720px; max-height: 88vh; overflow-y: auto;
       background: rgba(20, 26, 36, 0.98); border: 2px solid #00cec9; border-radius: 14px;
@@ -259,29 +546,6 @@
     }
     .set-comment-slot input:focus { border-color: #ffeaa7; }
 
-    .medal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
-    .medal-card {
-      position: relative; background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.15);
-      border-radius: 10px; padding: 12px; cursor: pointer; transition: 0.15s;
-    }
-    .medal-card.locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.8); }
-    .medal-card.selected { border-color: #f1c40f; box-shadow: 0 0 12px rgba(241,196,15,0.5); }
-    .medal-card:not(.locked):hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.4); }
-    .medal-card .name { font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
-    .medal-card .cond { font-size: 10.5px; color: #b2bec3; margin-top: 4px; }
-    .medal-card .effect { font-size: 11px; color: #55efc4; margin-top: 4px; font-weight: bold; }
-    .medal-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-    .medal-count-badge {
-      position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: bold;
-      background: #f1c40f; color: #111; padding: 1px 7px; border-radius: 10px; display: none;
-    }
-    .medal-equipped-note { font-size: 12px; color: #ffeaa7; margin-top: 10px; text-align: center; }
-    .medal-clear-row { text-align: center; margin-top: 10px; }
-    .medal-clear-btn {
-      padding: 7px 18px; font-size: 12px; background: #4b6584; color: #fff;
-      box-shadow: none; border-radius: 8px;
-    }
-    .medal-clear-btn:hover { background: #778ca3; }
 
     #profile-close-btn { margin-top: 18px; }
 
@@ -291,11 +555,6 @@
       background: rgba(241, 196, 15, 0.08); font-weight: bold;
     }
 
-    /* 勲章獲得ログ */
-    .log-item.medal {
-      font-weight: bold; border-left: 3px solid #a29bfe; padding-left: 8px;
-      background: rgba(162, 155, 254, 0.08);
-    }
 
     /* 0キー長押しでのセットコメント一覧表示 */
     #setcomment-overlay {
@@ -308,15 +567,13 @@
     #setcomment-overlay .sc-row { display: flex; gap: 8px; font-size: 12.5px; padding: 3px 0; color: #dfe6e9; }
     #setcomment-overlay .sc-key { color: #f1c40f; font-weight: bold; width: 18px; flex-shrink: 0; }
 
-    /* ミニ勲章タブ（必殺技選択画面内） */
+    /* 必殺技選択画面内タブ */
     .ult-section-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
     .ult-section-tab {
       padding: 6px 14px; font-size: 12px; font-weight: bold; border-radius: 8px 8px 0 0;
       background: rgba(255,255,255,0.05); color: #b2bec3; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); border-bottom: none;
     }
     .ult-section-tab.active { background: rgba(0,206,201,0.15); color: #00cec9; }
-    #medal-select-pane { display: none; width: 100%; }
-    #medal-select-pane.active { display: block; }
     #ult-select-pane { display: none; width: 100%; }
     #ult-select-pane.active { display: block; }
 
@@ -533,7 +790,6 @@
       <div class="profile-tabs">
         <div class="profile-tab active" data-pane="stats">📊 戦績</div>
         <div class="profile-tab" data-pane="comments">💬 セットコメント</div>
-        <div class="profile-tab" data-pane="medals">🎖️ 勲章</div>
       </div>
 
       <div class="profile-pane active" id="profile-pane-stats">
@@ -542,7 +798,7 @@
           <div class="profile-stat-card"><div class="val" id="stat-rate-battles">0</div><div class="label">レート戦回数</div></div>
           <div class="profile-stat-card"><div class="val" id="stat-rate-wins">0</div><div class="label">レート戦勝利数</div></div>
           <div class="profile-stat-card"><div class="val" id="stat-rate-winrate">0%</div><div class="label">レート戦勝率</div></div>
-          <div class="profile-stat-card"><div class="val" id="stat-total-distance">0m</div><div class="label">総移動距離</div></div>
+          <div class="profile-stat-card"><div class="val" id="stat-coins">0</div><div class="label">所持コイン</div></div>
         </div>
       </div>
 
@@ -551,15 +807,150 @@
         <div class="set-comment-grid" id="set-comment-grid"></div>
       </div>
 
-      <div class="profile-pane" id="profile-pane-medals">
-        <div class="section-title" style="margin-bottom:0;">最大2つまで装備（重複可）。達成条件を満たすと解放されます。</div>
-        <div class="medal-grid" id="profile-medal-grid"></div>
-        <div class="medal-equipped-note" id="profile-medal-equipped-note"></div>
-        <div class="medal-clear-row"><button type="button" class="btn medal-clear-btn" id="profile-medal-clear-btn">勲章を全て外す</button></div>
-      </div>
 
       <div class="btn-row">
         <button class="btn back" id="profile-close-btn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase2: ショップ画面 -->
+  <div id="shop-overlay">
+    <div id="shop-box">
+      <h2>🛒 ショップ</h2>
+      <div class="shop-note">コインで通常弾・必殺技・戦術サブ能力を買い切り購入します。購入したものだけが試合前の選択候補になります。</div>
+
+      <div id="shop-coin-row">
+        <span>所持コイン</span>
+        <span id="shop-coin-value">0</span>
+      </div>
+
+      <div class="shop-tabs">
+        <div class="shop-tab active" data-shop-pane="shots">🔫 通常弾</div>
+        <div class="shop-tab" data-shop-pane="ults">⚡ 必殺技</div>
+        <div class="shop-tab" data-shop-pane="tactics">🎯 戦術サブ能力</div>
+      </div>
+
+      <div class="shop-pane active" id="shop-pane-shots">
+        <div class="shop-grid" id="shop-grid-shots"></div>
+      </div>
+
+      <div class="shop-pane" id="shop-pane-ults">
+        <div class="shop-random-box">
+          <div>
+            <div class="srb-title">🎲 ランダム必殺技</div>
+            <div class="srb-desc">未所持の必殺技からランダムで1種入手。個別購入より安く済むギャンブル枠。</div>
+          </div>
+          <button type="button" class="shop-buy-btn" id="shop-random-ult-btn">3,500 で引く</button>
+        </div>
+        <div class="shop-grid" id="shop-grid-ults"></div>
+      </div>
+
+      <div class="shop-pane" id="shop-pane-tactics">
+        <div class="shop-note">戦術サブ能力は、対応する必殺技を所持していないと購入できません。未購入の場合、その必殺技は「戦術なし（素の性能）」で使用されます。</div>
+        <div class="shop-grid" id="shop-grid-tactics"></div>
+      </div>
+
+      <div id="shop-message"></div>
+
+      <div class="btn-row">
+        <button class="btn back" id="shop-close-btn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase3: ガチャ画面 -->
+  <div id="gacha-overlay">
+    <div id="gacha-box">
+      <h2>🎰 ガチャ</h2>
+      <div class="shop-note">1回300コインでギアの破片・通常弾・必殺技・戦術タイプ・完成ギアが手に入ります。30連ごとに万能破片3個の天井があります。</div>
+
+      <div id="gacha-coin-row">
+        <span>所持コイン</span>
+        <span id="gacha-coin-value">0</span>
+      </div>
+      <div id="gacha-pity-row">
+        天井まで <span id="gacha-pity-count">0</span> / 30 連
+        <div id="gacha-pity-bar-outer"><div id="gacha-pity-bar-inner" style="width:0%;"></div></div>
+      </div>
+
+      <div class="gacha-pull-row">
+        <button type="button" class="gacha-pull-btn" id="gacha-pull-1-btn">1回引く（300）</button>
+        <button type="button" class="gacha-pull-btn" id="gacha-pull-10-btn">10回引く（3,000）</button>
+      </div>
+
+      <div id="gacha-message"></div>
+      <div id="gacha-result-list"></div>
+
+      <div id="gacha-universal-row">
+        <span>万能破片: <span id="gacha-universal-value">0</span>個</span>
+        <select id="gacha-universal-select"></select>
+        <button type="button" id="gacha-universal-use-btn">1個使う</button>
+      </div>
+
+      <div class="gacha-section-title">🎒 破片・完成ギア在庫</div>
+      <div id="gacha-gear-grid"></div>
+
+      <div class="btn-row">
+        <button class="btn back" id="gacha-close-btn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase4: ギア装備画面 -->
+  <div id="gear-overlay">
+    <div id="gear-box">
+      <h2>⚙️ ギア装備</h2>
+      <div class="shop-note">メイン1つ＋サブ（メインの種類で0〜3枠）を装備できます。外すとそのギアは消滅し、破片3個が戻ります。メインを切り替えると旧メインは自動的に外れます。</div>
+
+      <div id="gear-coin-row">
+        <span>所持コイン</span>
+        <span id="gear-coin-value">0</span>
+      </div>
+
+      <div class="gear-section-title">🧩 現在の装備</div>
+      <div id="gear-equipped-row"></div>
+
+      <div id="gear-message"></div>
+
+      <div class="gear-section-title">🎒 所持ギア（完成品）</div>
+      <div id="gear-inventory-grid"></div>
+
+      <div class="btn-row">
+        <button class="btn back" id="gear-close-btn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quest: クエスト＋ログインボーナス画面 -->
+  <div id="quest-overlay">
+    <div id="quest-box">
+      <h2>📜 クエスト</h2>
+
+      <div id="quest-login-card">
+        <div id="quest-login-head">
+          <div id="quest-login-title">🎁 7日連続ログインボーナス</div>
+          <div id="quest-login-status">現在の連続日数: 0日</div>
+        </div>
+        <div id="quest-login-grid"></div>
+        <div id="quest-login-message"></div>
+        <button class="btn" id="quest-login-claim-btn">今日のログインボーナスを受け取る</button>
+      </div>
+
+      <div class="quest-tabs">
+        <div class="quest-tab active" data-quest-tab="daily">デイリー</div>
+        <div class="quest-tab" data-quest-tab="weekly">ウィークリー</div>
+        <div class="quest-tab" data-quest-tab="monthly">マンスリー</div>
+      </div>
+
+      <div id="quest-period"></div>
+      <div id="quest-list-daily" class="quest-list active"></div>
+      <div id="quest-list-weekly" class="quest-list"></div>
+      <div id="quest-list-monthly" class="quest-list"></div>
+      <div id="quest-message"></div>
+
+      <div class="btn-row">
+        <button class="btn back" id="quest-close-btn">閉じる</button>
       </div>
     </div>
   </div>
@@ -585,6 +976,7 @@
     <div id="rate-result-box">
       <h2 id="rate-result-title">VICTORY</h2>
       <div id="rate-result-list"></div>
+      <div id="rate-result-coins" style="margin-bottom:14px; font-size:15px; color:#ffd93d;"></div>
       <button id="rate-rematch-btn" class="btn" style="display:none;">もう一戦する</button>
       <button id="rate-leave-btn" class="btn back">ロビーへ戻る</button>
     </div>
@@ -631,6 +1023,15 @@
     <div id="step-1" class="step-container">
       <!-- Ver5: プロフィールボタン（最初の画面のみ表示） -->
       <button id="profile-btn">👤 プロフィール</button>
+      <!-- Phase2: ショップボタン（最初の画面のみ表示） -->
+      <button id="shop-btn">🛒 ショップ</button>
+      <!-- Phase3: ガチャボタン（最初の画面のみ表示） -->
+      <button id="gacha-btn">🎰 ガチャ</button>
+      <!-- Phase4: ギア装備ボタン（最初の画面のみ表示） -->
+      <button id="gear-btn">⚙️ ギア装備</button>
+
+      <!-- Quest: デイリー/ウィークリー/マンスリー＋ログインボーナス -->
+      <button id="quest-btn">📜 クエスト</button>
 
       <div class="room-box">
         <label>合言葉（ルームID）</label>
@@ -726,7 +1127,6 @@
       </div>
       <div class="ult-section-tabs">
         <div class="ult-section-tab active" id="ult-tab-skills">必殺技一覧</div>
-        <div class="ult-section-tab" id="ult-tab-medals">🎖️ 勲章</div>
       </div>
       <div id="ult-select-pane" class="active">
       <div class="char-grid">
@@ -777,12 +1177,6 @@
         </div>
       </div>
       </div>
-      <div id="medal-select-pane">
-        <div class="section-title" style="margin-bottom:8px;">最大2つまで装備（重複可）。プロフィール画面と共通の設定です。</div>
-        <div class="medal-grid" id="ult-screen-medal-grid"></div>
-        <div class="medal-equipped-note" id="ult-screen-medal-equipped-note"></div>
-        <div class="medal-clear-row"><button type="button" class="btn medal-clear-btn" id="ult-screen-medal-clear-btn">勲章を全て外す</button></div>
-      </div>
 
       <!-- サブ能力選択エリア (Aタイプ / Bタイプ) -->
       <div id="subtype-panel" class="subtype-container">
@@ -806,6 +1200,18 @@
             <div class="subtype-desc" id="subtype-desc-b">メガビームによるULTチャージが100%以降にも適用され、EXまで溜まる</div>
           </div>
         </div>
+        <div id="subtype-none-note" style="display:none; font-size:11px; color:#b2bec3; margin-top:10px; text-align:center;"></div>
+      </div>
+
+      <!-- Phase5: 訓練場専用の自由ギア設定パネル（gameModeChoice==='solo'の時だけ表示） -->
+      <div id="training-gear-panel" style="display:none; margin-top:18px; background:rgba(85,239,196,0.08); border:1.5px solid #55efc4; border-radius:12px; padding:16px;">
+        <div style="font-size:13px; font-weight:bold; color:#55efc4; margin-bottom:4px;">⚙️ 訓練場：自由ギア設定</div>
+        <div style="font-size:10.5px; color:#b2bec3; margin-bottom:10px;">訓練場では所持・コインに関係なく全てのギアを自由に試せます（この設定は訓練場限定で、実戦には反映されません）。</div>
+        <div id="training-gear-equipped-row" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
+        <select id="training-gear-select" style="padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:#1e1b2e; color:#fff; font-size:11.5px; margin-right:6px;"></select>
+        <button type="button" id="training-gear-add-main-btn" class="btn" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">メインにする</button>
+        <button type="button" id="training-gear-add-sub-btn" class="btn" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">サブに追加</button>
+        <button type="button" id="training-gear-clear-btn" class="btn back" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">全解除</button>
       </div>
 
       <div class="btn-row">
@@ -849,7 +1255,7 @@
 
     // ================================================================
     // --- Ver5: プレイヤー識別用クライアントID（ブラウザ発行UUID） ---
-    // サーバー側のプロフィール（セットコメント・勲章・戦績）はこのIDで紐付けられる。
+    // サーバー側のプロフィール（セットコメント・戦績・コイン/ギア）はこのIDで紐付けられる。
     // ================================================================
     const CLIENT_ID_KEY = 'magicFightClientId_v1';
     function getOrCreateClientId() {
@@ -871,19 +1277,6 @@
     }
     const MY_CLIENT_ID = getOrCreateClientId();
 
-    // ================================================================
-    // --- Ver5: 勲章マスターデータ ＆ プロフィール状態 ---
-    // ================================================================
-    const MEDAL_MASTER = {
-      red:    { name: '赤の勲章', color: '#ff4757', cond: 'レート戦で敗北する',                          effect: '最大HP+10' },
-      blue:   { name: '青の勲章', color: '#0984e3', cond: 'レート戦で勝利する',                          effect: '最大MP+15' },
-      yellow: { name: '黄の勲章', color: '#f1c40f', cond: '1回のレート戦で50回ジャンプする',              effect: 'ジャンプ力1.15倍' },
-      green:  { name: '緑の勲章', color: '#2ecc71', cond: '1回のレート戦で3000m以上移動する',              effect: '移動速度1.15倍' },
-      orange: { name: '橙の勲章', color: '#e17055', cond: 'レート戦でEX ULTを使う',                       effect: 'MP回復速度1.15倍' },
-      purple: { name: '紫の勲章', color: '#a55eea', cond: '合計被ダメージ99以内でレート戦に勝利する',       effect: '通常弾速度1.15倍' },
-      white:  { name: '白の勲章', color: '#dfe6e9', cond: 'レート1100',                                  effect: '(初回スポーン含め)リスポーン時ULT+10%チャージ' }
-    };
-
     // サーバーから取得した自分のプロフィール（未取得時はnull）
     let myProfile = null;
 
@@ -894,27 +1287,21 @@
         rate: myRate,
         stats: { freeBattles: 0, rateBattles: 0, rateWins: 0, rateLosses: 0 },
         setComments: Array(9).fill(null),
-        medalsUnlocked: Object.fromEntries(Object.keys(MEDAL_MASTER).map(id => [id, false])),
-        medalsEquipped: [],
-        progress: { totalDistanceM: 0, bestRateMatchJumps: 0 }
+        // --- コイン経済・ショップ・ガチャ・ギアパワー（Phase0/1: サーバー未応答時のローカル既定値）---
+        coins: 0,
+        unlockedShots: ['magic'],
+        unlockedUlts: ['beam'],
+        unlockedTactics: [],
+        gearFragments: {},
+        universalFragments: 0,
+        completedGear: {},
+        equippedGear: { main: null, subs: [] },
+        gachaPityCount: 0,
+        quests: { daily: { periodKey: '', quests: [] }, weekly: { periodKey: '', quests: [] }, monthly: { periodKey: '', quests: [] } },
+        loginBonus: { lastClaimDate: null, streak: 0, monthlyStreak: 0, claimedToday: false, nextDay: 1, rewards: [] },
+        monthlyCoinEarned: 0
       };
     }
-
-    // 現在装備中の勲章から効果倍率を計算するヘルパー群
-    // （重複可なので、同じ勲章を2つ選ぶと効果が重ね掛けされる）
-    function getEquippedMedals() {
-      return (myProfile && Array.isArray(myProfile.medalsEquipped)) ? myProfile.medalsEquipped : [];
-    }
-    function countEquipped(medalId) {
-      return getEquippedMedals().filter(id => id === medalId).length;
-    }
-    function medalBonusMaxHp() { return countEquipped('red') * 10; }
-    function medalBonusMaxMp() { return countEquipped('blue') * 15; }
-    function medalJumpMultiplier() { return Math.pow(1.15, countEquipped('yellow')); }
-    function medalMoveSpeedMultiplier() { return Math.pow(1.15, countEquipped('green')); }
-    function medalMpRegenMultiplier() { return Math.pow(1.15, countEquipped('orange')); }
-    function medalBulletSpeedMultiplier() { return Math.pow(1.15, countEquipped('purple')); }
-    function medalRespawnUltBonus() { return countEquipped('white') * 10; }
 
     function loadSavedData() {
       try {
@@ -948,12 +1335,9 @@
     // --- レート戦の試合内状態 ---
     let isRateMatch = false;      // 現在の部屋がレート戦かどうか
     let isRateMatchOver = false;  // このマッチが既に決着しているか（多重終了防止）
-    // バグ修正: 白の勲章「初回スポーン含めリスポーン時ULT+10%」が、
-    // スタートボタン押下時のresetSpawn → __joined受信時のresetSpawn（→さらに
-    // __stage_update等）と、1回の参戦フローの中でresetSpawnが複数回呼ばれることで
-    // 二重・三重にボーナスが乗ってしまっていたため、
-    // 「このマッチでの初回スポーン分はまだ未付与か」を明示的に管理する。
-    let pendingFirstSpawnUltBonus = true;
+    // 新しい試合の開始時だけ、試合をまたいで持ち越さない状態を初期化し、
+    // gear20のスポーンチャージを1回だけ適用するためのフラグ。
+    let pendingNewMatchStart = true;
     let myKills = 0;
     let myDeaths = 0;
 
@@ -968,7 +1352,7 @@
     }
 
     // ================================================================
-    // --- Ver5: プロフィール画面 ＆ セットコメント ＆ 勲章タブ UI ---
+    // --- Ver5: プロフィール画面 ＆ セットコメント UI ---
     // ================================================================
 
     function renderProfileUI() {
@@ -988,12 +1372,10 @@
       setText('stat-rate-battles', String(s.rateBattles || 0));
       setText('stat-rate-wins', String(s.rateWins || 0));
       setText('stat-rate-winrate', `${winRate}%`);
-      const distM = Math.round((myProfile.progress && myProfile.progress.totalDistanceM) || 0);
-      setText('stat-total-distance', `${distM}m`);
+      // --- コイン経済（Phase1）：所持コイン残高表示 ---
+      setText('stat-coins', String(myProfile.coins || 0));
 
       renderSetCommentGrid();
-      renderMedalGrid('profile-medal-grid', 'profile-medal-equipped-note');
-      renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
     }
 
     // --- セットコメント編集欄（プロフィール画面内） ---
@@ -1034,81 +1416,6 @@
       sendProfileMessage({ type: '__profile_set_comments', clientId: MY_CLIENT_ID, comments });
     }
 
-    // --- 勲章グリッド（プロフィール画面＆必殺技選択画面の両方で共通利用） ---
-    function renderMedalGrid(gridElId, noteElId) {
-      const grid = document.getElementById(gridElId);
-      if (!grid) return;
-      grid.innerHTML = '';
-      if (!myProfile) return;
-
-      const unlocked = myProfile.medalsUnlocked || {};
-      const equipped = myProfile.medalsEquipped || [];
-
-      for (const medalId of Object.keys(MEDAL_MASTER)) {
-        const meta = MEDAL_MASTER[medalId];
-        const isUnlocked = !!unlocked[medalId];
-        const equipCount = equipped.filter(id => id === medalId).length;
-
-        const card = document.createElement('div');
-        card.className = 'medal-card' + (isUnlocked ? '' : ' locked') + (equipCount > 0 ? ' selected' : '');
-        card.dataset.medal = medalId;
-
-        card.innerHTML = `
-          <div class="name"><span class="medal-swatch" style="background:${meta.color}"></span>${meta.name}${isUnlocked ? '' : ' 🔒'}</div>
-          <div class="cond">条件：${meta.cond}</div>
-          <div class="effect">効果：${isUnlocked ? meta.effect : '？？？'}</div>
-          <div class="medal-count-badge" style="display:${equipCount > 0 ? 'block' : 'none'}">×${equipCount}</div>
-        `;
-
-        if (isUnlocked) {
-          card.addEventListener('click', () => toggleMedalEquip(medalId, gridElId, noteElId));
-        }
-        grid.appendChild(card);
-      }
-
-      const note = document.getElementById(noteElId);
-      if (note) {
-        note.innerText = equipped.length > 0
-          ? `装備中: ${equipped.map(id => MEDAL_MASTER[id].name).join(' + ')}（${equipped.length}/2）`
-          : '勲章は未装備です（クリックして装備、最大2つ・重複可）';
-      }
-    }
-
-    function toggleMedalEquip(medalId, gridElId, noteElId) {
-      if (!myProfile) return;
-      let equipped = [...(myProfile.medalsEquipped || [])];
-
-      // 既に2つ選ばれている状態で同じ勲章をクリックした場合は1つ取り除く（重複解除の直感的な操作）
-      const idxLast = equipped.lastIndexOf(medalId);
-      if (equipped.length >= 2) {
-        if (idxLast >= 0) {
-          equipped.splice(idxLast, 1);
-        } else {
-          // 2枠とも埋まっていて別の勲章を選んだ場合は何もしない（先に外してもらう）
-          addBattleLog('<span style="color:#ff4757">勲章は最大2つまでです。先に装備を外してください。</span>');
-          return;
-        }
-      } else {
-        equipped.push(medalId);
-      }
-
-      myProfile.medalsEquipped = equipped;
-      renderMedalGrid('profile-medal-grid', 'profile-medal-equipped-note');
-      renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
-      sendProfileMessage({ type: '__profile_equip_medals', clientId: MY_CLIENT_ID, medals: equipped });
-    }
-
-    // 装備中の勲章を一括で全て外す
-    function clearAllMedals() {
-      if (!myProfile) return;
-      if (!myProfile.medalsEquipped || myProfile.medalsEquipped.length === 0) return;
-
-      myProfile.medalsEquipped = [];
-      renderMedalGrid('profile-medal-grid', 'profile-medal-equipped-note');
-      renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
-      sendProfileMessage({ type: '__profile_equip_medals', clientId: MY_CLIENT_ID, medals: [] });
-    }
-
     // --- プロフィール画面の開閉・タブ切り替え ---
     function openProfileOverlay() {
       document.getElementById('profile-overlay').style.display = 'flex';
@@ -1132,6 +1439,692 @@
       });
     });
 
+    // ================================================================
+    // --- Phase2: ショップ（通常弾・ULT・戦術タイプの買い切り購入）---
+    // 価格・所持判定・コイン残高の検証はすべてサーバー側で行う。
+    // ここでは表示と購入リクエストの送信だけを担当する。
+    // ================================================================
+    const SHOP_PRICE_SHOT = 3000;
+    const SHOP_PRICE_ULT = 5000;
+    const SHOP_PRICE_ULT_RANDOM = 3500;
+    const SHOP_PRICE_TACTIC = 2000;
+
+    // 購入されていない（＝選択できない）状態でも参照できるよう、
+    // ショップ表示用のIDリストはマスターデータの並び順に従う。
+    const SHOP_SHOT_IDS = ['magic', 'sniper', 'heavy', 'bomb', 'ricochet'];
+    const SHOP_ULT_IDS = ['beam', 'shield', 'curse', 'super', 'warp', 'heal', 'upgrade', 'highjump', 'thunder'];
+
+    // プロフィール未取得（サーバー未接続・応答待ち）の間は所持状況が「不明」であり、
+    // ここで勝手にロックしてしまうと、通信が遅い環境で一瞬すべてが未所持に見えてしまう。
+    // そのため未取得中は判定を保留（=ロックしない）とし、プロフィール到着時に
+    // enforceOwnedSelections() が改めて整合性を取る方針にする。
+    // 購入自体はサーバー側で検証しているので、この猶予が不正購入につながることはない。
+    function profileReady() { return !!(myProfile && Array.isArray(myProfile.unlockedShots)); }
+
+    function ownedShots() { return (myProfile && myProfile.unlockedShots) || ['magic']; }
+    function ownedUlts() { return (myProfile && myProfile.unlockedUlts) || ['beam']; }
+    function ownedTactics() { return (myProfile && myProfile.unlockedTactics) || []; }
+    // ユーザー要望：訓練場（ソロ練習）では、所持・購入状況に関係なく全ての通常弾・ULT・
+    // 戦術タイプを自由に試せるようにする。選択画面の時点では、gameModeChoice が
+    // 'solo' になった時点（訓練場ボタン押下時）で判定できるので、これを使う
+    // （currentStageは実際にマッチが始まるまで更新されないため選択画面では使えない）。
+    function isTrainingSelection() { return gameModeChoice === 'solo'; }
+
+    function hasShot(id) { return isTrainingSelection() || !profileReady() || ownedShots().includes(id); }
+    function hasUlt(id) { return isTrainingSelection() || !profileReady() || ownedUlts().includes(id); }
+    function hasTactic(ultId, sub) { return isTrainingSelection() || !profileReady() || ownedTactics().includes(`${ultId}_${sub}`); }
+    function myCoins() { return (myProfile && myProfile.coins) || 0; }
+
+    // ショップの「所持済み」表示は猶予なしの厳密判定を使う。
+    // （未取得中に全部“所持済み”と表示されると購入できないように見えてしまうため）
+    function ownsShotStrict(id) { return profileReady() && ownedShots().includes(id); }
+    function ownsUltStrict(id) { return profileReady() && ownedUlts().includes(id); }
+    function ownsTacticStrict(ultId, sub) { return profileReady() && ownedTactics().includes(`${ultId}_${sub}`); }
+
+    function showShopMessage(text, ok) {
+      const el = document.getElementById('shop-message');
+      if (!el) return;
+      el.innerText = text;
+      el.className = ok ? 'ok' : 'ng';
+    }
+
+    const SHOP_ERROR_TEXT = {
+      not_enough_coins: 'コインが足りません。',
+      already_owned: 'すでに所持しています。',
+      ult_required: '先に対応する必殺技を購入してください。',
+      all_owned: '必殺技はすべて所持済みです。',
+      invalid_id: '不正なアイテムです。',
+      invalid_kind: '不正な購入種別です。',
+      no_profile: 'プロフィールを取得できませんでした。'
+    };
+
+    function requestPurchase(kind, id) {
+      // sendProfileMessage は未接続なら専用の軽量WebSocketを自動で張ってくれるため、
+      // ここで接続状態を判定する必要はない。接続に失敗した場合のみメッセージを出す。
+      showShopMessage('購入処理中…', true);
+      sendProfileMessage(
+        { type: '__shop_purchase', clientId: MY_CLIENT_ID, kind, id },
+        () => showShopMessage('サーバーに接続できませんでした。時間をおいて再度お試しください。', false)
+      );
+    }
+
+    function renderShopUI() {
+      const coinEl = document.getElementById('shop-coin-value');
+      if (coinEl) coinEl.innerText = myCoins().toLocaleString();
+      const coins = myCoins();
+
+      // --- 通常弾 ---
+      const shotGrid = document.getElementById('shop-grid-shots');
+      if (shotGrid) {
+        shotGrid.innerHTML = '';
+        SHOP_SHOT_IDS.forEach(id => {
+          const meta = bulletMasterData[id];
+          if (!meta) return;
+          const owned = ownsShotStrict(id);
+          const affordable = coins >= SHOP_PRICE_SHOT;
+          shotGrid.appendChild(buildShopItem({
+            name: `${meta.name} (MP${meta.mpCost})`,
+            desc: meta.desc,
+            owned,
+            price: SHOP_PRICE_SHOT,
+            affordable,
+            onBuy: () => requestPurchase('shot', id)
+          }));
+        });
+      }
+
+      // --- ULT ---
+      const ultGrid = document.getElementById('shop-grid-ults');
+      if (ultGrid) {
+        ultGrid.innerHTML = '';
+        SHOP_ULT_IDS.forEach(id => {
+          const meta = ultMasterData[id];
+          if (!meta) return;
+          const owned = ownsUltStrict(id);
+          ultGrid.appendChild(buildShopItem({
+            name: meta.name,
+            desc: `必要ULT: ${meta.baseHitCharge}% / 戦術A「${meta.typeA.title}」・B「${meta.typeB.title}」`,
+            owned,
+            price: SHOP_PRICE_ULT,
+            affordable: coins >= SHOP_PRICE_ULT,
+            onBuy: () => requestPurchase('ult', id)
+          }));
+        });
+      }
+      const randomBtn = document.getElementById('shop-random-ult-btn');
+      if (randomBtn) {
+        const allUltsOwned = SHOP_ULT_IDS.every(ownsUltStrict);
+        randomBtn.disabled = allUltsOwned || coins < SHOP_PRICE_ULT_RANDOM;
+        randomBtn.innerText = allUltsOwned ? 'すべて所持済み' : `${SHOP_PRICE_ULT_RANDOM.toLocaleString()} で引く`;
+      }
+
+      // --- 戦術サブ能力 ---
+      const tacticGrid = document.getElementById('shop-grid-tactics');
+      if (tacticGrid) {
+        tacticGrid.innerHTML = '';
+        SHOP_ULT_IDS.forEach(ultId => {
+          const meta = ultMasterData[ultId];
+          if (!meta) return;
+          const parentOwned = ownsUltStrict(ultId);
+          ['A', 'B'].forEach(sub => {
+            const subMeta = (sub === 'A') ? meta.typeA : meta.typeB;
+            const owned = ownsTacticStrict(ultId, sub);
+            tacticGrid.appendChild(buildShopItem({
+              name: `${meta.name} [${sub}] ${subMeta.title}`,
+              desc: parentOwned ? subMeta.desc : `🔒 先に「${meta.name}」本体の購入が必要です。`,
+              owned,
+              blocked: !parentOwned,
+              price: SHOP_PRICE_TACTIC,
+              affordable: coins >= SHOP_PRICE_TACTIC,
+              onBuy: () => requestPurchase('tactic', `${ultId}_${sub}`)
+            }));
+          });
+        });
+      }
+    }
+
+    function buildShopItem({ name, desc, owned, blocked = false, price, affordable, onBuy }) {      const el = document.createElement('div');
+      el.className = 'shop-item' + (owned ? ' owned' : '') + (blocked && !owned ? ' blocked' : '');
+
+      const foot = owned
+        ? `<span class="si-owned-tag">✓ 所持済み</span>`
+        : `<span class="si-price">${price.toLocaleString()} コイン</span>`;
+
+      el.innerHTML = `
+        <div class="si-name">${name}</div>
+        <div class="si-desc">${desc}</div>
+        <div class="si-foot">${foot}</div>
+      `;
+
+      if (!owned) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'shop-buy-btn';
+        btn.innerText = '購入';
+        btn.disabled = blocked || !affordable;
+        if (blocked) btn.innerText = '要ULT';
+        else if (!affordable) btn.innerText = 'コイン不足';
+        btn.addEventListener('click', onBuy);
+        el.querySelector('.si-foot').appendChild(btn);
+      }
+      return el;
+    }
+
+    // ================================================================
+    // --- Phase2: 選択画面の所持状況の反映 ---
+    // ================================================================
+
+    // 未購入の通常弾・ULTをロック表示（グレーアウト＋🔒＋価格）にする。
+    // 選択済みカードの見た目も所持状況に合わせて付け直す。
+    function refreshSelectionLockUI() {
+      document.querySelectorAll('.bullet-card').forEach(card => {
+        const id = card.getAttribute('data-bullet');
+        const owned = hasShot(id);
+        card.classList.toggle('locked', !owned);
+        card.classList.toggle('selected', owned && id === selectedBulletType);
+
+        const nameEl = card.querySelector('.b-name');
+        if (nameEl && !nameEl.dataset.baseHtml) nameEl.dataset.baseHtml = nameEl.innerHTML;
+        if (nameEl) {
+          nameEl.innerHTML = nameEl.dataset.baseHtml
+            + (owned ? '' : ` <span class="lock-tag">🔒 ${SHOP_PRICE_SHOT.toLocaleString()}</span>`);
+        }
+      });
+
+      document.querySelectorAll('.char-card').forEach(card => {
+        const id = card.getAttribute('data-ult');
+        const owned = hasUlt(id);
+        card.classList.toggle('locked', !owned);
+        card.classList.toggle('selected', owned && id === selectedUltType);
+
+        const nameEl = card.querySelector('.name');
+        if (nameEl && !nameEl.dataset.baseHtml) nameEl.dataset.baseHtml = nameEl.innerHTML;
+        if (nameEl) {
+          nameEl.innerHTML = nameEl.dataset.baseHtml
+            + (owned ? '' : ` <span class="lock-tag">🔒 ${SHOP_PRICE_ULT.toLocaleString()}</span>`);
+        }
+      });
+
+      updateSubtypePanelUI();
+    }
+
+    // 所持していないものが選択されたままになっていないか点検し、
+    // 必要なら所持しているものへ強制的に戻す。
+    // プロフィール取得はゲーム開始後に届くこともあるため、この整合処理は
+    // 「プロフィールを受け取った時」と「参戦ボタンを押した時」の両方で呼ぶ。
+    function enforceOwnedSelections() {
+      if (!myProfile) return;
+
+      if (!hasShot(selectedBulletType)) {
+        selectedBulletType = ownedShots()[0] || 'magic';
+      }
+      if (!hasUlt(selectedUltType)) {
+        selectedUltType = ownedUlts()[0] || 'beam';
+        selectedUltSubtype = defaultSubtypeFor(selectedUltType);
+      }
+      // 戦術タイプは「所持しているもの」または 'NONE' のいずれかでなければならない
+      if (selectedUltSubtype === 'A' && !hasTactic(selectedUltType, 'A')) {
+        selectedUltSubtype = defaultSubtypeFor(selectedUltType);
+      } else if (selectedUltSubtype === 'B' && !hasTactic(selectedUltType, 'B')) {
+        selectedUltSubtype = defaultSubtypeFor(selectedUltType);
+      } else if (selectedUltSubtype !== 'A' && selectedUltSubtype !== 'B') {
+        selectedUltSubtype = 'NONE';
+      }
+
+      refreshSelectionLockUI();
+      updateHudBars();
+    }
+
+    // ================================================================
+    // --- Phase5: 訓練場専用「自由ギア設定」パネル ---
+    // trainingFreeGear（サーバーに一切送らないローカル限定の値）を、
+    // コイン・所持状況を無視して自由に編集できるUI。
+    // ================================================================
+    function trainingMaxSlots() {
+      return trainingFreeGear.main ? GEAR_MASTER[trainingFreeGear.main].mainSubSlots : 0;
+    }
+
+    function refreshTrainingGearPanel() {
+      const panel = document.getElementById('training-gear-panel');
+      if (!panel) return;
+      const show = (gameModeChoice === 'solo');
+      panel.style.display = show ? 'block' : 'none';
+      if (!show) return;
+
+      const selectEl = document.getElementById('training-gear-select');
+      if (selectEl && selectEl.options.length === 0) {
+        GEAR_IDS.forEach(gearId => {
+          const opt = document.createElement('option');
+          opt.value = gearId;
+          opt.innerText = GEAR_MASTER[gearId].name;
+          selectEl.appendChild(opt);
+        });
+      }
+
+      const row = document.getElementById('training-gear-equipped-row');
+      if (!row) return;
+      row.innerHTML = '';
+
+      const chip = (label, gearId, onRemove) => {
+        const el = document.createElement('div');
+        el.style.cssText = 'background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:5px 10px; font-size:11px; display:flex; align-items:center; gap:6px;';
+        el.innerHTML = `<span>${label}: ${GEAR_MASTER[gearId].name}</span>`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.innerText = '×';
+        btn.style.cssText = 'background:none; border:none; color:#ff7675; font-weight:bold; cursor:pointer; font-size:13px; padding:0;';
+        btn.addEventListener('click', onRemove);
+        el.appendChild(btn);
+        return el;
+      };
+
+      if (trainingFreeGear.main) {
+        row.appendChild(chip('メイン', trainingFreeGear.main, () => {
+          trainingFreeGear.main = null;
+          trainingFreeGear.subs = [];
+          refreshTrainingGearPanel();
+        }));
+      } else {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'font-size:11px; color:#74808a;';
+        empty.innerText = 'メイン未設定';
+        row.appendChild(empty);
+      }
+      trainingFreeGear.subs.forEach((subId, idx) => {
+        row.appendChild(chip(`サブ${idx + 1}`, subId, () => {
+          trainingFreeGear.subs.splice(idx, 1);
+          refreshTrainingGearPanel();
+        }));
+      });
+    }
+
+    document.getElementById('training-gear-add-main-btn').addEventListener('click', () => {
+      const gearId = document.getElementById('training-gear-select').value;
+      trainingFreeGear.main = gearId;
+      // メインを切り替えたら、新しいサブ枠数に収まらない分は先頭から間引く
+      const maxSlots = GEAR_MASTER[gearId].mainSubSlots;
+      if (trainingFreeGear.subs.length > maxSlots) {
+        trainingFreeGear.subs = trainingFreeGear.subs.slice(0, maxSlots);
+      }
+      refreshTrainingGearPanel();
+    });
+    document.getElementById('training-gear-add-sub-btn').addEventListener('click', () => {
+      const gearId = document.getElementById('training-gear-select').value;
+      if (!trainingFreeGear.main) {
+        addBattleLog('<span style="color:#ffd93d">先にメインギアを設定してください。</span>');
+        return;
+      }
+      if (GEAR_MASTER[gearId].subOnly) {
+        addBattleLog('<span style="color:#ffd93d">このギアはメイン専用で、サブには置けません。</span>');
+        return;
+      }
+      if (trainingFreeGear.subs.length >= trainingMaxSlots()) {
+        addBattleLog('<span style="color:#ffd93d">サブスロットの空きがありません。</span>');
+        return;
+      }
+      trainingFreeGear.subs.push(gearId);
+      refreshTrainingGearPanel();
+    });
+    document.getElementById('training-gear-clear-btn').addEventListener('click', () => {
+      trainingFreeGear = { main: null, subs: [] };
+      refreshTrainingGearPanel();
+    });
+
+    function openShopOverlay() {
+      document.getElementById('shop-overlay').style.display = 'flex';
+      showShopMessage('', true);
+      // 最新の残高・所持状況を取りに行く（応答時に renderShopUI が再実行される）
+      requestMyProfile();
+      renderShopUI();
+    }
+    function closeShopOverlay() {
+      document.getElementById('shop-overlay').style.display = 'none';
+    }
+
+    document.getElementById('shop-btn').addEventListener('click', openShopOverlay);
+    document.getElementById('shop-close-btn').addEventListener('click', closeShopOverlay);
+    document.getElementById('shop-random-ult-btn').addEventListener('click', () => requestPurchase('ult_random', ''));
+
+    document.querySelectorAll('.shop-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.shop-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.shop-pane').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(`shop-pane-${tab.dataset.shopPane}`).classList.add('active');
+      });
+    });
+
+    // ================================================================
+    // --- Phase3: ガチャ ---
+    // 抽選は必ずサーバー側で行う。ここでは表示とリクエスト送信のみを担当する。
+    // ================================================================
+    const GACHA_COST = 300;
+    const GACHA_PITY_MAX = 30;
+
+    function showGachaMessage(text, ok) {
+      const el = document.getElementById('gacha-message');
+      if (!el) return;
+      el.innerText = text;
+      el.className = ok ? 'ok' : 'ng';
+    }
+
+    const GACHA_ERROR_TEXT = {
+      not_enough_coins: 'コインが足りません。',
+      no_profile: 'プロフィールを取得できませんでした。',
+      invalid_id: '不正なギアです。',
+      invalid_amount: '個数が不正です。',
+      not_enough_fragments: '万能破片が足りません。'
+    };
+
+    function renderGachaUI() {
+      const coinEl = document.getElementById('gacha-coin-value');
+      if (coinEl) coinEl.innerText = myCoins().toLocaleString();
+
+      const pityCount = (myProfile && myProfile.gachaPityCount) || 0;
+      document.getElementById('gacha-pity-count').innerText = pityCount;
+      document.getElementById('gacha-pity-bar-inner').style.width = `${(pityCount / GACHA_PITY_MAX * 100).toFixed(1)}%`;
+
+      const coins = myCoins();
+      document.getElementById('gacha-pull-1-btn').disabled = coins < GACHA_COST;
+      document.getElementById('gacha-pull-10-btn').disabled = coins < GACHA_COST * 10;
+
+      const universal = (myProfile && myProfile.universalFragments) || 0;
+      document.getElementById('gacha-universal-value').innerText = universal;
+      const useBtn = document.getElementById('gacha-universal-use-btn');
+      if (useBtn) useBtn.disabled = universal <= 0;
+
+      const selectEl = document.getElementById('gacha-universal-select');
+      if (selectEl && selectEl.options.length === 0) {
+        // ギア選択肢は固定リストなので初回だけ構築する
+        GEAR_IDS.forEach(gearId => {
+          const opt = document.createElement('option');
+          opt.value = gearId;
+          opt.innerText = `${GEAR_MASTER[gearId].name}`;
+          selectEl.appendChild(opt);
+        });
+      }
+
+      // --- 破片・完成ギア在庫グリッド ---
+      const grid = document.getElementById('gacha-gear-grid');
+      if (grid) {
+        grid.innerHTML = '';
+        const fragments = (myProfile && myProfile.gearFragments) || {};
+        const completed = (myProfile && myProfile.completedGear) || {};
+        GEAR_IDS.forEach(gearId => {
+          const frag = fragments[gearId] || 0;
+          const comp = completed[gearId] || 0;
+          const el = document.createElement('div');
+          el.className = 'gacha-gear-item' + (comp > 0 ? ' has-completed' : '');
+          el.innerHTML = `
+            <div class="ggi-name">${GEAR_MASTER[gearId].name}</div>
+            <div class="ggi-nums">破片 ${frag}/10　完成: <span class="completed-count">${comp}</span></div>
+          `;
+          grid.appendChild(el);
+        });
+      }
+    }
+
+    function requestGachaPull(times) {
+      showGachaMessage('抽選中…', true);
+      sendProfileMessage(
+        { type: '__gacha_pull', clientId: MY_CLIENT_ID, times },
+        () => showGachaMessage('サーバーに接続できませんでした。時間をおいて再度お試しください。', false)
+      );
+    }
+
+    function requestUseUniversal() {
+      const gearId = document.getElementById('gacha-universal-select').value;
+      sendProfileMessage(
+        { type: '__gacha_use_universal', clientId: MY_CLIENT_ID, gearId, amount: 1 },
+        () => showGachaMessage('サーバーに接続できませんでした。', false)
+      );
+    }
+
+    // ガチャ結果1件分の表示テキストを組み立てる
+    function describeGachaPull(d) {
+      if (d.kind === 'fragment') {
+        const name = GEAR_MASTER[d.gearId]?.name || d.gearId;
+        const rare = d.completedGained > 0;
+        return { text: `破片「${name}」×${d.amount}${rare ? `（完成！+${d.completedGained}）` : ''}`, rare, tag: '破片' };
+      }
+      if (d.kind === 'gear') {
+        const name = GEAR_MASTER[d.gearId]?.name || d.gearId;
+        return { text: `✨完成ギア「${name}」を直接入手！`, rare: true, tag: '完成' };
+      }
+      if (d.kind === 'shot') {
+        const name = bulletMasterData[d.grantedId]?.name || d.grantedId;
+        return { text: `✨通常弾「${name}」を入手！`, rare: true, tag: '通常弾' };
+      }
+      if (d.kind === 'ult') {
+        const name = ultMasterData[d.grantedId]?.name || d.grantedId;
+        return { text: `✨必殺技「${name}」を入手！`, rare: true, tag: '必殺技' };
+      }
+      if (d.kind === 'tactic') {
+        const [uid, sub] = String(d.grantedId).split('_');
+        const um = ultMasterData[uid];
+        const label = um ? `${um.name}[${sub}]${(sub === 'A' ? um.typeA : um.typeB).title}` : d.grantedId;
+        return { text: `✨戦術「${label}」を入手！`, rare: true, tag: '戦術' };
+      }
+      if (d.kind === 'fallback_universal') {
+        return { text: `（対象カテゴリは所持済みのため）万能破片×${d.amount}`, rare: false, tag: '代替' };
+      }
+      return { text: '不明な結果', rare: false, tag: '?' };
+    }
+
+    function renderGachaResults(pulls) {
+      const list = document.getElementById('gacha-result-list');
+      if (!list) return;
+      list.innerHTML = '';
+      pulls.forEach(d => {
+        const info = describeGachaPull(d);
+        const row = document.createElement('div');
+        row.className = 'gacha-result-row' + (info.rare ? ' rare' : '');
+        row.innerHTML = `<span><span class="grr-tag">${info.tag}</span>${info.text}</span>`;
+        if (d.pityTriggered) {
+          const pityNote = document.createElement('div');
+          pityNote.style.cssText = 'font-size:10.5px;color:#ffd93d;margin-top:2px;';
+          pityNote.innerText = '🎯 天井達成！万能破片+3';
+          row.appendChild(pityNote);
+        }
+        list.appendChild(row);
+      });
+    }
+
+    function openGachaOverlay() {
+      document.getElementById('gacha-overlay').style.display = 'flex';
+      showGachaMessage('', true);
+      document.getElementById('gacha-result-list').innerHTML = '';
+      requestMyProfile();
+      renderGachaUI();
+    }
+    function closeGachaOverlay() {
+      document.getElementById('gacha-overlay').style.display = 'none';
+    }
+
+    document.getElementById('gacha-btn').addEventListener('click', openGachaOverlay);
+    document.getElementById('gacha-close-btn').addEventListener('click', closeGachaOverlay);
+    document.getElementById('gacha-pull-1-btn').addEventListener('click', () => requestGachaPull(1));
+    document.getElementById('gacha-pull-10-btn').addEventListener('click', () => requestGachaPull(10));
+    document.getElementById('gacha-universal-use-btn').addEventListener('click', requestUseUniversal);
+
+    // ================================================================
+    // --- Phase4: ギア装備 ---
+    // 装備・解除の判定はすべてサーバー側で行う。ここでは表示とリクエスト送信のみ。
+    // ================================================================
+    const GEAR_MAIN_EQUIP_COST = 1000;
+    const GEAR_SUB_EQUIP_COST = 500;
+
+    function showGearMessage(text, ok) {
+      const el = document.getElementById('gear-message');
+      if (!el) return;
+      el.innerText = text;
+      el.className = ok ? 'ok' : 'ng';
+    }
+
+    const GEAR_ERROR_TEXT = {
+      not_enough_coins: 'コインが足りません。',
+      not_enough_inventory: '完成ギアの在庫がありません。ガチャで入手してください。',
+      already_equipped: 'すでにメインに装備しています。',
+      main_only_gear: 'このギアはメイン専用で、サブスロットには装備できません。',
+      no_main_equipped: '先にメインギアを装備してください。',
+      sub_slots_full: 'サブスロットの空きがありません。',
+      invalid_id: '不正なギアです。',
+      invalid_index: '不正なスロットです。',
+      no_profile: 'プロフィールを取得できませんでした。'
+    };
+
+    function requestEquipMain(gearId) {
+      showGearMessage('処理中…', true);
+      sendProfileMessage(
+        { type: '__gear_equip_main', clientId: MY_CLIENT_ID, gearId },
+        () => showGearMessage('サーバーに接続できませんでした。', false)
+      );
+    }
+    function requestEquipSub(gearId) {
+      showGearMessage('処理中…', true);
+      sendProfileMessage(
+        { type: '__gear_equip_sub', clientId: MY_CLIENT_ID, gearId },
+        () => showGearMessage('サーバーに接続できませんでした。', false)
+      );
+    }
+    function requestUnequipMain() {
+      showGearMessage('処理中…', true);
+      sendProfileMessage(
+        { type: '__gear_unequip_main', clientId: MY_CLIENT_ID },
+        () => showGearMessage('サーバーに接続できませんでした。', false)
+      );
+    }
+    function requestUnequipSub(index) {
+      showGearMessage('処理中…', true);
+      sendProfileMessage(
+        { type: '__gear_unequip_sub', clientId: MY_CLIENT_ID, index },
+        () => showGearMessage('サーバーに接続できませんでした。', false)
+      );
+    }
+
+    function renderGearUI() {
+      const coinEl = document.getElementById('gear-coin-value');
+      if (coinEl) coinEl.innerText = myCoins().toLocaleString();
+      const coins = myCoins();
+
+      const equipped = (myProfile && myProfile.equippedGear) || { main: null, subs: [] };
+      const mainId = equipped.main;
+      const maxSlots = mainId ? GEAR_MASTER[mainId].mainSubSlots : 0;
+
+      // --- 現在の装備表示（メイン1枠＋サブ最大3枠のスロットカード）---
+      const row = document.getElementById('gear-equipped-row');
+      if (row) {
+        row.innerHTML = '';
+
+        // メインスロット
+        const mainCard = document.createElement('div');
+        mainCard.className = 'gear-slot-card' + (mainId ? ' filled' : '');
+        if (mainId) {
+          mainCard.innerHTML = `
+            <div class="gsc-label">メイン</div>
+            <div class="gsc-name">${GEAR_MASTER[mainId].name}</div>
+          `;
+          const btn = document.createElement('button');
+          btn.className = 'gsc-unequip-btn';
+          btn.innerText = '外す';
+          btn.addEventListener('click', requestUnequipMain);
+          mainCard.appendChild(btn);
+        } else {
+          mainCard.innerHTML = `<div class="gsc-label">メイン</div><div class="gsc-empty">未装備</div>`;
+        }
+        row.appendChild(mainCard);
+
+        // サブスロット（メインのサブ枠数ぶん、未使用枠も空カードとして表示）
+        for (let i = 0; i < Math.max(maxSlots, equipped.subs.length); i++) {
+          const subId = equipped.subs[i];
+          const card = document.createElement('div');
+          card.className = 'gear-slot-card' + (subId ? ' filled' : '');
+          if (subId) {
+            card.innerHTML = `<div class="gsc-label">サブ${i + 1}</div><div class="gsc-name">${GEAR_MASTER[subId].name}</div>`;
+            const btn = document.createElement('button');
+            btn.className = 'gsc-unequip-btn';
+            btn.innerText = '外す';
+            btn.addEventListener('click', () => requestUnequipSub(i));
+            card.appendChild(btn);
+          } else {
+            card.innerHTML = `<div class="gsc-label">サブ${i + 1}</div><div class="gsc-empty">空き</div>`;
+          }
+          row.appendChild(card);
+        }
+        if (maxSlots === 0 && equipped.subs.length === 0) {
+          const note = document.createElement('div');
+          note.style.cssText = 'font-size:11px;color:#74808a;align-self:center;';
+          note.innerText = 'メインを装備するとサブ枠が開放されます。';
+          row.appendChild(note);
+        }
+      }
+
+      // --- 所持ギア（完成品）一覧 ---
+      const grid = document.getElementById('gear-inventory-grid');
+      if (grid) {
+        grid.innerHTML = '';
+        const completed = (myProfile && myProfile.completedGear) || {};
+        GEAR_IDS.forEach(gearId => {
+          const count = completed[gearId] || 0;
+          if (count <= 0) return; // 在庫が無いギアは装備画面には出さない（ガチャ画面の在庫グリッドで確認できる）
+          const meta = GEAR_MASTER[gearId];
+          const el = document.createElement('div');
+          el.className = 'gear-inv-item' + (meta.subOnly ? ' subonly' : '');
+
+          const isMain = equipped.main === gearId;
+          const subFull = !mainId || equipped.subs.length >= maxSlots;
+
+          el.innerHTML = `
+            <div class="gii-name">${meta.name} <span class="gii-count">×${count}</span></div>
+            <div class="gii-desc-main">メイン: ${meta.mainDesc}</div>
+            ${meta.subOnly ? '<div class="gii-desc-sub">（サブ不可）</div>' : `<div class="gii-desc-sub">サブ: ${meta.subDesc}</div>`}
+          `;
+
+          const btnRow = document.createElement('div');
+          btnRow.className = 'gii-btn-row';
+
+          const mainBtn = document.createElement('button');
+          mainBtn.className = 'gii-equip-btn';
+          mainBtn.innerText = `メインに装備 (${GEAR_MAIN_EQUIP_COST.toLocaleString()})`;
+          mainBtn.disabled = isMain || coins < GEAR_MAIN_EQUIP_COST;
+          mainBtn.addEventListener('click', () => requestEquipMain(gearId));
+          btnRow.appendChild(mainBtn);
+
+          if (!meta.subOnly) {
+            const subBtn = document.createElement('button');
+            subBtn.className = 'gii-equip-btn';
+            subBtn.innerText = `サブに装備 (${GEAR_SUB_EQUIP_COST.toLocaleString()})`;
+            subBtn.disabled = subFull || coins < GEAR_SUB_EQUIP_COST;
+            subBtn.addEventListener('click', () => requestEquipSub(gearId));
+            btnRow.appendChild(subBtn);
+          }
+
+          el.appendChild(btnRow);
+          grid.appendChild(el);
+        });
+
+        if (grid.children.length === 0) {
+          const empty = document.createElement('div');
+          empty.style.cssText = 'font-size:12px;color:#74808a;grid-column:1/-1;';
+          empty.innerText = '所持している完成ギアがありません。ガチャで入手してください。';
+          grid.appendChild(empty);
+        }
+      }
+    }
+
+    function openGearOverlay() {
+      document.getElementById('gear-overlay').style.display = 'flex';
+      showGearMessage('', true);
+      requestMyProfile();
+      renderGearUI();
+    }
+    function closeGearOverlay() {
+      document.getElementById('gear-overlay').style.display = 'none';
+    }
+
+    document.getElementById('gear-btn').addEventListener('click', openGearOverlay);
+    document.getElementById('gear-close-btn').addEventListener('click', closeGearOverlay);
+
     document.getElementById('profile-name-input').addEventListener('change', (e) => {
       const newName = e.target.value.trim().slice(0, 10) || DEFAULT_SAVED_DATA.playerName;
       e.target.value = newName;
@@ -1141,31 +2134,14 @@
       sendProfileMessage({ type: '__profile_sync_name', clientId: MY_CLIENT_ID, name: newName });
     });
 
-    // --- 必殺技選択画面内の「勲章」タブ切り替え ---
+    // --- 必殺技選択画面のタブ状態を初期化 ---
     function resetUltSectionTabs() {
       document.getElementById('ult-tab-skills').classList.add('active');
-      document.getElementById('ult-tab-medals').classList.remove('active');
       document.getElementById('ult-select-pane').classList.add('active');
-      document.getElementById('medal-select-pane').classList.remove('active');
       const subtypePanel = document.getElementById('subtype-panel');
       if (subtypePanel) subtypePanel.style.display = '';
     }
     document.getElementById('ult-tab-skills').addEventListener('click', resetUltSectionTabs);
-    document.getElementById('ult-tab-medals').addEventListener('click', () => {
-      document.getElementById('ult-tab-medals').classList.add('active');
-      document.getElementById('ult-tab-skills').classList.remove('active');
-      document.getElementById('medal-select-pane').classList.add('active');
-      document.getElementById('ult-select-pane').classList.remove('active');
-      // 勲章タブ表示中は戦術サブ能力選択を隠す
-      const subtypePanel = document.getElementById('subtype-panel');
-      if (subtypePanel) subtypePanel.style.display = 'none';
-      // 必殺技選択画面に来るまでにプロフィール未取得のケースをカバー
-      if (!myProfile) requestMyProfile(); else renderMedalGrid('ult-screen-medal-grid', 'ult-screen-medal-equipped-note');
-    });
-
-    // --- 勲章を全て外すボタン（プロフィール画面／必殺技選択画面の両方） ---
-    document.getElementById('profile-medal-clear-btn').addEventListener('click', clearAllMedals);
-    document.getElementById('ult-screen-medal-clear-btn').addEventListener('click', clearAllMedals);
 
     // ================================================================
     // --- Ver5: セットコメント（1〜9キー2連続押し発言 ＆ 0キー長押し一覧） ---
@@ -1217,6 +2193,145 @@
     }
 
     // --- 通常弾マスターデータ ---
+    // ================================================================
+    // --- ギアマスターデータ（Phase3: 名称・説明のみ。効果反映はPhase5で実装）---
+    // メイン/サブ両対応14種 + メイン専用6種 = 全20種。
+    // mainSubSlots: このギアをメインに据えた場合のサブスロット数。
+    // subOnly: true の場合、サブスロットには置けずメイン専用。
+    // ================================================================
+    const GEAR_MASTER = {
+      gear01: { name: '体力上限UP', mainDesc: '最大HP+10', subDesc: '最大HP+3', mainSubSlots: 3, subOnly: false },
+      gear02: { name: 'MP上限UP', mainDesc: '最大MP+15', subDesc: '最大MP+3', mainSubSlots: 3, subOnly: false },
+      gear03: { name: '移動速度UP', mainDesc: '速度10%増', subDesc: '速度3%増', mainSubSlots: 3, subOnly: false },
+      gear04: { name: '弾速度UP', mainDesc: '通常弾速度8%増', subDesc: '通常弾速度2%増', mainSubSlots: 3, subOnly: false },
+      gear05: { name: '跳躍力UP', mainDesc: 'ジャンプ力8%増、空中移動速度10%増', subDesc: 'ジャンプ力2%増、空中移動速度3%増', mainSubSlots: 3, subOnly: false },
+      gear06: { name: 'MP回復UP', mainDesc: 'MP回復速度10%増', subDesc: 'MP回復速度3%増', mainSubSlots: 3, subOnly: false },
+      gear07: { name: 'ダメージ強化', mainDesc: '通常弾ダメージ+4', subDesc: '通常弾ダメージ+1', mainSubSlots: 2, subOnly: false },
+      gear08: { name: '被ダメージ軽減', mainDesc: '通常弾の被ダメージ-4', subDesc: '通常弾の被ダメージ-1', mainSubSlots: 3, subOnly: false },
+      gear09: { name: 'シールド強化', mainDesc: 'シールド持続MP消費20%減', subDesc: 'シールド持続MP消費5%減', mainSubSlots: 3, subOnly: false },
+      gear10: { name: '無敵延長', mainDesc: 'リスポーン時無敵+2秒', subDesc: 'リスポーン時無敵+0.5秒', mainSubSlots: 3, subOnly: false },
+      gear11: { name: 'MP効率UP', mainDesc: '通常弾MP消費量-4', subDesc: '通常弾MP消費量-1', mainSubSlots: 1, subOnly: false },
+      gear12: { name: 'ULT効率UP', mainDesc: '通常弾によるULTチャージ+4%', subDesc: '通常弾によるULTチャージ+1%', mainSubSlots: 2, subOnly: false },
+      gear13: { name: 'ガード低速減少', mainDesc: 'ガード時移動速度低下10%減', subDesc: 'ガード時移動速度低下3%減', mainSubSlots: 3, subOnly: false },
+      gear14: { name: 'デバフ短縮', mainDesc: '時間制限付きのデバフの効果時間20%減', subDesc: '時間制限付きのデバフの効果時間5%減', mainSubSlots: 3, subOnly: false },
+      gear15: { name: '起死回生', mainDesc: 'HPが最大の33%以下の時、移動速度が15%、通常弾ダメージが30%増', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear16: { name: 'スタートダッシュ', mainDesc: 'リスポーンから20秒間、移動速度と通常弾ダメージが共に10%増', subDesc: null, mainSubSlots: 3, subOnly: true },
+      gear17: { name: '即死回避', mainDesc: 'HPが0になる攻撃を受けてもHP1で耐える（1回のみ、リスポーンで回数復活）', subDesc: null, mainSubSlots: 1, subOnly: true },
+      gear18: { name: 'のろい', mainDesc: 'デス時、倒した相手のキルヒールを30減らす', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear19: { name: '忍者スタート', mainDesc: 'リスポーンから3秒間透明化', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear20: { name: 'スポーンチャージ', mainDesc: 'リスポーン時、ULTチャージ+15%', subDesc: null, mainSubSlots: 2, subOnly: true }
+    };
+    const GEAR_IDS = Object.keys(GEAR_MASTER);
+
+    // ================================================================
+    // --- ギア効果の数値定義（Phase5）---
+    // メイン/サブ両対応14種のみ対象。type:'flat'は単純加算、type:'pct'は
+    // パーセントポイントとして合算し、最終的に (1 + 合計/100) の倍率にする
+    // （設計書4-3節：割合系は重複しても掛け算ではなく足し算）。
+    // メイン専用6種（gear15〜20）は特殊発動条件付きのため、この表には含めず
+    // 個別ロジックとして実装する。
+    // ================================================================
+    const GEAR_EFFECTS = {
+      gear01: { key: 'maxHp', type: 'flat', main: 10, sub: 3 },
+      gear02: { key: 'maxMp', type: 'flat', main: 15, sub: 3 },
+      gear03: { key: 'moveSpeedPct', type: 'pct', main: 10, sub: 3 },
+      gear04: { key: 'bulletSpeedPct', type: 'pct', main: 8, sub: 2 },
+      gear05: { key: 'jumpPct', type: 'pct', main: 8, sub: 2 },
+      gear05air: { key: 'airMoveSpeedPct', type: 'pct', main: 10, sub: 3 }, // gear05の「空中移動速度」側（同じgear05だが別キー）
+      gear06: { key: 'mpRegenPct', type: 'pct', main: 10, sub: 3 },
+      gear07: { key: 'bulletDamageFlat', type: 'flat', main: 4, sub: 1 },
+      gear08: { key: 'damageReductionFlat', type: 'flat', main: 4, sub: 1 },
+      gear09: { key: 'shieldMpCostReductionPct', type: 'pct', main: 20, sub: 5 },
+      gear10: { key: 'invincibleExtendFlat', type: 'flat', main: 2, sub: 0.5 },
+      gear11: { key: 'mpCostReductionFlat', type: 'flat', main: 4, sub: 1 },
+      gear12: { key: 'ultChargeBonusPct', type: 'pct', main: 4, sub: 1 },
+      gear13: { key: 'guardSlowReductionPct', type: 'pct', main: 10, sub: 3 },
+      gear14: { key: 'debuffDurationReductionPct', type: 'pct', main: 20, sub: 5 }
+    };
+    // gear05は「ジャンプ力」と「空中移動速度」の2つの効果キーを同時に持つため、
+    // 実際の装備判定では gear05 と gear05air の両方を「gear05が装備されているか」で見る。
+    // getGearBonusTotal がキー別に GEAR_EFFECTS を1件ずつ引くため、
+    // 2キー目（空中移動速度）だけ下のヘルパーで個別に計算する。
+    function getGear05AirMoveBonusTotal() {
+      const equipped = (currentStage === 'training' ? trainingFreeGear : (myProfile && myProfile.equippedGear)) || { main: null, subs: [] };
+      let total = 0;
+      const eff = GEAR_EFFECTS.gear05air;
+      if (equipped.main === 'gear05') total += eff.main;
+      (equipped.subs || []).forEach(subId => { if (subId === 'gear05') total += eff.sub; });
+      return total;
+    }
+
+    // 現在装備中のギア構成（メイン＋サブ）から、指定した効果キーの合計値を返す。
+    // pct系はここでは「パーセントポイントの合計」を返すだけで、
+    // 実際に倍率へ変換するのは呼び出し側（getGearPctMultiplier）の責務。
+    // Phase5追加：訓練場では所持・コインに関係なく全ギアを自由に試せるようにするため、
+    // currentStage==='training' の間だけ myProfile.equippedGear の代わりに
+    // trainingFreeGear（ローカルのみで完結し、サーバーには一切送らない仮の装備状態）を参照する。
+    function getGearBonusTotal(effectKey) {
+      if (effectKey === 'airMoveSpeedPct') return getGear05AirMoveBonusTotal();
+      const equipped = (currentStage === 'training' ? trainingFreeGear : (myProfile && myProfile.equippedGear)) || { main: null, subs: [] };
+      let total = 0;
+      if (equipped.main) {
+        const eff = GEAR_EFFECTS[equipped.main];
+        if (eff && eff.key === effectKey) total += eff.main;
+      }
+      (equipped.subs || []).forEach(subId => {
+        const eff = GEAR_EFFECTS[subId];
+        if (eff && eff.key === effectKey) total += eff.sub;
+      });
+      return total;
+    }
+
+    // pct系の効果キーを (1 + 合計%/100) の倍率に変換するヘルパー。
+    // extraPct には、メイン専用ギア（起死回生・スタートダッシュ等）による
+    // 追加の一時的%ボーナスを同じ土俵で合算するために渡す（省略可）。
+    function getGearPctMultiplier(effectKey, extraPct = 0) {
+      return 1 + (getGearBonusTotal(effectKey) + extraPct) / 100;
+    }
+
+    // 現在メインスロットに装備しているギアIDが gearId と一致するか。
+    // 訓練場では trainingFreeGear を見る（Phase2の関数と同じ分岐ルール）。
+    function isMainGear(gearId) {
+      const equipped = (currentStage === 'training' ? trainingFreeGear : (myProfile && myProfile.equippedGear));
+      return !!(equipped && equipped.main === gearId);
+    }
+
+    // --- メイン専用ギア（gear15〜20）の一時的な特殊ボーナス ---
+    // 起死回生とスタートダッシュは「移動速度」と「通常弾ダメージ」で上昇幅が異なる
+    // （起死回生は速度+15%/ダメージ+30%、スタートダッシュは両方+10%）ため、
+    // 速度用・ダメージ用を別関数として算出する。
+    let dashBuffTimer = 0;        // gear16 スタートダッシュ残り時間
+    let deathAvoidCharge = false; // gear17 即死回避：1回分のチャージがあるか
+    // Phase5: 訓練場専用の「自由装備」状態（コイン・所持に一切関係なく、その場で切り替えられる）。
+    // 実戦（レート戦・フリーバトル）には絶対に持ち出せない・サーバーへも送らない、ローカル限定の値。
+    let trainingFreeGear = { main: null, subs: [] };
+
+    function specialGearOffenseSpeedPct() {
+      let pct = 0;
+      if (isMainGear('gear15') && getMaxHp() > 0 && myHp <= getMaxHp() * 0.33) pct += 15; // 起死回生：移動速度+15%
+      if (isMainGear('gear16') && dashBuffTimer > 0) pct += 10; // スタートダッシュ：移動速度+10%
+      return pct;
+    }
+    function specialGearOffenseDamagePct() {
+      let pct = 0;
+      if (isMainGear('gear15') && getMaxHp() > 0 && myHp <= getMaxHp() * 0.33) pct += 30; // 起死回生：通常弾ダメージ+30%
+      if (isMainGear('gear16') && dashBuffTimer > 0) pct += 10; // スタートダッシュ：通常弾ダメージ+10%
+      return pct;
+    }
+
+    // Phase5: gear11のMP消費軽減を反映した実際の消費MPを計算する（最低1まで）。
+    function getEffectiveMpCost(bMeta) {
+      const base = bMeta ? bMeta.mpCost : 25;
+      return Math.max(1, base - getGearBonusTotal('mpCostReductionFlat'));
+    }
+
+    // Phase5: gear20 スポーンチャージ。メインに装備している時、リスポーン時のULTチャージ+15%。
+    // （サブ不可のメイン専用ギア。スポーン時の追加チャージとして単独で適用される）
+    function gearRespawnUltBonus() {
+      return isMainGear('gear20') ? 15 : 0;
+    }
+
+
     const bulletMasterData = {
       magic: {
         name: "魔法弾",
@@ -1282,49 +2397,120 @@
       return null;
     }
 
-    // 障害物の外側（最近傍の安全空間）へ瞬時に押し出し
-    function ejectPlayerFromObstacles() {
-      const hitBox = isPlayerInsideObstacle(playerPos);
-      if (!hitBox) return;
+    // 指定座標がマップの外壁の外側（またはその境界ギリギリの外）にあるかを判定。
+    // ハイジャンプ等で外壁の上・向こう側へ出てしまうケースの検出に使う。
+    function isOutOfMapBounds(pos) {
+      const half = currentMapSize / 2 - 1.0;
+      return (pos.x < -half || pos.x > half || pos.z < -half || pos.z > half);
+    }
 
-      const dPosX = (hitBox.max.x + playerRadius + 0.08) - playerPos.x;
-      const dNegX = playerPos.x - (hitBox.min.x - playerRadius - 0.08);
-      const dPosZ = (hitBox.max.z + playerRadius + 0.08) - playerPos.z;
-      const dNegZ = playerPos.z - (hitBox.min.z - playerRadius - 0.08);
-
-      const candidates = [
-        { x: hitBox.max.x + playerRadius + 0.12, z: playerPos.z, dist: Math.abs(dPosX) },
-        { x: hitBox.min.x - playerRadius - 0.12, z: playerPos.z, dist: Math.abs(dNegX) },
-        { x: playerPos.x, z: hitBox.max.z + playerRadius + 0.12, dist: Math.abs(dPosZ) },
-        { x: playerPos.x, z: hitBox.min.z - playerRadius - 0.12, dist: Math.abs(dNegZ) }
-      ];
-      candidates.sort((a, b) => a.dist - b.dist);
-
-      for (let cand of candidates) {
-        const testVec = new THREE.Vector3(cand.x, playerPos.y, cand.z);
-        if (!isPlayerInsideObstacle(testVec)) {
-          playerPos.x = cand.x;
-          playerPos.z = cand.z;
-          camera.position.set(playerPos.x, playerPos.y + eyeHeight, playerPos.z);
-          addBattleLog(`<span style="color:#74b9ff">★ 透明化解除：障害物外へ押し出されました</span>`);
-          return;
-        }
-      }
-
-      for (let r = 0.5; r <= 8.0; r += 0.4) {
-        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
-          const tx = playerPos.x + Math.cos(angle) * r;
-          const tz = playerPos.z + Math.sin(angle) * r;
-          const testVec = new THREE.Vector3(tx, playerPos.y, tz);
-          if (!isPlayerInsideObstacle(testVec)) {
-            playerPos.x = tx;
-            playerPos.z = tz;
-            camera.position.set(playerPos.x, playerPos.y + eyeHeight, playerPos.z);
-            addBattleLog(`<span style="color:#74b9ff">★ 透明化解除：障害物外へ押し出されました</span>`);
-            return;
+    // 指定のXZ座標に「立てる床」があるかを調べ、その床の高さ(Y)を返す。
+    // 床が無い（奈落・マップ外など）場合はnullを返す。
+    // checkGround()と違い、現在位置に依存せず任意の座標を単独で判定できる。
+    function getFloorHeightAt(x, z) {
+      let found = false;
+      let groundLevel = 0;
+      for (let box of colliders) {
+        if (x >= box.min.x - playerRadius * 0.6 && x <= box.max.x + playerRadius * 0.6 &&
+            z >= box.min.z - playerRadius * 0.6 && z <= box.max.z + playerRadius * 0.6) {
+          if (box.max.y > groundLevel || !found) {
+            groundLevel = box.max.y;
+            found = true;
           }
         }
       }
+      // 通常のプレーン床（Y=0）はcolliders配列には入っていないため、
+      // マップ範囲内であれば最低でもY=0の床があるものとして扱う。
+      if (!found && !isOutOfMapBounds(new THREE.Vector3(x, 0, z))) {
+        groundLevel = 0;
+        found = true;
+      }
+      return found ? groundLevel : null;
+    }
+
+    // 指定座標が「壁や障害物に埋まっている」「マップ範囲外」「床が存在しない（奈落含む）」
+    // のいずれかに該当するかを判定する。ejectPlayerFromObstacles / teleportToNearestSafeFloor
+    // 双方の共通トリガー判定として使う。
+    function isPositionUnsafe(pos) {
+      if (isOutOfMapBounds(pos)) return true;
+      if (isPlayerInsideObstacle(pos)) return true;
+      const floorY = getFloorHeightAt(pos.x, pos.z);
+      if (floorY === null) return true;
+      // 床よりかなり下（奈落に沈んでいる等）も救済対象にする
+      if (pos.y < floorY - 3.0) return true;
+      return false;
+    }
+
+    // 壁・障害物への埋まり込み、マップ範囲外への逸脱（ハイジャンプ等による外壁越え）、
+    // 床の無い場所への転落を検出し、最も近い「移動可能な床」へプレイヤーを瞬時に押し戻す。
+    // ゴーストウォーク終了時の弾き出し判定（ejectPlayerFromObstacles）を全マップ共通の
+    // セーフティネットとして一般化したもの。
+    function teleportToNearestSafeFloor(logMessage) {
+      if (!isPositionUnsafe(playerPos)) return false;
+
+      const isSafeCandidate = (x, z) => {
+        const floorY = getFloorHeightAt(x, z);
+        if (floorY === null) return null;
+        const testVec = new THREE.Vector3(x, floorY + 0.1, z);
+        if (isOutOfMapBounds(testVec)) return null;
+        if (isPlayerInsideObstacle(testVec)) return null;
+        return floorY;
+      };
+
+      // 1. まず今埋まっている障害物があれば、そのすぐ外側（最短距離の面）を優先的に試す
+      const hitBox = isPlayerInsideObstacle(playerPos);
+      if (hitBox) {
+        const dPosX = (hitBox.max.x + playerRadius + 0.08) - playerPos.x;
+        const dNegX = playerPos.x - (hitBox.min.x - playerRadius - 0.08);
+        const dPosZ = (hitBox.max.z + playerRadius + 0.08) - playerPos.z;
+        const dNegZ = playerPos.z - (hitBox.min.z - playerRadius - 0.08);
+        const candidates = [
+          { x: hitBox.max.x + playerRadius + 0.12, z: playerPos.z, dist: Math.abs(dPosX) },
+          { x: hitBox.min.x - playerRadius - 0.12, z: playerPos.z, dist: Math.abs(dNegX) },
+          { x: playerPos.x, z: hitBox.max.z + playerRadius + 0.12, dist: Math.abs(dPosZ) },
+          { x: playerPos.x, z: hitBox.min.z - playerRadius - 0.12, dist: Math.abs(dNegZ) }
+        ];
+        candidates.sort((a, b) => a.dist - b.dist);
+        for (let cand of candidates) {
+          const floorY = isSafeCandidate(cand.x, cand.z);
+          if (floorY !== null) {
+            playerPos.set(cand.x, floorY + 0.05, cand.z);
+            camera.position.set(playerPos.x, playerPos.y + eyeHeight, playerPos.z);
+            velocityY = 0;
+            if (logMessage) addBattleLog(logMessage);
+            return true;
+          }
+        }
+      }
+
+      // 2. 見つからなければ、現在地から渦巻き状に少しずつ広げて安全な床を探索
+      for (let r = 0.5; r <= 20.0; r += 0.5) {
+        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+          const tx = playerPos.x + Math.cos(angle) * r;
+          const tz = playerPos.z + Math.sin(angle) * r;
+          const floorY = isSafeCandidate(tx, tz);
+          if (floorY !== null) {
+            playerPos.set(tx, floorY + 0.05, tz);
+            camera.position.set(playerPos.x, playerPos.y + eyeHeight, playerPos.z);
+            velocityY = 0;
+            if (logMessage) addBattleLog(logMessage);
+            return true;
+          }
+        }
+      }
+
+      // 3. それでも見つからない最終手段として、マップの安全スポーン地点へ退避
+      const s = safeSpawns[0] || { x: 0, z: 0 };
+      playerPos.set(s.x, 2.5, s.z);
+      camera.position.set(playerPos.x, playerPos.y + eyeHeight, playerPos.z);
+      velocityY = 0;
+      if (logMessage) addBattleLog(logMessage);
+      return true;
+    }
+
+    // 障害物の外側（最近傍の安全空間）へ瞬時に押し出し（ゴーストウォーク解除時用）
+    function ejectPlayerFromObstacles() {
+      teleportToNearestSafeFloor(`<span style="color:#74b9ff">★ 透明化解除：障害物外へ押し出されました</span>`);
     }
 
     let wasInvisible = false;
@@ -1388,29 +2574,69 @@
     };
 
     let selectedUltType = "beam";
-    let selectedUltSubtype = "A";
+    // Phase2: 戦術サブ能力は買い切り制になったため、「未所持＝戦術なし」の状態を表す 'NONE' を導入する。
+    // 既存の効果分岐はすべて `=== 'A'` / `=== 'B'` の明示比較（三項演算子のelse側は素の基本値）なので、
+    // 'NONE' を入れると自動的に「戦術効果なしの素のULT」として振る舞う。
+    let selectedUltSubtype = "NONE";
+
+    function subtypeLabel(sub) {
+      return (sub === 'A' || sub === 'B') ? `タイプ${sub}` : '戦術なし';
+    }
 
     function updateSubtypePanelUI() {
       const data = ultMasterData[selectedUltType];
       if (!data) return;
 
-      document.getElementById('subtype-current-ult-name').innerText = `${data.name} [タイプ${selectedUltSubtype}]`;
+      document.getElementById('subtype-current-ult-name').innerText =
+        `${data.name} [${subtypeLabel(selectedUltSubtype)}]`;
 
-      document.getElementById('subtype-title-a').innerText = data.typeA.title;
-      document.getElementById('subtype-desc-a').innerText = data.typeA.desc;
+      // Phase2: 未所持の戦術タイプはロック表示にして選択できないようにする
+      const ownedA = hasTactic(selectedUltType, 'A');
+      const ownedB = hasTactic(selectedUltType, 'B');
 
-      document.getElementById('subtype-title-b').innerText = data.typeB.title;
-      document.getElementById('subtype-desc-b').innerText = data.typeB.desc;
+      document.getElementById('subtype-title-a').innerText = data.typeA.title + (ownedA ? '' : ' 🔒');
+      document.getElementById('subtype-desc-a').innerText = ownedA
+        ? data.typeA.desc
+        : `未所持（ショップで ${SHOP_PRICE_TACTIC.toLocaleString()} コイン）：${data.typeA.desc}`;
+
+      document.getElementById('subtype-title-b').innerText = data.typeB.title + (ownedB ? '' : ' 🔒');
+      document.getElementById('subtype-desc-b').innerText = ownedB
+        ? data.typeB.desc
+        : `未所持（ショップで ${SHOP_PRICE_TACTIC.toLocaleString()} コイン）：${data.typeB.desc}`;
 
       const cardA = document.getElementById('subtype-card-a');
       const cardB = document.getElementById('subtype-card-b');
-      if (selectedUltSubtype === 'A') {
-        cardA.className = 'subtype-card selected subtype-a';
-        cardB.className = 'subtype-card';
-      } else {
-        cardA.className = 'subtype-card';
-        cardB.className = 'subtype-card selected subtype-b';
+
+      // 'A' / 'B' / 'NONE' の3状態を明示的に扱う。
+      // 'NONE'（戦術未所持・未選択）ではどちらのカードも選択状態にしない。
+      cardA.className = 'subtype-card'
+        + (selectedUltSubtype === 'A' ? ' selected subtype-a' : '')
+        + (ownedA ? '' : ' locked');
+      cardB.className = 'subtype-card'
+        + (selectedUltSubtype === 'B' ? ' selected subtype-b' : '')
+        + (ownedB ? '' : ' locked');
+
+      // 戦術を1つも所持していない場合の案内
+      const noteEl = document.getElementById('subtype-none-note');
+      if (noteEl) {
+        if (!ownedA && !ownedB) {
+          noteEl.style.display = 'block';
+          noteEl.innerText = `「${data.name}」の戦術サブ能力を所持していません。戦術なし（素の性能）で出撃します。ショップで購入できます。`;
+        } else if (selectedUltSubtype === 'NONE') {
+          noteEl.style.display = 'block';
+          noteEl.innerText = '戦術なし（素の性能）で出撃します。上のカードをクリックすると戦術を選択できます。';
+        } else {
+          noteEl.style.display = 'none';
+        }
       }
+    }
+
+    // Phase2: 所持している戦術タイプの中から既定値を決める。
+    // A→B の優先順で、どちらも未所持なら 'NONE'（戦術なし）。
+    function defaultSubtypeFor(ultId) {
+      if (hasTactic(ultId, 'A')) return 'A';
+      if (hasTactic(ultId, 'B')) return 'B';
+      return 'NONE';
     }
 
     // --- 1. 3Dシーン & レンダラー ---
@@ -1998,9 +3224,8 @@
     let playerName = "魔導士A";
     let myHp = 100;
     let myMp = 100;
-    // Ver5: 勲章による最大HP/MP補正（赤の勲章=最大HP+10、青の勲章=最大MP+15）
-    function getMaxHp() { return 100 + medalBonusMaxHp(); }
-    function getMaxMp() { return 100 + medalBonusMaxMp(); }
+    function getMaxHp() { return 100 + getGearBonusTotal('maxHp'); }
+    function getMaxMp() { return 100 + getGearBonusTotal('maxMp'); }
     let ultPercent = 0.0;
     let isOverheated = false;
     let isGuarding = false;
@@ -2161,15 +3386,9 @@
       }
       nextShotExHoming = false;
 
-      // --- バグ修正: 新しい試合（初回スポーン／レート戦の再戦）開始時に
-      //     前の試合のULTゲージや強化状態が引き継がれてしまう問題への対処 ---
-      // pendingFirstSpawnUltBonus は「このresetSpawn呼び出しが、死亡リスポーンではなく
-      // “新しい試合の開始” であること」を示すフラグとして __joined / __rematch_start の
-      // 受信直後に true にセットされている。このタイミングでのみ、
-      // 試合をまたいで持ち越すべきでない状態（ULTゲージ・ワープ持続・雷速上昇など）を
-      // 明示的に0クリアする。死亡リスポーン（isDeathRespawn === true）では
-      // 従来通りULTゲージ等は維持し、この処理は行わない。
-      const isNewMatchStart = !isDeathRespawn && pendingFirstSpawnUltBonus;
+      // 新しい試合の開始時には、前の試合のULTゲージや強化状態を持ち越さない。
+      // pendingNewMatchStart は新しい試合の開始点でのみ true にする。
+      const isNewMatchStart = !isDeathRespawn && pendingNewMatchStart;
       if (isNewMatchStart) {
         ultPercent = 0.0;
         warpExpireTimer = 0;
@@ -2178,19 +3397,25 @@
         nextShotExHoming = false;
       }
 
-      // Ver5: 白の勲章（初回スポーン含め、リスポーン時ULTチャージ+10%）
-      // バグ修正: 1回の参戦フロー中にresetSpawnが複数回呼ばれても、
-      // 「本当の死亡リスポーン」か「このマッチで初めてのスポーン」の時だけ1回付与する。
-      const shouldGrantUltBonus = isDeathRespawn || pendingFirstSpawnUltBonus;
-      if (shouldGrantUltBonus) {
-        const respawnUltBonus = medalRespawnUltBonus();
+      // 死亡リスポーン、または新しい試合の初回スポーン時にgear20のスポーンチャージを適用する。
+      const shouldGrantSpawnUltBonus = isDeathRespawn || pendingNewMatchStart;
+      if (shouldGrantSpawnUltBonus) {
+        const respawnUltBonus = gearRespawnUltBonus();
         if (respawnUltBonus > 0) {
           ultPercent = Math.min(200, ultPercent + respawnUltBonus);
         }
-        pendingFirstSpawnUltBonus = false;
+        pendingNewMatchStart = false;
       }
 
-      respawnInvincibleTimer = giveInvincible ? 5.0 : 0.0;
+      // Phase5: gear10（無敵延長）をリスポーン無敵時間に反映
+      respawnInvincibleTimer = giveInvincible ? (5.0 + getGearBonusTotal('invincibleExtendFlat')) : 0.0;
+
+      // Phase5: メイン専用ギアのリスポーン時リセット/再チャージ
+      dashBuffTimer = isMainGear('gear16') ? 20.0 : 0;             // スタートダッシュ：20秒間の速度・ダメージバフ
+      deathAvoidCharge = isMainGear('gear17');                     // 即死回避：リスポーンのたびに1回分再チャージ
+      if (isMainGear('gear19')) {                                  // 忍者スタート：3秒間透明化（既存のinvisibilityTimerを流用）
+        invisibilityTimer = Math.max(invisibilityTimer, 3.0);
+      }
 
       beamCharging = false;
       beamFiring = false;
@@ -2253,7 +3478,7 @@
       l1.style.width = `${p1}%`;
       l2.style.width = `${p2}%`;
 
-      const currentTypeName = `${ultMasterData[selectedUltType].name}[${selectedUltSubtype}]`;
+      const currentTypeName = `${ultMasterData[selectedUltType].name}[${subtypeLabel(selectedUltSubtype)}]`;
 
       if (ultPercent >= 200.0) {
         l2.className = 'ult-ready-ex';
@@ -2302,6 +3527,9 @@
     }
 
     function handleRateMatchResult(data) {
+      // 試合終了直前の1秒バッチを先に送ってから、以後の戦闘イベントを停止する。
+      flushQuestEvents();
+      clearQuestEventBuffer();
       isRateMatchOver = true;
       clearInputs();
       releasePointerLock();
@@ -2344,8 +3572,17 @@
         updateRateHud();
       }
 
-      // Ver5: レート戦決着で戦績・勲章解放状況が更新されるため、プロフィールを再取得しておく
-      // （newlyUnlockedMedalsの個別通知は別途 __medal_unlocked_batch で届く）
+      // --- コイン経済（Phase1）：今回の試合で得たコインを表示 ---
+      const coinsEl = document.getElementById('rate-result-coins');
+      if (coinsEl) {
+        if (myResult && typeof myResult.coinsEarned === 'number') {
+          coinsEl.innerText = `獲得コイン: +${myResult.coinsEarned}（所持: ${myResult.newCoins ?? '?'}）`;
+        } else {
+          coinsEl.innerText = '';
+        }
+      }
+
+      // Ver5: レート戦決着で戦績・コイン等が更新されるため、プロフィールを再取得しておく
       requestMyProfile();
 
       document.getElementById('rate-rematch-btn').style.display = isHost ? 'inline-block' : 'none';
@@ -2648,6 +3885,56 @@
     }
 
     // ================================================================
+    // --- Quest: 戦闘系イベントの軽量バッチ送信 ---
+    // ダメージ/回復/被ダメージ等は今回、戦闘計算自体をサーバー権威化しない。
+    // ただしクエスト状態・達成・報酬はサーバー側で管理する。
+    // ================================================================
+    const questEventBuffer = {
+      damageDealt: 0,
+      damageTaken: 0,
+      hpRecovered: 0,
+      kill: 0,
+      exUltUsed: 0
+    };
+    let questEventFlushTimer = null;
+
+    function queueQuestEvent(eventType, amount = 1) {
+      if (currentStage === 'training') return;
+      if (!Object.prototype.hasOwnProperty.call(questEventBuffer, eventType)) return;
+      const n = Number(amount);
+      if (!Number.isFinite(n) || n <= 0) return;
+      questEventBuffer[eventType] += n;
+      if (!questEventFlushTimer) {
+        questEventFlushTimer = setTimeout(() => {
+          questEventFlushTimer = null;
+          flushQuestEvents();
+        }, 1000);
+      }
+    }
+
+    function flushQuestEvents() {
+      if (currentStage === 'training') {
+        Object.keys(questEventBuffer).forEach(k => { questEventBuffer[k] = 0; });
+        return;
+      }
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const events = {};
+      Object.entries(questEventBuffer).forEach(([k, v]) => {
+        if (Number.isFinite(v) && v > 0) {
+          events[k] = v;
+          questEventBuffer[k] = 0;
+        }
+      });
+      if (Object.keys(events).length === 0) return;
+      sendToServer({ type: '__quest_event_batch', clientId: MY_CLIENT_ID, events });
+    }
+
+    function clearQuestEventBuffer() {
+      if (questEventFlushTimer) { clearTimeout(questEventFlushTimer); questEventFlushTimer = null; }
+      Object.keys(questEventBuffer).forEach(k => { questEventBuffer[k] = 0; });
+    }
+
+    // ================================================================
     // --- Ver5: プロフィール通信 ---
     // スタート画面（試合外）ではメインの ws が存在しないため専用の軽量接続を使い、
     // 試合中はメインの ws（sendToServer）をそのまま使う。
@@ -2710,19 +3997,165 @@
           }
           applySavedDataToUI();
           renderProfileUI();
+          renderQuestUI();
+          // Phase2: ショップの残高・所持表示も最新のプロフィールで更新する
+          renderShopUI();
+          // Phase2: 所持していないものが選択されたままにならないよう整合性を取る
+          enforceOwnedSelections();
         }
         return;
       }
-      if (data.type === '__medal_unlocked' || data.type === '__medal_unlocked_batch') {
-        const medals = data.type === '__medal_unlocked_batch' ? data.medals : [data.medal];
-        for (const medalId of medals) {
-          if (myProfile && myProfile.medalsUnlocked) myProfile.medalsUnlocked[medalId] = true;
-          const meta = MEDAL_MASTER[medalId];
-          if (meta) {
-            addBattleLog(`<span style="color:${meta.color}">🎖️ 勲章「${meta.name}」を獲得しました！</span>`, 'medal');
-          }
+
+      // ================================================================
+      // --- Quest: クエスト受取結果 ---
+      // ================================================================
+      if (data.type === '__quest_claim_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderQuestUI();
+          renderProfileUI();
+          const reward = data.reward || {};
+          let msg = `✓ 「${data.title || data.questId}」を受け取りました`;
+          if (reward.coins) msg += ` / +${Number(reward.coins).toLocaleString()}コイン`;
+          const fr = reward.fragmentReward?.fragments || [];
+          if (fr.length) msg += ` / ギア破片×${fr.reduce((s, x) => s + Number(x.amount || 0), 0)}`;
+          setQuestMessage(msg, true);
+        } else {
+          setQuestMessage(questErrorText(data.reason), false);
         }
-        renderProfileUI();
+        return;
+      }
+
+      // --- Quest: ログインボーナス受取結果 ---
+      if (data.type === '__login_bonus_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderQuestUI();
+          renderProfileUI();
+          const reward = data.reward || {};
+          let msg = `✓ ${data.streak}日目のログインボーナスを受け取りました / +${Number(reward.coins || 0).toLocaleString()}コイン`;
+          const fr = reward.fragmentReward?.fragments || [];
+          if (fr.length) msg += ` / ギア破片×${fr.reduce((sum, x) => sum + Number(x.amount || 0), 0)}`;
+          setQuestLoginMessage(msg, true);
+        } else {
+          setQuestLoginMessage(data.reason === 'already_claimed' ? '今日はすでに受け取り済みです。' : 'ログインボーナスを受け取れませんでした。', false);
+        }
+        return;
+      }
+
+      // ================================================================
+      // --- Phase2: ショップ購入結果 ---
+      // ================================================================
+      if (data.type === '__shop_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderShopUI();
+          renderProfileUI();
+          refreshSelectionLockUI();
+
+          let label = data.grantedId;
+          if (data.kind === 'shot' && bulletMasterData[data.grantedId]) {
+            label = bulletMasterData[data.grantedId].name;
+          } else if (data.kind === 'ult' && ultMasterData[data.grantedId]) {
+            label = ultMasterData[data.grantedId].name;
+          } else if (data.kind === 'tactic') {
+            const [uid, sub] = String(data.grantedId).split('_');
+            const um = ultMasterData[uid];
+            if (um) label = `${um.name} [${sub}] ${(sub === 'A' ? um.typeA : um.typeB).title}`;
+          }
+          const prefix = data.wasRandom ? '🎲 抽選結果' : '✓ 購入完了';
+          showShopMessage(`${prefix}：「${label}」を入手しました！（-${(data.spent || 0).toLocaleString()} コイン）`, true);
+        } else {
+          showShopMessage(SHOP_ERROR_TEXT[data.reason] || '購入に失敗しました。', false);
+        }
+        return;
+      }
+
+      // ================================================================
+      // --- Phase3: ガチャ結果 ---
+      // ================================================================
+      if (data.type === '__gacha_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderGachaUI();
+          renderShopUI();
+          renderProfileUI();
+          refreshSelectionLockUI();
+          renderGachaResults(data.pulls || []);
+          showGachaMessage(`${data.pulls.length}連実行（-${(data.spent || 0).toLocaleString()} コイン）`, true);
+        } else {
+          showGachaMessage(GACHA_ERROR_TEXT[data.reason] || 'ガチャに失敗しました。', false);
+        }
+        return;
+      }
+
+      // --- Phase3: 万能破片の使用結果 ---
+      if (data.type === '__gacha_use_universal_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderGachaUI();
+          const name = GEAR_MASTER[data.gearId]?.name || data.gearId;
+          showGachaMessage(`万能破片×${data.amount}を「${name}」に変換${data.completedGained > 0 ? `（完成+${data.completedGained}）` : ''}`, true);
+        } else {
+          showGachaMessage(GACHA_ERROR_TEXT[data.reason] || '変換に失敗しました。', false);
+        }
+        return;
+      }
+
+      // ================================================================
+      // --- Phase4: ギア装備・解除の結果 ---
+      // ================================================================
+      if (data.type === '__gear_equip_main_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderGearUI();
+          renderGachaUI();
+          const name = GEAR_MASTER[data.gearId]?.name || data.gearId;
+          let msg = `メインに「${name}」を装備しました（-${(data.spent || 0).toLocaleString()} コイン）`;
+          if (data.removedOldMain) msg += `／旧メイン「${GEAR_MASTER[data.removedOldMain]?.name || data.removedOldMain}」は破片に戻りました`;
+          if (data.trimmedSubs && data.trimmedSubs.length > 0) msg += `／サブ枠超過分${data.trimmedSubs.length}個も破片に戻りました`;
+          showGearMessage(msg, true);
+        } else {
+          showGearMessage(GEAR_ERROR_TEXT[data.reason] || '装備に失敗しました。', false);
+        }
+        return;
+      }
+      if (data.type === '__gear_equip_sub_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderGearUI();
+          renderGachaUI();
+          const name = GEAR_MASTER[data.gearId]?.name || data.gearId;
+          showGearMessage(`サブに「${name}」を装備しました（-${(data.spent || 0).toLocaleString()} コイン）`, true);
+        } else {
+          showGearMessage(GEAR_ERROR_TEXT[data.reason] || '装備に失敗しました。', false);
+        }
+        return;
+      }
+      if (data.type === '__gear_unequip_main_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderGearUI();
+          renderGachaUI();
+          const name = GEAR_MASTER[data.removedMain]?.name || data.removedMain;
+          let msg = `メイン「${name}」を外しました（破片+3）`;
+          if (data.removedSubs && data.removedSubs.length > 0) msg += `／サブ${data.removedSubs.length}個も道連れで外れました`;
+          showGearMessage(msg, true);
+        } else {
+          showGearMessage(GEAR_ERROR_TEXT[data.reason] || '解除に失敗しました。', false);
+        }
+        return;
+      }
+      if (data.type === '__gear_unequip_sub_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderGearUI();
+          renderGachaUI();
+          const name = GEAR_MASTER[data.removedId]?.name || data.removedId;
+          showGearMessage(`サブ「${name}」を外しました（破片+3）`, true);
+        } else {
+          showGearMessage(GEAR_ERROR_TEXT[data.reason] || '解除に失敗しました。', false);
+        }
         return;
       }
     }
@@ -2734,6 +4167,167 @@
         renderProfileUI();
       });
     }
+
+    // ================================================================
+    // --- Quest UI ---
+    // ================================================================
+    const QUEST_TAB_LABELS = { daily: 'デイリー', weekly: 'ウィークリー', monthly: 'マンスリー' };
+
+    function questErrorText(reason) {
+      const map = {
+        already_claimed: 'このクエストは受け取り済みです。',
+        not_completed: 'まだクエストが達成されていません。',
+        invalid_quest: 'クエスト情報が古くなっています。画面を更新してください。',
+        no_profile: 'プロフィールを取得できませんでした。',
+        invalid_client: 'プロフィール認証に失敗しました。'
+      };
+      return map[reason] || 'クエスト報酬を受け取れませんでした。';
+    }
+
+    function setQuestMessage(text, ok) {
+      const el = document.getElementById('quest-message');
+      if (!el) return;
+      el.innerText = text || '';
+      el.className = ok ? 'ok' : 'ng';
+    }
+
+    function setQuestLoginMessage(text, ok) {
+      const el = document.getElementById('quest-login-message');
+      if (!el) return;
+      el.innerText = text || '';
+      el.className = ok ? 'ok' : 'ng';
+    }
+
+    function formatQuestReward(reward) {
+      if (!reward) return '';
+      const parts = [];
+      if (reward.coins) parts.push(`🪙 ${Number(reward.coins).toLocaleString()}`);
+      if (reward.fragments) parts.push(`🧩 ランダムギア破片×${reward.fragments}`);
+      return parts.join(' / ');
+    }
+
+    function renderQuestLoginBonus() {
+      const info = myProfile?.loginBonus;
+      const rewards = info?.rewards || [];
+      const grid = document.getElementById('quest-login-grid');
+      const status = document.getElementById('quest-login-status');
+      const btn = document.getElementById('quest-login-claim-btn');
+      if (!grid || !status || !btn) return;
+      const streak = Number(info?.streak || 0);
+      status.innerText = info?.claimedToday ? `現在の連続日数: ${streak}日 / 本日受取済み` : `現在の連続日数: ${streak}日`;
+      grid.innerHTML = '';
+      rewards.forEach((reward, index) => {
+        const day = index + 1;
+        const el = document.createElement('div');
+        el.className = 'quest-login-day';
+        if (info?.claimedToday && streak === day) el.classList.add('claimed');
+        if (!info?.claimedToday && (info?.nextDay || 1) === day) el.classList.add('current');
+        const dayNum = document.createElement('div');
+        dayNum.className = 'quest-login-day-num';
+        dayNum.innerText = `DAY ${day}`;
+        const rewardEl = document.createElement('div');
+        rewardEl.className = 'quest-login-day-reward';
+        rewardEl.innerText = `🪙 ${Number(reward.coins || 0).toLocaleString()}${reward.fragments ? `\n🧩 ギア破片×${reward.fragments}` : ''}`;
+        rewardEl.style.whiteSpace = 'pre-line';
+        el.appendChild(dayNum);
+        el.appendChild(rewardEl);
+        grid.appendChild(el);
+      });
+      btn.disabled = !!info?.claimedToday;
+      btn.innerText = info?.claimedToday ? '本日は受け取り済み' : `${info?.nextDay || 1}日目のログインボーナスを受け取る`;
+    }
+
+    function renderQuestList(category) {
+      const snapshot = myProfile?.quests?.[category];
+      const list = document.getElementById(`quest-list-${category}`);
+      if (!list) return;
+      list.innerHTML = '';
+      const quests = snapshot?.quests || [];
+      quests.forEach(q => {
+        const item = document.createElement('div');
+        item.className = 'quest-item';
+        if (q.completed) item.classList.add('completed');
+        if (q.claimed) item.classList.add('claimed');
+
+        const top = document.createElement('div');
+        top.className = 'quest-row-top';
+        const title = document.createElement('div');
+        title.className = 'quest-title';
+        title.innerText = q.title;
+        const reward = document.createElement('div');
+        reward.className = 'quest-reward';
+        reward.innerText = formatQuestReward(q.reward);
+        top.appendChild(title);
+        top.appendChild(reward);
+
+        const progressRow = document.createElement('div');
+        progressRow.className = 'quest-progress-row';
+        const bg = document.createElement('div');
+        bg.className = 'quest-progress-bg';
+        const fill = document.createElement('div');
+        fill.className = 'quest-progress-fill';
+        const ratio = q.target > 0 ? Math.min(1, Math.max(0, Number(q.progress || 0) / Number(q.target))) : 0;
+        fill.style.width = `${ratio * 100}%`;
+        bg.appendChild(fill);
+        const text = document.createElement('div');
+        text.className = 'quest-progress-text';
+        text.innerText = `${Number(q.progress || 0).toLocaleString()} / ${Number(q.target || 0).toLocaleString()}`;
+        progressRow.appendChild(bg);
+        progressRow.appendChild(text);
+
+        const claimBtn = document.createElement('button');
+        claimBtn.className = 'quest-claim-btn';
+        claimBtn.type = 'button';
+        claimBtn.innerText = q.claimed ? '受取済み' : (q.completed ? '受け取る' : '未達成');
+        claimBtn.disabled = q.claimed || !q.completed;
+        claimBtn.addEventListener('click', () => {
+          sendProfileMessage({ type: '__quest_claim', clientId: MY_CLIENT_ID, category, questId: q.id });
+        });
+
+        item.appendChild(top);
+        item.appendChild(progressRow);
+        item.appendChild(claimBtn);
+        list.appendChild(item);
+      });
+    }
+
+    function renderQuestUI() {
+      if (!myProfile) return;
+      renderQuestLoginBonus();
+      ['daily', 'weekly', 'monthly'].forEach(renderQuestList);
+      const active = document.querySelector('.quest-tab.active');
+      const category = active ? active.dataset.questTab : 'daily';
+      const period = myProfile?.quests?.[category]?.periodKey || '';
+      const periodEl = document.getElementById('quest-period');
+      if (periodEl) periodEl.innerText = `${QUEST_TAB_LABELS[category]}期間: ${period}`;
+    }
+
+    function setQuestTab(category) {
+      document.querySelectorAll('.quest-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.questTab === category));
+      document.querySelectorAll('.quest-list').forEach(list => list.classList.toggle('active', list.id === `quest-list-${category}`));
+      const periodEl = document.getElementById('quest-period');
+      if (periodEl) periodEl.innerText = `${QUEST_TAB_LABELS[category]}期間: ${myProfile?.quests?.[category]?.periodKey || ''}`;
+    }
+
+    function openQuestOverlay() {
+      document.getElementById('quest-overlay').style.display = 'flex';
+      setQuestMessage('', true);
+      setQuestLoginMessage('', true);
+      requestMyProfile();
+    }
+
+    function closeQuestOverlay() {
+      document.getElementById('quest-overlay').style.display = 'none';
+    }
+
+    document.getElementById('quest-btn').addEventListener('click', openQuestOverlay);
+    document.getElementById('quest-close-btn').addEventListener('click', closeQuestOverlay);
+    document.getElementById('quest-login-claim-btn').addEventListener('click', () => {
+      sendProfileMessage({ type: '__login_bonus_claim', clientId: MY_CLIENT_ID });
+    });
+    document.querySelectorAll('.quest-tab').forEach(tab => {
+      tab.addEventListener('click', () => setQuestTab(tab.dataset.questTab));
+    });
 
     // --- 部屋プレビュー（「合言葉で部屋に入る」選択時に部屋の詳細を確認） ---
     let previewWs = null;
@@ -2838,7 +4432,7 @@
       if (currentStage === 'training') {
         myPeerId = "solo_player";
         document.getElementById('info').innerText = '訓練場（ソロ練習モード）';
-        addBattleLog(`訓練場へ入場しました。通常弾[${bulletMasterData[selectedBulletType].name}]＆サブ能力[${selectedUltSubtype}タイプ]をお試しください！`);
+        addBattleLog(`訓練場へ入場しました。通常弾[${bulletMasterData[selectedBulletType].name}]＆サブ能力[${subtypeLabel(selectedUltSubtype)}]をお試しください！`);
         return;
       }
 
@@ -3000,9 +4594,8 @@
           document.getElementById('rate-result-overlay').style.display = 'none';
           document.getElementById('death-overlay').style.display = 'none';
           addBattleLog(`<span style="color:#f1c40f">★ 次のレート戦が開始されました！</span>`);
-          // バグ修正: 再戦も新たなレート戦の「初回スポーン」に該当するため、
-          // 白の勲章のULTチャージボーナスを1回だけ再度付与できるようにする。
-          pendingFirstSpawnUltBonus = true;
+          // 再戦は新たなレート戦の開始なので、初回スポーン用の状態をリセットする。
+          pendingNewMatchStart = true;
           resetSpawn(true, false);
           // ブラウザの仕様上、ユーザー操作なしでrequestPointerLockは呼べないため、
           // resume-overlay（クリックで再ロック）をpointerlockchangeの通常フローに任せる。
@@ -3010,8 +4603,8 @@
           return;
         }
 
-        // Ver5: プロフィール関連メッセージ（プロフィール結果・勲章獲得通知）はメインwsでも受け取り得る
-        if (data.type === '__profile_result' || data.type === '__medal_unlocked' || data.type === '__medal_unlocked_batch') {
+        // Ver5: プロフィール関連メッセージはメインwsでも受け取り得る
+        if (data.type === '__profile_result' || data.type === '__shop_result' || data.type === '__gacha_result' || data.type === '__gacha_use_universal_result' || data.type === '__gear_equip_main_result' || data.type === '__gear_equip_sub_result' || data.type === '__gear_unequip_main_result' || data.type === '__gear_unequip_sub_result' || data.type === '__quest_claim_result' || data.type === '__login_bonus_result') {
           handleProfileServerMessage(data);
           return;
         }
@@ -3090,8 +4683,11 @@
       } else if (data.type === 'hit_approved') {
         // シューター側の処理
         if (data.shooterId === myPeerId || data.shooterId === 'player') {
+          queueQuestEvent('damageDealt', Number(data.rawDmg) || 0);
           let baseAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
           if (data.isCurseTarget) baseAmt *= 0.5;
+          // Phase5: gear12（ULTチャージ効率）
+          baseAmt *= getGearPctMultiplier('ultChargeBonusPct');
           addUltCharge(baseAmt, false);
 
           if (fullShieldTimer > 0 && isExFullShieldActive) {
@@ -3141,7 +4737,7 @@
             if (isVulnerable) { damage *= 1.5; isVulnerable = false; }
 
             if (damage > 0) {
-              applyDamage(damage, data.shooterId);
+              applyDamage(damage, data.shooterId, false, false, true); // Phase5: 通常弾ヒット → gear08対象
               triggerHitEffect();
             }
           }
@@ -3158,7 +4754,7 @@
           if (dist <= (data.radius || 1.8)) {
             let dmg = data.splashDmg || 5;
             if (isVulnerable) dmg *= 1.5;
-            applyDamage(dmg, data.shooterId);
+            applyDamage(dmg, data.shooterId, false, false, true); // Phase5: 爆風はULT直接ダメージではないため、gear08(被ダメージ軽減)を適用。gear07/15/16のダメージ増加側はexecuteBombExplosion()でcomputeBulletDamageを使っていないため元々非適用のまま
 
             // ハイジャンプの半分威力のふっとばし
             const pVec = new THREE.Vector3(playerPos.x - data.x, 0, playerPos.z - data.z).normalize();
@@ -3175,15 +4771,24 @@
           remotePlayers[senderId].isDead = true;
         }
         if (data.killerId === myPeerId || data.killerId === 'player') {
+          queueQuestEvent('kill', 1);
           if (isRateMatch && !isRateMatchOver) {
             myKills++;
             updateRateHud();
             addBattleLog(`<span style="color:#f1c40f">★ 撃破！ (${myKills}/3キル)</span>`);
           }
-          const healBonus = (selectedUltType === 'heal' && selectedUltSubtype === 'B') ? 50 : 30;
-          myHp = Math.min(getMaxHp(), myHp + healBonus);
+          const baseHealBonus = (selectedUltType === 'heal' && selectedUltSubtype === 'B') ? 50 : 30;
+          // Phase5: gear18（のろい）。倒した相手がのろいを装備していた場合、キルヒールを30減らす（最低0）。
+          const healBonus = Math.max(0, baseHealBonus - (data.hasCurseGear ? 30 : 0));
+          const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + healBonus) - myHp);
+          myHp += healedHp;
+          if (healedHp > 0) queueQuestEvent('hpRecovered', healedHp);
           updateHudBars();
-          addBattleLog(`<span style="color:#2ecc71">★ 敵撃破ボーナス: HP+${healBonus} 回復！</span>`);
+          if (healBonus > 0) {
+            addBattleLog(`<span style="color:#2ecc71">★ 敵撃破ボーナス: HP+${healBonus} 回復！</span>`);
+          } else {
+            addBattleLog(`<span style="color:#a29bfe">★ 敵撃破...が、相手の「のろい」でヒールを受けられなかった</span>`);
+          }
         }
       } else if (data.type === 'ult_curse_hit') {
         if (data.targetId !== myPeerId) return;
@@ -3191,10 +4796,11 @@
         superMagicTimer = 0;
         myMp = 0;
         triggerOverheat();
-        curseDebuffTimer = 6.0;
+        // Phase5: gear14（デバフ短縮）を反映。受けた本人の装備で短縮される。
+        curseDebuffTimer = 6.0 * (1 - getGearBonusTotal('debuffDurationReductionPct') / 100);
         if (data.isEx) {
           const lostHp = myHp * 0.33;
-          applyDamage(lostHp, senderId, true);
+          applyDamage(lostHp, senderId, true, false, true); // Phase5: EXカースショックはgear08(被ダメージ軽減)の対象
           addBattleLog(`<span style="color:#fd79a8">★ EXカース被弾！残りHPの33%を喪失！</span>`);
         }
         triggerHitEffect();
@@ -3241,12 +4847,12 @@
         if (respawnInvincibleTimer <= 0 && myHp > 0 && !isDead) {
           let dmg = 10;
           if (isVulnerable) { dmg *= 1.5; isVulnerable = false; }
-          applyDamage(dmg, senderId);
+          applyDamage(dmg, senderId, false, false, true); // Phase5: ハイジャンプのスラムはgear08(被ダメージ軽減)の対象
           triggerHitEffect();
         }
       } else if (data.type === 'warp_damage') {
         if (data.targetId === myPeerId && myHp > 0 && !isDead && respawnInvincibleTimer <= 0) {
-          applyDamage(data.dmg, senderId, true);
+          applyDamage(data.dmg, senderId, true, false, true); // Phase5: クイックワープBのバックスタブはgear08(被ダメージ軽減)の対象
           triggerHitEffect();
           addBattleLog(`<span style="color:#ff7675">💥 クイックワープの奇襲バックスタブ(${Math.round(data.dmg)}ダメージ)を受けた！</span>`);
         }
@@ -3264,7 +4870,7 @@
           if (data.isEx) {
             let dmg = 33;
             if (isVulnerable) dmg *= 1.5;
-            applyDamage(dmg, senderId);
+            applyDamage(dmg, senderId, false, false, true); // Phase5: ハイパーサンダー系はgear08(被ダメージ軽減)の対象
             velocityY = -35;
             isVulnerable = true;
             stunTimer = 1.0;
@@ -3273,12 +4879,12 @@
             if (isGrounded) {
               let dmg = 10;
               if (isVulnerable) dmg *= 1.5;
-              applyDamage(dmg, senderId);
+              applyDamage(dmg, senderId, false, false, true); // Phase5: ハイパーサンダー系はgear08(被ダメージ軽減)の対象
               addBattleLog(`ハイパーサンダー直撃！(地上：10ダメージ)`);
             } else {
               let dmg = 33;
               if (isVulnerable) dmg *= 1.5;
-              applyDamage(dmg, senderId);
+              applyDamage(dmg, senderId, false, false, true); // Phase5: ハイパーサンダー系はgear08(被ダメージ軽減)の対象
               velocityY = -35;
               isVulnerable = true;
               stunTimer = 1.0;
@@ -3290,7 +4896,7 @@
       }
     }
 
-    function applyDamage(amount, attackerId, isCrit = false, isReflect = false) {
+    function applyDamage(amount, attackerId, isCrit = false, isReflect = false, isNormalBullet = false) {
       if (myHp <= 0 || isDead || respawnInvincibleTimer > 0) return;
       if (isRateMatchOver) {
         // 診断ログ: 「ダメージを一切受けなくなる」症状の切り分け用。
@@ -3301,6 +4907,12 @@
       }
 
       let finalDmg = amount;
+
+      // Phase5: gear08（被ダメージ軽減）は「通常弾の被ダメージ」限定の固定値軽減。
+      // ULT・爆風などの特殊ダメージには適用しない。最低1は残す（0/マイナス化を防止）。
+      if (isNormalBullet) {
+        finalDmg = Math.max(1, finalDmg - getGearBonusTotal('damageReductionFlat'));
+      }
 
       if (selectedUltType === 'beam' && selectedUltSubtype === 'A' && (beamCharging || beamFiring)) {
         finalDmg *= 0.5;
@@ -3313,18 +4925,24 @@
           spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
           updateHudBars();
           addBattleLog(`<span style="color:#ff4757">★ オートヒール不死身発動！HP1で耐えた！</span>`);
-          // Ver5: 紫の勲章（合計被ダメージ99以内でレート戦勝利）判定用に実際の減少分を報告
-          if (isRateMatch && actualDmg > 0) sendToServer({ type: '__report_damage_taken', amount: actualDmg });
           return;
         }
       }
 
-      myHp -= finalDmg;
-      spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
+      // Phase5: gear17（即死回避、メイン専用）：1回のリスポーンにつき1回だけ、致死ダメージをHP1で耐える。
+      // オートヒール不死身が発動中の場合はそちらが優先され、この判定には来ない。
+      if (isMainGear('gear17') && deathAvoidCharge && (myHp - finalDmg) <= 0) {
+        myHp = 1;
+        deathAvoidCharge = false;
+        spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
+        updateHudBars();
+        addBattleLog(`<span style="color:#ffd93d">★ 即死回避発動！HP1で耐えた！（リスポーンまで再発動不可）</span>`);
+        return;
+      }
 
-      // Ver5: 紫の勲章（合計被ダメージ99以内でレート戦勝利）判定用に、
-      // シールド・ガード等の軽減を反映した「実際に受けたダメージ」をサーバーへ報告する
-      if (isRateMatch && finalDmg > 0) sendToServer({ type: '__report_damage_taken', amount: finalDmg });
+      myHp -= finalDmg;
+      if (finalDmg > 0) queueQuestEvent('damageTaken', finalDmg);
+      spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
 
       if (selectedUltType === 'shield' && selectedUltSubtype === 'B' && finalDmg > 0) {
         addUltCharge(finalDmg * 0.5, false);
@@ -3420,6 +5038,8 @@
       releasePointerLock();
       clearInputs();
       clearConnectTimeout();
+      flushQuestEvents();
+      clearQuestEventBuffer();
 
       if (pingIntervalTimer) { clearInterval(pingIntervalTimer); pingIntervalTimer = null; }
       if (ws) { try { ws.close(); } catch (e) {} ws = null; }
@@ -3474,7 +5094,10 @@
       closeRoomPreview();
       document.getElementById('step-1').style.display = 'none';
       document.getElementById('step-2').style.display = 'flex';
+      // Phase2: 選択画面に入るたびに所持状況を反映し直す（購入直後の反映・未所持選択の是正）
+      enforceOwnedSelections();
       updateSubtypePanelUI();
+      refreshTrainingGearPanel(); // Phase5: 訓練場専用の自由ギアパネルの表示切替
     });
 
     document.getElementById('btn-goto-join').addEventListener('click', () => {
@@ -3487,7 +5110,10 @@
       document.getElementById('battle-mode-area').style.display = 'none';
       document.getElementById('step-1').style.display = 'none';
       document.getElementById('step-2').style.display = 'flex';
+      // Phase2: 選択画面に入るたびに所持状況を反映し直す（購入直後の反映・未所持選択の是正）
+      enforceOwnedSelections();
       updateSubtypePanelUI();
+      refreshTrainingGearPanel(); // Phase5: 訓練場専用の自由ギアパネルの表示切替
       requestRoomInfoPreview(document.getElementById('room-input').value.trim() || 'arena888');
     });
 
@@ -3501,7 +5127,10 @@
       closeRoomPreview();
       document.getElementById('step-1').style.display = 'none';
       document.getElementById('step-2').style.display = 'flex';
+      // Phase2: 選択画面に入るたびに所持状況を反映し直す（購入直後の反映・未所持選択の是正）
+      enforceOwnedSelections();
       updateSubtypePanelUI();
+      refreshTrainingGearPanel(); // Phase5: 訓練場専用の自由ギアパネルの表示切替
     });
 
     document.getElementById('btn-step2-back').addEventListener('click', () => {
@@ -3539,17 +5168,32 @@
     // 通常弾選択
     document.querySelectorAll('.bullet-card').forEach(card => {
       card.addEventListener('click', () => {
+        const id = card.getAttribute('data-bullet');
+        // Phase2: 未購入の通常弾は選択できない
+        if (!hasShot(id)) {
+          addBattleLog(`<span style="color:#ffd93d">🔒 「${bulletMasterData[id]?.name || id}」は未購入です。ショップで購入してください。</span>`);
+          return;
+        }
         document.querySelectorAll('.bullet-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
-        selectedBulletType = card.getAttribute('data-bullet');
+        selectedBulletType = id;
       });
     });
 
     document.querySelectorAll('.char-card').forEach(card => {
       card.addEventListener('click', () => {
+        const id = card.getAttribute('data-ult');
+        // Phase2: 未購入のULTは選択できない
+        if (!hasUlt(id)) {
+          addBattleLog(`<span style="color:#ffd93d">🔒 「${ultMasterData[id]?.name || id}」は未購入です。ショップで購入してください。</span>`);
+          return;
+        }
         document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
-        selectedUltType = card.getAttribute('data-ult');
+        selectedUltType = id;
+        // ULTを切り替えたら、戦術タイプも「そのULTで所持しているもの」に設定し直す。
+        // 直前のULTの戦術が残ったままにならないようにするための整合処理。
+        selectedUltSubtype = defaultSubtypeFor(id);
         ultPercent = 0;
         updateSubtypePanelUI();
         updateHudBars();
@@ -3557,12 +5201,21 @@
     });
 
     document.getElementById('subtype-card-a').addEventListener('click', () => {
-      selectedUltSubtype = "A";
+      if (!hasTactic(selectedUltType, 'A')) {
+        addBattleLog('<span style="color:#ffd93d">🔒 この戦術サブ能力は未購入です。ショップで購入してください。</span>');
+        return;
+      }
+      // 既に選択中のものを再クリックしたら「戦術なし」に戻せるようにする
+      selectedUltSubtype = (selectedUltSubtype === 'A') ? 'NONE' : 'A';
       updateSubtypePanelUI();
       updateHudBars();
     });
     document.getElementById('subtype-card-b').addEventListener('click', () => {
-      selectedUltSubtype = "B";
+      if (!hasTactic(selectedUltType, 'B')) {
+        addBattleLog('<span style="color:#ffd93d">🔒 この戦術サブ能力は未購入です。ショップで購入してください。</span>');
+        return;
+      }
+      selectedUltSubtype = (selectedUltSubtype === 'B') ? 'NONE' : 'B';
       updateSubtypePanelUI();
       updateHudBars();
     });
@@ -3573,9 +5226,12 @@
       const room = document.getElementById('room-input').value.trim() || 'arena888';
       closeRoomPreview();
 
-      // Ver5: 勲章効果（最大HP/MP・リスポーンULTチャージ等）を正しく適用するため、
-      // 試合開始前に必ず自分のプロフィールを取得しておく。
+      // 試合開始前にサーバー権威のプロフィール（コイン/ギア等）を取得しておく。
       if (!myProfile) requestMyProfile();
+
+      // Phase2: 未所持の通常弾/ULT/戦術が選択されたまま出撃しないよう、
+      // 出撃直前にもう一度だけ整合性を取る（ロック表示をすり抜けた場合の保険）。
+      enforceOwnedSelections();
 
       ultPercent = 0.0;
       warpExpireTimer = 0;
@@ -3588,9 +5244,8 @@
       myDeaths = 0;
       isRateMatch = false;
       isRateMatchOver = false;
-      // バグ修正: 新しい参戦フローの開始点なので、白の勲章の初回スポーンボーナスを
-      // このマッチで1回だけ付与できる状態に戻す。
-      pendingFirstSpawnUltBonus = true;
+      // 新しい参戦フローの開始点なので、初回スポーン用の状態をリセットする。
+      pendingNewMatchStart = true;
 
       if (gameModeChoice === 'solo') {
         buildStage('training');
@@ -3691,7 +5346,7 @@
           const cooldown = (superMagicTimer > 0) ? SUPER_MAGIC_SHOOT_COOLDOWN_MS : SHOOT_COOLDOWN_MS;
           if (now - lastShootTime >= cooldown) {
             const bMeta = bulletMasterData[selectedBulletType];
-            const neededMp = bMeta ? bMeta.mpCost : 25;
+            const neededMp = getEffectiveMpCost(bMeta); // Phase5: gear11のMP消費軽減を反映
             if (!isOverheated && (myMp >= (neededMp * 0.5) || superMagicTimer > 0)) {
               tryFireSpell();
               lastShootTime = now;
@@ -3706,7 +5361,7 @@
     function tryFireSpell() {
       if (stunTimer > 0) return;
       const bMeta = bulletMasterData[selectedBulletType];
-      const cost = bMeta ? bMeta.mpCost : 25;
+      const cost = getEffectiveMpCost(bMeta); // Phase5: gear11のMP消費軽減を反映
 
       if (superMagicTimer <= 0) {
         if (myMp >= cost) { myMp -= cost; }
@@ -3733,8 +5388,8 @@
 
       let speed = bMeta ? bMeta.speed : 44;
       if (isExSuperHoming) speed = 36;
-      // Ver5: 紫の勲章（通常弾速度1.15倍）。EX超誘導弾は特殊弾速のため対象外
-      if (!isExSuperHoming) speed *= medalBulletSpeedMultiplier();
+      // Phase5: gear04（弾速度）はEX超誘導弾には適用しない
+      if (!isExSuperHoming) speed *= getGearPctMultiplier('bulletSpeedPct');
       const vx = dir.x * speed, vy = dir.y * speed, vz = dir.z * speed;
 
       if (nextShotExHoming) {
@@ -3796,7 +5451,8 @@
       broadcastMsg({
         type: 'player_died',
         x: playerPos.x, y: playerPos.y, z: playerPos.z, rot: yaw,
-        killerId
+        killerId,
+        hasCurseGear: isMainGear('gear18') // Phase5: のろい。死亡した本人の装備を、キル側のヒール減算に使ってもらう
       });
 
       let killerName = "誰か";
@@ -3837,9 +5493,10 @@
 
       const ultName = ultMasterData[selectedUltType].name;
       if (isEx) {
+        queueQuestEvent('exUltUsed', 1);
         triggerRainbowFlash();
         broadcastLog(`<span style="color:#fd79a8">★★★ ${playerName} が 【EX ${ultName}】 を発動！！ ★★★</span>`, 'ex');
-        // Ver5: 橙の勲章（レート戦でEX ULTを使う）判定用にサーバーへ報告
+        // レート戦のEX ULTコインボーナス判定用にサーバーへ報告
         if (isRateMatch) sendToServer({ type: '__report_ex_ult_used' });
       } else {
         broadcastLog(`<span style="color:#00cec9">${playerName}</span> が <span style="color:#f1c40f">${ultName}</span> を発動！`, 'ult');
@@ -3896,7 +5553,9 @@
             document.getElementById('mp-label').style.color = '#fff';
           }
           if (selectedUltSubtype === 'A') {
-            myHp = Math.min(getMaxHp(), myHp + 15);
+            const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + 15) - myHp);
+            myHp += healedHp;
+            if (healedHp > 0) queueQuestEvent('hpRecovered', healedHp);
             updateHudBars();
             addBattleLog(`<span style="color:#55efc4">★ グレードアップ効果: HP+15 回復！</span>`);
           }
@@ -4009,6 +5668,13 @@
       pitch = 0;
       velocityY = 0;
       warpExpireTimer = 0;
+
+      // バグ修正: 相手が壁際にいる状態でワープすると、背後方向のレイが壁に当たらず
+      // warpDistが不適切になり、着地地点が壁の中になることがあった。
+      // ワープ直後に埋まり込み・マップ範囲外を検知したら、最も近い安全な床へ補正する。
+      if (isPositionUnsafe(playerPos)) {
+        teleportToNearestSafeFloor(null);
+      }
 
       if (selectedUltType === 'warp' && selectedUltSubtype === 'B') {
         if (currentStage === 'training' && targetEnemy.dummyRef) {
@@ -4328,26 +5994,32 @@
 
     // ダメージ計算用ヘルパー
     function computeBulletDamage(bType, originPos, hitPos, isExHoming) {
-      if (isExHoming) return 35;
-      let base = 20;
-
-      if (bType === 'sniper') {
-        const dist = originPos.distanceTo(hitPos);
-        const t = Math.min(1.0, dist / 35.0);
-        base = 10 + t * 25;
-      } else if (bType === 'heavy') {
-        base = 30;
-      } else if (bType === 'bomb') {
-        base = 15; // 直撃ダメージ
-      } else if (bType === 'ricochet') {
-        base = 15;
+      let base;
+      if (isExHoming) {
+        base = 35;
       } else {
-        base = 20;
+        if (bType === 'sniper') {
+          const dist = originPos.distanceTo(hitPos);
+          const t = Math.min(1.0, dist / 35.0);
+          base = 10 + t * 25;
+        } else if (bType === 'heavy') {
+          base = 30;
+        } else if (bType === 'bomb') {
+          base = 15; // 直撃ダメージ
+        } else if (bType === 'ricochet') {
+          base = 15;
+        } else {
+          base = 20;
+        }
+
+        if (upgradeLevel >= 3) {
+          base *= 1.25;
+        }
       }
 
-      if (upgradeLevel >= 3) {
-        base *= 1.25;
-      }
+      // Phase5: gear07（固定値ダメージ強化）＋ gear15/16（発動時の%ダメージバフ）を反映
+      base += getGearBonusTotal('bulletDamageFlat');
+      base *= (1 + specialGearOffenseDamagePct() / 100);
 
       return Math.round(base);
     }
@@ -4355,10 +6027,6 @@
     // --- 11. メインループ ---
     const clock = new THREE.Clock();
     let networkTimer = 0;
-    // Ver5: 総移動距離をまとめて一定間隔でサーバーへ報告するためのバッファ
-    let pendingDistanceReport = 0;
-    let distanceReportTimer = 0;
-    const DISTANCE_REPORT_INTERVAL_S = 2.0;
     const ccdRaycaster = new THREE.Raycaster();
 
     function animate() {
@@ -4411,11 +6079,14 @@
 
       if (autoHealTimer > 0) {
         autoHealTimer -= delta;
-        myHp = Math.min(getMaxHp(), myHp + 10 * delta);
+        const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + 10 * delta) - myHp);
+        myHp += healedHp;
+        if (healedHp > 0) queueQuestEvent('hpRecovered', healedHp);
         updateHudBars();
       }
 
       if (stunTimer > 0) stunTimer -= delta;
+      if (dashBuffTimer > 0) dashBuffTimer -= delta; // Phase5: gear16 スタートダッシュ残り時間
       if (invisibilityTimer > 0) {
         invisibilityTimer -= delta;
       }
@@ -4618,7 +6289,7 @@
       const bMeta = bulletMasterData[selectedBulletType];
       buffList.push(`<span style="color:#ffeaa7">通常弾: ${bMeta ? bMeta.name : '魔法弾'}</span>`);
       const ultMeta = ultMasterData[selectedUltType];
-      buffList.push(`<span style="color:#00cec9">ULT: ${ultMeta.name}[${selectedUltSubtype}]</span>`);
+      buffList.push(`<span style="color:#00cec9">ULT: ${ultMeta.name}[${subtypeLabel(selectedUltSubtype)}]</span>`);
       if (selectedUltType === 'upgrade') {
         const upTxt = (upgradeLevel >= 3) ? `第${upgradeLevel}段階 (弾ダメ1.25倍)` : `第${upgradeLevel}段階`;
         buffList.push(`<span style="color:#a29bfe">強化: ${upTxt}</span>`);
@@ -4635,6 +6306,10 @@
       if (stunTimer > 0) buffList.push(`<span style="color:#e74c3c">雷硬直</span>`);
       if (isVulnerable) buffList.push(`<span style="color:#e74c3c">弱体化(1.5倍)</span>`);
       if (thunderSpeedTimer > 0) buffList.push(`<span style="color:#f1c40f">雷速UP(+${Math.round((thunderSpeedMultiplier-1)*100)}%)</span>`);
+      // Phase5: ギアバフの発動中インジケーター（5-2節：未着手事項だったもの）
+      if (isMainGear('gear16') && dashBuffTimer > 0) buffList.push(`<span style="color:#fab1a0">スタートダッシュ (${dashBuffTimer.toFixed(1)}s)</span>`);
+      if (isMainGear('gear15') && myHp > 0 && myHp <= getMaxHp() * 0.33) buffList.push(`<span style="color:#ff6b6b">起死回生 発動中</span>`);
+      if (isMainGear('gear17') && deathAvoidCharge) buffList.push(`<span style="color:#ffd93d">即死回避 チャージ済み</span>`);
       document.getElementById('active-buff').innerHTML = buffList.join(' | ');
 
       // 操作 & 物理
@@ -4648,11 +6323,13 @@
 
         if (superMagicTimer <= 0) {
           if (isGuarding) {
-            myMp = Math.max(0, myMp - 15 * delta);
+            // Phase5: gear09（シールド強化）でガード中のMP消費速度を軽減
+            const guardDrainRate = 15 * (1 - getGearBonusTotal('shieldMpCostReductionPct') / 100);
+            myMp = Math.max(0, myMp - Math.max(0, guardDrainRate) * delta);
             if (myMp <= 0) triggerOverheat();
           } else {
-            // Ver5: 橙の勲章（EX ULT使用でMP回復速度1.15倍）を通常のMP自然回復に適用
-            myMp = Math.min(getMaxMp(), myMp + 10 * medalMpRegenMultiplier() * delta);
+            // Phase5: gear06（MP回復UP）を自然回復に適用
+            myMp = Math.min(getMaxMp(), myMp + 10 * getGearPctMultiplier('mpRegenPct') * delta);
             if (isOverheated && myMp >= getMaxMp()) {
               isOverheated = false;
               document.getElementById('mp-bar').classList.remove('overheat');
@@ -4691,22 +6368,28 @@
 
         if (moveVec.lengthSq() > 0) {
           moveVec.normalize();
-          let speed = 11 * medalMoveSpeedMultiplier();
-          if (isGuarding) speed = 5.5 * medalMoveSpeedMultiplier();
+          // Phase5: gear03（移動速度）・gear13（ガード低速緩和）・gear15/16（発動時の速度バフ）を反映
+          const gearMoveMult = getGearPctMultiplier('moveSpeedPct', specialGearOffenseSpeedPct());
+          let speed = 11 * gearMoveMult;
+          if (isGuarding) {
+            // 素のガード速度低下は 11→5.5（5.5低下）。gear13はこの低下幅そのものを軽減する。
+            const guardPenalty = 11 - 5.5;
+            const reducedPenalty = guardPenalty * (1 - getGearBonusTotal('guardSlowReductionPct') / 100);
+            speed = (11 - reducedPenalty) * gearMoveMult;
+          }
           if (curseDebuffTimer > 0) speed *= 0.5;
-          if (beamFiring) speed = 4.0 * medalMoveSpeedMultiplier();
+          if (beamFiring) speed = 4.0 * gearMoveMult;
           if (superMagicTimer > 0) speed *= 1.5;
           if (thunderSpeedTimer > 0) speed *= thunderSpeedMultiplier;
+          // Phase5: gear05の「空中移動速度」は接地していない時のみ追加で乗算
+          if (!isGrounded) speed *= (1 + getGearBonusTotal('airMoveSpeedPct') / 100);
 
           const targetX = playerPos.x + moveVec.x * speed * delta;
           const targetZ = playerPos.z + moveVec.z * speed * delta;
           const resolved = resolveCollision(targetX, targetZ);
-          const movedDist = Math.hypot(resolved.x - playerPos.x, resolved.z - playerPos.z);
           playerPos.x = resolved.x;
           playerPos.z = resolved.z;
 
-          // Ver5: 緑の勲章（1回のレート戦で3000m以上移動）判定用に、まとめて一定間隔でサーバーへ報告
-          pendingDistanceReport += movedDist;
         }
 
         if (playerKnockbackVel.lengthSq() > 0.01) {
@@ -4720,13 +6403,13 @@
 
         const isJumpHeld = !!(keys['Space'] || keys['ShiftLeft'] || keys['ShiftRight']);
         if (isJumpHeld && isGrounded && stunTimer <= 0) {
-          let jPower = 10 * medalJumpMultiplier();
-          if (curseDebuffTimer > 0) jPower = 7 * medalJumpMultiplier();
-          if (beamFiring) jPower = 5 * medalJumpMultiplier();
+          // Phase5: gear05（跳躍力）を反映
+          const gearJumpMult = getGearPctMultiplier('jumpPct');
+          let jPower = 10 * gearJumpMult;
+          if (curseDebuffTimer > 0) jPower = 7 * gearJumpMult;
+          if (beamFiring) jPower = 5 * gearJumpMult;
           velocityY = jPower;
           isGrounded = false;
-          // Ver5: 黄の勲章（1回のレート戦で50回ジャンプする）判定用にサーバーへ報告
-          if (isRateMatch) sendToServer({ type: '__report_jump' });
         }
 
         const prevY = playerPos.y;
@@ -4750,6 +6433,16 @@
           velocityY = 0;
         }
 
+        // 安全装置: 壁・障害物への埋まり込み、マップ範囲外（外壁の上・向こう側）への
+        // 逸脱を検知したら、最も近い移動可能な床へ即座にテレポートする。
+        // 例: ハイジャンプで外壁を飛び越えてしまった／クイックワープの着地先が
+        // 偶然壁際で埋まり込んでしまった、といったケースの保険。
+        // ゴーストウォーク中（意図的な壁すり抜け状態）は対象外にする。
+        const isGhostWalking = (selectedUltType === 'super' && selectedUltSubtype === 'B' && invisibilityTimer > 0);
+        if (!isGhostWalking && isPositionUnsafe(playerPos)) {
+          teleportToNearestSafeFloor(`<span style="color:#ffa502">★ 障害物・マップ範囲外への逸脱を検知、安全な床へ復帰しました</span>`);
+        }
+
         networkTimer += delta;
         if (networkTimer >= 0.033) {
           networkTimer = 0;
@@ -4770,13 +6463,6 @@
             isDead: isDead
           });
 
-          // Ver5: 緑の勲章（1回のレート戦で3000m以上移動）判定用に、まとめた移動距離を定期送信
-          distanceReportTimer += 0.033;
-          if (distanceReportTimer >= DISTANCE_REPORT_INTERVAL_S && pendingDistanceReport > 0) {
-            distanceReportTimer = 0;
-            sendToServer({ type: '__report_distance', meters: pendingDistanceReport });
-            pendingDistanceReport = 0;
-          }
           if (beamFiring) {
             const chestPos = new THREE.Vector3(playerPos.x, playerPos.y + 1.2, playerPos.z);
             const bQuat = myBeam.quaternion;
@@ -4959,6 +6645,8 @@
 
               let chargeAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
               if (d.curseDebuffTimer > 0) chargeAmt *= 0.5;
+              // Phase5: gear12（ULTチャージ効率）
+              chargeAmt *= getGearPctMultiplier('ultChargeBonusPct');
               addUltCharge(chargeAmt, false);
 
               if (fullShieldTimer > 0 && isExFullShieldActive) {
@@ -5034,7 +6722,7 @@
               if (isVulnerable) { damage *= 1.5; isVulnerable = false; }
 
               if (damage > 0) {
-                applyDamage(damage, s.shooterId);
+                applyDamage(damage, s.shooterId, false, false, true); // Phase5: 訓練場の反撃マネキンも通常弾扱い → gear08対象
                 triggerHitEffect();
               }
             }
@@ -5100,7 +6788,7 @@
     resetSpawn(false);
     updateSubtypePanelUI();
     applySavedDataToUI();
-    // Ver5: ページ読み込み時点で自分のプロフィール（勲章・セットコメント・戦績）を先読みしておく
+    // Ver5: ページ読み込み時点で自分のプロフィール（セットコメント・戦績・ギア等）を先読みしておく
     requestMyProfile();
     animate();
   </script>
