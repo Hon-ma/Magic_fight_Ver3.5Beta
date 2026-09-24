@@ -1,9 +1,10 @@
-// 3D Magic FPS Duel - オーソリタティブ遅延補償＆中継サーバー
+// 3D Magic FPS Duel - Ver6
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const { Redis } = require('@upstash/redis');
+const quest = require('./quest');
 
 const PORT = process.env.PORT || 3000;
 const MAX_MEMBERS_PER_ROOM = 4;
@@ -20,12 +21,24 @@ const RATE_MATCH_MEMBERS = 2; // レート戦は完全1vs1
 // 切断（切断側の反則負け）時、レート変動計算とは別に切断者へ追加で科すペナルティ
 const DISCONNECT_PENALTY = 10;
 
+// ================================================================
+// --- コイン経済 設定（Phase1）---
+// 金額感は「叩き台の仮数値」。設計書(gear_power_design.md)の1-1節に準拠。
+// レート戦限定（フリーバトルはコイン対象外）で運用する。
+// ================================================================
+const COIN_RATE_WIN = 600;
+const COIN_RATE_LOSS = 250;
+const COIN_PER_KILL = 50;
+const COIN_MAX_KILLS_FOR_BONUS = RATE_KILLS_TO_WIN; // 1試合あたりのキルボーナス対象上限（=3キル分まで）
+const COIN_EX_ULT_BONUS = 100; // EX ULTを1回でも発動した試合につき1回だけ加算
+const COIN_DISCONNECT_PENALTY_OVERRIDE = 0; // 切断による反則負けは戦績に関わらずコイン0
+
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
 
 // ================================================================
 // --- Ver5: プレイヤープロフィール永続化ストア ---
 // プレイヤーはブラウザ側で発行されるUUID(clientId)で識別する。
-// セットコメント(9個)・勲章の所持状況・戦績をJSONファイルに保存し、
+// セットコメント(9個)・戦績・コイン/ショップ/ガチャ/ギア情報をJSONファイルに保存し、
 // サーバー再起動をまたいでも保持されるようにする。
 // ================================================================
 const PROFILE_DB_PATH = path.join(__dirname, 'profiles.json');
@@ -45,7 +58,186 @@ if (!redis) {
   console.warn('[profiles] UPSTASH_REDIS_REST_URL/TOKEN が未設定のため、ローカルファイル保存のみで動作します。');
 }
 
-const MEDAL_IDS = ['red', 'blue', 'yellow', 'green', 'orange', 'purple', 'white'];
+// ================================================================
+// --- ショップ（Phase2）：通常弾・ULT・戦術タイプの買い切り購入 ---
+// 購入判定は全てサーバー側で行い、クライアントの申告は信用しない。
+// 価格は設計書(gear_power_design.md)2-1節の指定額。
+// ================================================================
+const VALID_SHOT_IDS = ['magic', 'sniper', 'heavy', 'bomb', 'ricochet'];
+const VALID_ULT_IDS = ['beam', 'shield', 'curse', 'super', 'warp', 'heal', 'upgrade', 'highjump', 'thunder'];
+// 戦術タイプIDは `${ultId}_A` / `${ultId}_B` の形式（全18種）
+const VALID_TACTIC_IDS = VALID_ULT_IDS.flatMap(u => [`${u}_A`, `${u}_B`]);
+
+const SHOP_PRICE_SHOT = 3000;
+const SHOP_PRICE_ULT = 5000;
+const SHOP_PRICE_ULT_RANDOM = 3500;
+const SHOP_PRICE_TACTIC = 2000;
+
+// 新規プレイヤーの初期所持（Phase2：既存プレイヤーもこの条件にリセットされる）
+const INITIAL_SHOT_IDS = ['magic'];
+const INITIAL_ULT_IDS = ['beam'];
+
+// ================================================================
+// --- ガチャ（Phase3）---
+// 設計書(gear_power_design.md)3章に準拠。
+// 排出内容は「破片95% / 通常弾0.8% / ULT0.5% / 戦術0.7% / 完成ギア3%」の重み付き抽選。
+// 抽選は必ずサーバー側の Math.random() で行い、結果だけをクライアントへ返す。
+// ================================================================
+const GEAR_IDS = Array.from({ length: 20 }, (_, i) => `gear${String(i + 1).padStart(2, '0')}`);
+quest.configure({ gearIds: GEAR_IDS });
+
+// ================================================================
+// --- ギアスロット装備（Phase4）---
+// 設計書4章に準拠。メインギアの種類でサブスロット数（1〜3）が決まる。
+// subOnly=true のギアはサブスロットに置けず、メインにのみ装備できる。
+// mainSubSlots はクライアント側 GEAR_MASTER と同じ値を保持する（表示名はサーバー側では不要）。
+// ================================================================
+const GEAR_META = {
+  gear01: { mainSubSlots: 3, subOnly: false },
+  gear02: { mainSubSlots: 3, subOnly: false },
+  gear03: { mainSubSlots: 3, subOnly: false },
+  gear04: { mainSubSlots: 3, subOnly: false },
+  gear05: { mainSubSlots: 3, subOnly: false },
+  gear06: { mainSubSlots: 3, subOnly: false },
+  gear07: { mainSubSlots: 2, subOnly: false },
+  gear08: { mainSubSlots: 3, subOnly: false },
+  gear09: { mainSubSlots: 3, subOnly: false },
+  gear10: { mainSubSlots: 3, subOnly: false },
+  gear11: { mainSubSlots: 1, subOnly: false },
+  gear12: { mainSubSlots: 2, subOnly: false },
+  gear13: { mainSubSlots: 3, subOnly: false },
+  gear14: { mainSubSlots: 3, subOnly: false },
+  gear15: { mainSubSlots: 2, subOnly: true },
+  gear16: { mainSubSlots: 3, subOnly: true },
+  gear17: { mainSubSlots: 1, subOnly: true },
+  gear18: { mainSubSlots: 2, subOnly: true },
+  gear19: { mainSubSlots: 2, subOnly: true },
+  gear20: { mainSubSlots: 2, subOnly: true } // スポーンチャージ（旧コンボチャージから置き換え。効果はクライアント側で処理）
+};
+
+// 装備コスト・キャッシュバック（バランス調整済み：1-1節のコイン収入を基準に算出）
+const GEAR_MAIN_EQUIP_COST = 1000;
+const GEAR_SUB_EQUIP_COST = 500;
+const GEAR_UNEQUIP_FRAGMENT_CASHBACK = 3; // 外す（消滅させる）と破片3個が戻る
+const GACHA_COST = 300;
+const GACHA_PITY_MAX = 30;                 // 30連ごとに天井
+const GACHA_PITY_UNIVERSAL_REWARD = 3;     // 天井到達で万能破片3個（通常の抽選結果に加えて付与）
+const GACHA_FRAGMENTS_PER_GEAR = 10;       // 破片10個で完成ギア1個
+const GACHA_FRAGMENT_MIN = 1;
+const GACHA_FRAGMENT_MAX = 3;
+
+// 排出テーブルの基礎重み。実際の抽選時は、shot/ult/tacticのいずれかが
+// 「全種所持済み（コンプ）」であれば、そのカテゴリの重みを0にして
+// 丸ごとfragmentへ上乗せする（被り救済の万能破片は廃止）。
+const GACHA_BASE_WEIGHTS = { fragment: 95.0, shot: 0.8, ult: 0.5, tactic: 0.7, gear: 3.0 };
+
+// プロフィールの所持状況を見て、コンプ済みカテゴリの重みをfragmentへ再配分した
+// 実効の排出テーブルを組み立てる。合計は常に100.0のまま変わらない。
+function computeGachaWeights(profile) {
+  const w = { ...GACHA_BASE_WEIGHTS };
+  if (VALID_SHOT_IDS.every(id => profile.unlockedShots.includes(id))) {
+    w.fragment += w.shot; w.shot = 0;
+  }
+  if (VALID_ULT_IDS.every(id => profile.unlockedUlts.includes(id))) {
+    w.fragment += w.ult; w.ult = 0;
+  }
+  if (VALID_TACTIC_IDS.every(id => profile.unlockedTactics.includes(id))) {
+    w.fragment += w.tactic; w.tactic = 0;
+  }
+  return w;
+}
+
+function pickWeightedFromMap(weights) {
+  const total = Object.values(weights).reduce((s, w) => s + w, 0);
+  let r = Math.random() * total;
+  for (const [kind, w] of Object.entries(weights)) {
+    if (r < w) return kind;
+    r -= w;
+  }
+  // 浮動小数点誤差の保険：重みが残っている最後のカテゴリを返す
+  const remaining = Object.keys(weights).filter(k => weights[k] > 0);
+  return remaining[remaining.length - 1] || 'fragment';
+}
+
+// 破片を加算し、10個貯まるごとに完成ギアへ変換する（余りは繰り越し）。
+// 例：既に7個持っている状態で+5個入手 → 12個 → 完成+1、繰り越し2個。
+function addGearFragments(profile, gearId, amount) {
+  if (!profile.gearFragments[gearId]) profile.gearFragments[gearId] = 0;
+  profile.gearFragments[gearId] += amount;
+  let completed = 0;
+  while (profile.gearFragments[gearId] >= GACHA_FRAGMENTS_PER_GEAR) {
+    profile.gearFragments[gearId] -= GACHA_FRAGMENTS_PER_GEAR;
+    if (!profile.completedGear[gearId]) profile.completedGear[gearId] = 0;
+    profile.completedGear[gearId] += 1;
+    completed += 1;
+  }
+  return completed; // このアクションで新たに完成した個数
+}
+
+// 装備中のギア1個を外す（＝消滅させて破片キャッシュバックする）共通処理。
+// 明示的な「外す」操作でも、メイン切替に伴う自動退避でも同じ処理を使う。
+function destroyEquippedGear(profile, gearId) {
+  return addGearFragments(profile, gearId, GEAR_UNEQUIP_FRAGMENT_CASHBACK);
+}
+
+// 1回分の抽選結果を計算し、profileへ直接反映する（コイン消費は呼び出し側の責務）。
+// 被り救済（万能破片5個）は廃止：shot/ult/tacticのいずれかがコンプ済みなら、
+// そのカテゴリはそもそも抽選対象から除外される（computeGachaWeights側で重み0）。
+function runGachaPull(profile) {
+  const weights = computeGachaWeights(profile);
+  const kind = pickWeightedFromMap(weights);
+  const detail = { kind };
+
+  if (kind === 'fragment') {
+    const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
+    const amount = GACHA_FRAGMENT_MIN + Math.floor(Math.random() * (GACHA_FRAGMENT_MAX - GACHA_FRAGMENT_MIN + 1));
+    const completedGained = addGearFragments(profile, gearId, amount);
+    Object.assign(detail, { gearId, amount, completedGained });
+  } else if (kind === 'shot') {
+    const candidates = VALID_SHOT_IDS.filter(id => !profile.unlockedShots.includes(id));
+    // computeGachaWeightsで既に除外されているはずだが、万一の不整合に備えた保険。
+    // 報酬を捏造せず、破片1個の当たりとして処理する（見た目上は「はずれ枠が無い」ことを保つ）。
+    if (candidates.length === 0) {
+      const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
+      const completedGained = addGearFragments(profile, gearId, GACHA_FRAGMENT_MIN);
+      Object.assign(detail, { kind: 'fragment', gearId, amount: GACHA_FRAGMENT_MIN, completedGained });
+    } else {
+      const id = candidates[Math.floor(Math.random() * candidates.length)];
+      profile.unlockedShots.push(id);
+      Object.assign(detail, { grantedId: id });
+    }
+  } else if (kind === 'ult') {
+    const candidates = VALID_ULT_IDS.filter(id => !profile.unlockedUlts.includes(id));
+    if (candidates.length === 0) {
+      const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
+      const completedGained = addGearFragments(profile, gearId, GACHA_FRAGMENT_MIN);
+      Object.assign(detail, { kind: 'fragment', gearId, amount: GACHA_FRAGMENT_MIN, completedGained });
+    } else {
+      const id = candidates[Math.floor(Math.random() * candidates.length)];
+      profile.unlockedUlts.push(id);
+      Object.assign(detail, { grantedId: id });
+    }
+  } else if (kind === 'tactic') {
+    // 設計書3-1：ガチャ直撃の戦術タイプは対応ULT未所持でも入手・保持可（2-4の例外）
+    const candidates = VALID_TACTIC_IDS.filter(id => !profile.unlockedTactics.includes(id));
+    if (candidates.length === 0) {
+      const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
+      const completedGained = addGearFragments(profile, gearId, GACHA_FRAGMENT_MIN);
+      Object.assign(detail, { kind: 'fragment', gearId, amount: GACHA_FRAGMENT_MIN, completedGained });
+    } else {
+      const id = candidates[Math.floor(Math.random() * candidates.length)];
+      profile.unlockedTactics.push(id);
+      Object.assign(detail, { grantedId: id });
+    }
+  } else if (kind === 'gear') {
+    const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
+    if (!profile.completedGear[gearId]) profile.completedGear[gearId] = 0;
+    profile.completedGear[gearId] += 1;
+    Object.assign(detail, { gearId });
+  }
+
+  return detail;
+}
 
 function defaultProfile(clientId) {
   return {
@@ -63,15 +255,21 @@ function defaultProfile(clientId) {
     },
     // セットコメント（1〜9キーに対応、未設定はnull）
     setComments: Array(9).fill(null),
-    // 勲章の達成状況 { red: bool, blue: bool, ... }
-    medalsUnlocked: Object.fromEntries(MEDAL_IDS.map(id => [id, false])),
-    // 選択中の勲章（最大2つ、重複可なので配列でid格納。例: ['red','red']）
-    medalsEquipped: [],
-    // 勲章の進捗トラッキング用（達成条件の判定に使う中間値）
-    progress: {
-      totalDistanceM: 0,        // 緑の勲章用: 総移動距離
-      bestRateMatchJumps: 0     // 黄の勲章用: 1回のレート戦での最大ジャンプ数（参考値、判定はクライアント申告+簡易検証）
-    },
+    // ================================================================
+    // --- コイン経済・ショップ・ガチャ・ギアパワー（Phase0: データ受け皿のみ）---
+    // このフェーズではフィールドを保持するだけで、ゲームプレイには影響しない。
+    // Phase2以降でショップ・ガチャ・ギア効果を順次実装していく。
+    // ================================================================
+    coins: 0,
+    unlockedShots: [...INITIAL_SHOT_IDS],  // 買い切りで所持している通常弾ID一覧（初期は魔法弾のみ）
+    unlockedUlts: [...INITIAL_ULT_IDS],    // 買い切りで所持しているULT ID一覧（初期はメガビームのみ）
+    unlockedTactics: [],            // 買い切り/ガチャ直撃で所持している戦術タイプ（例: 'beam_A'）
+    gearFragments: {},              // { gearId: 破片数 }
+    universalFragments: 0,          // 万能破片（天井報酬）の未使用ストック数
+    completedGear: {},              // { gearId: 完成在庫数 }
+    equippedGear: { main: null, subs: [] }, // 装備中のギア（サブ枠数はメインのギア種によって可変）
+    gachaPityCount: 0,              // 天井までのガチャ回数カウント（30到達で万能破片3個→0にリセット）
+    ...quest.createInitialQuestState(),
     updatedAt: Date.now()
   };
 }
@@ -121,6 +319,32 @@ async function loadProfileDBOnStartup() {
     }
   }
   profileDB = loadProfileDBFromLocalFile();
+}
+
+// 旧勲章システムの保存データをプロフィールDBから完全に除去する。
+// 現行プロフィールには勲章関連フィールドを残さず、コイン/ショップ/ガチャ/ギアだけを保持する。
+async function purgeLegacyMedalData() {
+  let changed = false;
+  for (const profile of Object.values(profileDB)) {
+    if (!profile || typeof profile !== 'object') continue;
+    for (const key of ['medalsUnlocked', 'medalsEquipped', 'progress']) {
+      if (Object.prototype.hasOwnProperty.call(profile, key)) {
+        delete profile[key];
+        changed = true;
+      }
+    }
+  }
+  if (!changed) return;
+
+  writeProfileDBToLocalFile();
+  if (redis) {
+    try {
+      await redis.set(REDIS_PROFILE_KEY, profileDB);
+    } catch (e) {
+      console.error('[profiles] 旧勲章データのUpstash削除保存に失敗（ローカルファイルには保存済み）:', e.message);
+    }
+  }
+  console.log('[profiles] 旧勲章データを保存済みプロフィールから削除しました。');
 }
 
 let profileSaveTimer = null;
@@ -179,16 +403,77 @@ function getOrCreateProfile(clientId) {
     }
     p.setComments = merged;
   }
-  if (!p.medalsUnlocked) p.medalsUnlocked = Object.fromEntries(MEDAL_IDS.map(id => [id, false]));
-  for (const id of MEDAL_IDS) if (typeof p.medalsUnlocked[id] !== 'boolean') p.medalsUnlocked[id] = false;
-  if (!Array.isArray(p.medalsEquipped)) p.medalsEquipped = [];
-  if (!p.progress) p.progress = defaultProfile(clientId).progress;
-  if (typeof p.progress.totalDistanceM !== 'number' || !Number.isFinite(p.progress.totalDistanceM)) {
-    p.progress.totalDistanceM = 0;
+  // ================================================================
+  // --- コイン経済・ショップ・ガチャ・ギアパワー（Phase0: 旧プロフィールへの補完）---
+  // 既にプレイ済みの（このフィールドが無い）プロフィールに対して、
+  // 欠けているフィールドだけをデフォルト値で補う。Phase2で「既存プレイヤーも
+  // 新規プレイヤーと同条件にリセットする」方針が確定しているため、
+  // unlockedShots/unlockedUlts の初期値も新規プレイヤーと同じ（魔法弾+メガビームのみ）にする。
+  // ================================================================
+  if (typeof p.coins !== 'number' || !Number.isFinite(p.coins)) p.coins = 0;
+  p.coins = Math.max(0, Math.floor(p.coins));
+
+  // 所持リストは「正規のIDのみ」「重複なし」「初期付与分を必ず含む」状態に正規化する。
+  // 不正なIDが紛れ込んでもここで落とされるため、クライアント改竄の保険にもなる。
+  const normalizeOwned = (list, validIds, initialIds) => {
+    const base = Array.isArray(list) ? list : [];
+    const cleaned = base.filter(id => typeof id === 'string' && validIds.includes(id));
+    return Array.from(new Set([...initialIds, ...cleaned]));
+  };
+  p.unlockedShots = normalizeOwned(p.unlockedShots, VALID_SHOT_IDS, INITIAL_SHOT_IDS);
+  p.unlockedUlts = normalizeOwned(p.unlockedUlts, VALID_ULT_IDS, INITIAL_ULT_IDS);
+  p.unlockedTactics = normalizeOwned(p.unlockedTactics, VALID_TACTIC_IDS, []);
+
+  // ================================================================
+  // --- ガチャ・ギア在庫（Phase3）：不正な値・キーの正規化 ---
+  // gearId は GEAR_IDS 以外を弾き、数量は 0以上の整数にクランプする。
+  // ================================================================
+  const normalizeGearCountMap = (obj) => {
+    const out = {};
+    if (obj && typeof obj === 'object') {
+      for (const gearId of GEAR_IDS) {
+        const v = obj[gearId];
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+          out[gearId] = Math.floor(v);
+        }
+      }
+    }
+    return out;
+  };
+  p.gearFragments = normalizeGearCountMap(p.gearFragments);
+  p.completedGear = normalizeGearCountMap(p.completedGear);
+
+  if (typeof p.universalFragments !== 'number' || !Number.isFinite(p.universalFragments) || p.universalFragments < 0) {
+    p.universalFragments = 0;
   }
-  if (typeof p.progress.bestRateMatchJumps !== 'number' || !Number.isFinite(p.progress.bestRateMatchJumps)) {
-    p.progress.bestRateMatchJumps = 0;
+  p.universalFragments = Math.floor(p.universalFragments);
+
+  if (!p.equippedGear || typeof p.equippedGear !== 'object') p.equippedGear = { main: null, subs: [] };
+  if (p.equippedGear.main !== null && !GEAR_IDS.includes(p.equippedGear.main)) p.equippedGear.main = null;
+  if (!Array.isArray(p.equippedGear.subs)) p.equippedGear.subs = [];
+  // Phase4: サブ枠には subOnly（メイン専用）ギアを置けない。
+  p.equippedGear.subs = p.equippedGear.subs.filter(id => GEAR_IDS.includes(id) && !GEAR_META[id].subOnly);
+  // メインが無ければサブ枠は常に0（メインなしでサブだけ装備している状態を許さない）。
+  if (!p.equippedGear.main) {
+    p.equippedGear.subs = [];
+  } else {
+    // メインのサブ枠数を超えている分は末尾から切り詰める（超過分の破片救済はここでは行わない：
+    // 起動時の保険的な正規化のため、通常運用では __gear_equip_main 側で正しく処理される）
+    const maxSlots = GEAR_META[p.equippedGear.main].mainSubSlots;
+    if (p.equippedGear.subs.length > maxSlots) p.equippedGear.subs = p.equippedGear.subs.slice(0, maxSlots);
   }
+
+  if (typeof p.gachaPityCount !== 'number' || !Number.isFinite(p.gachaPityCount) || p.gachaPityCount < 0) {
+    p.gachaPityCount = 0;
+  }
+  p.gachaPityCount = Math.floor(p.gachaPityCount) % GACHA_PITY_MAX;
+
+  // Quest system: existing profiles are lazily migrated and period rollover is checked here.
+  const questBefore = JSON.stringify({ loginBonus: p.loginBonus, dailyQuests: p.dailyQuests, weeklyQuests: p.weeklyQuests, monthlyQuests: p.monthlyQuests, monthlyLoginStreak: p.monthlyLoginStreak, monthlyCoinEarned: p.monthlyCoinEarned });
+  quest.ensureQuestState(p);
+  const questAfter = JSON.stringify({ loginBonus: p.loginBonus, dailyQuests: p.dailyQuests, weeklyQuests: p.weeklyQuests, monthlyQuests: p.monthlyQuests, monthlyLoginStreak: p.monthlyLoginStreak, monthlyCoinEarned: p.monthlyCoinEarned });
+  if (questBefore !== questAfter) scheduleProfileSave();
+
   return p;
 }
 
@@ -205,9 +490,19 @@ function publicProfilePayload(p) {
     rate: p.rate,
     stats: p.stats,
     setComments: p.setComments,
-    medalsUnlocked: p.medalsUnlocked,
-    medalsEquipped: p.medalsEquipped,
-    progress: p.progress
+    // --- コイン経済・ショップ・ガチャ・ギアパワー（Phase0/1）---
+    coins: p.coins,
+    unlockedShots: p.unlockedShots,
+    unlockedUlts: p.unlockedUlts,
+    unlockedTactics: p.unlockedTactics,
+    gearFragments: p.gearFragments,
+    universalFragments: p.universalFragments,
+    completedGear: p.completedGear,
+    equippedGear: p.equippedGear,
+    gachaPityCount: p.gachaPityCount,
+    quests: quest.getQuestSnapshot(p),
+    loginBonus: quest.getLoginBonusSnapshot(p),
+    monthlyCoinEarned: p.monthlyCoinEarned
   };
 }
 
@@ -360,42 +655,32 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
     const isWinner = id === winnerId;
 
     // ================================================================
-    // --- Ver5: 勲章の達成判定 ＆ 戦績・プロフィールの更新 ---
+    // --- レート戦決着時の戦績・プロフィール更新 ---
     // ================================================================
-    let newlyUnlockedMedals = [];
+    let coinsEarned = 0;
     const profile = me.clientId ? getOrCreateProfile(me.clientId) : null;
     if (profile) {
       profile.stats.rateBattles += 1;
       if (isWinner) profile.stats.rateWins += 1; else profile.stats.rateLosses += 1;
 
-      // 緑の勲章: 1回のレート戦で3000m以上移動する
-      // （プロフィールの累計移動距離 - このマッチ開始時点の基準値 = マッチ内移動距離）
-      const matchDistance = profile
-        ? Math.max(0, profile.progress.totalDistanceM - me.matchStartDistance)
-        : 0;
-
-      const checks = [
-        // 赤の勲章: レート戦で敗北する
-        ['red', !isWinner],
-        // 青の勲章: レート戦で勝利する
-        ['blue', isWinner],
-        // 黄の勲章: 1回のレート戦で50回ジャンプする
-        ['yellow', me.matchJumps >= 50],
-        // 緑の勲章: 1回のレート戦で3000m以上移動する
-        ['green', matchDistance >= 3000],
-        // 橙の勲章: レート戦でEX ULTを使う
-        ['orange', me.matchUsedExUlt === true],
-        // 紫の勲章: 合計被ダメージ99以内でレート戦に勝利する
-        ['purple', isWinner && me.matchDamageTaken <= 99],
-        // 白の勲章: レート1100（このマッチ終了後の新レートで判定）
-        ['white', newRate >= 1100]
-      ];
-      for (const [medalId, achieved] of checks) {
-        if (achieved && !profile.medalsUnlocked[medalId]) {
-          profile.medalsUnlocked[medalId] = true;
-          newlyUnlockedMedals.push(medalId);
-        }
+      // ================================================================
+      // --- コイン経済（Phase1）：レート戦決着に応じたコイン付与 ---
+      // 切断による反則負けは戦績・キル数に関わらずコイン0（設計書1-1節）。
+      // それ以外は「勝敗基礎額 ＋ キル1つにつき+50（3キル分まで） ＋ EX ULT発動ボーナス（1試合1回）」。
+      // ================================================================
+      if (id === disconnectedId) {
+        coinsEarned = COIN_DISCONNECT_PENALTY_OVERRIDE;
+      } else {
+        coinsEarned = isWinner ? COIN_RATE_WIN : COIN_RATE_LOSS;
+        coinsEarned += Math.min(me.kills, COIN_MAX_KILLS_FOR_BONUS) * COIN_PER_KILL;
+        if (me.matchUsedExUlt) coinsEarned += COIN_EX_ULT_BONUS;
       }
+      quest.addCoins(profile, coinsEarned);
+      quest.recordRateBattleResult(profile, {
+        completed: id === disconnectedId ? 0 : 1,
+        won: isWinner && id !== disconnectedId ? 1 : 0
+      });
+
       profile.rate = newRate;
       profile.updatedAt = Date.now();
       scheduleProfileSave();
@@ -411,21 +696,15 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
       delta: total,
       isWinner,
       disconnected: id === disconnectedId,
-      newlyUnlockedMedals
+      // --- コイン経済（Phase1）---
+      coinsEarned,
+      newCoins: profile ? profile.coins : null
     });
 
     me.rate = newRate;
 
-    // 個別に本人へ新規勲章獲得を通知（他プレイヤーには見せない）
-    if (newlyUnlockedMedals.length > 0 && me.ws && me.ws.readyState === me.ws.OPEN) {
-      me.ws.send(JSON.stringify({ type: '__medal_unlocked_batch', medals: newlyUnlockedMedals }));
-    }
-
-    // 次戦に備えてマッチ内トラッキング値をリセット
-    me.matchJumps = 0;
-    me.matchDamageTaken = 0;
+    // 次戦に備えてEX ULT発動コインボーナス判定をリセット
     me.matchUsedExUlt = false;
-    me.matchStartDistance = profile ? profile.progress.totalDistanceM : me.matchStartDistance;
   }
 
   broadcastToRoom(roomName, {
@@ -476,7 +755,7 @@ wss.on('connection', (socket) => {
     }
 
     // ================================================================
-    // --- Ver5: プロフィール（セットコメント・勲章・戦績）の永続化 ---
+    // --- Ver5: プロフィール（セットコメント・戦績・ギア関連）の永続化 ---
     // ================================================================
 
     // プロフィールの取得（未参加でも可。プロフィール画面を開いた時点で呼ばれる）
@@ -514,22 +793,6 @@ wss.on('connection', (socket) => {
       return;
     }
 
-    // 勲章の装備選択（最大2つ、未達成の勲章は選択不可・重複可）
-    if (data.type === '__profile_equip_medals') {
-      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
-      const profile = getOrCreateProfile(clientId);
-      if (!profile || !Array.isArray(data.medals)) return;
-      const requested = data.medals.slice(0, 2).filter(id => MEDAL_IDS.includes(id) && profile.medalsUnlocked[id]);
-      profile.medalsEquipped = requested;
-      profile.updatedAt = Date.now();
-      scheduleProfileSave();
-      socket.send(JSON.stringify({
-        type: '__profile_result',
-        ok: true,
-        profile: publicProfilePayload(profile)
-      }));
-      return;
-    }
 
     // 名前の同期（プレイヤー名変更時、サーバー側プロフィールにも反映）
     if (data.type === '__profile_sync_name') {
@@ -539,6 +802,366 @@ wss.on('connection', (socket) => {
       profile.name = String(data.name || profile.name).slice(0, 20);
       profile.updatedAt = Date.now();
       scheduleProfileSave();
+      return;
+    }
+
+    // ================================================================
+    // --- クエスト / ログインボーナス ---
+    // 受取判定・報酬付与・期間更新は quest.js + サーバー側プロフィールを正とする。
+    // data: { type:'__quest_claim', clientId, category, questId }
+    // ================================================================
+    if (data.type === '__quest_claim') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const fail = (reason) => {
+        socket.send(JSON.stringify({ type: '__quest_claim_result', ok: false, reason }));
+      };
+      if (!clientId) return fail('no_profile');
+      if (myClientId && myClientId !== clientId) return fail('invalid_client');
+      const profile = getOrCreateProfile(clientId);
+      if (!profile) return fail('no_profile');
+      myClientId = clientId;
+
+      const category = String(data.category || '');
+      const questId = String(data.questId || '');
+      const result = quest.claimQuest(profile, category, questId, addGearFragments);
+      if (!result.ok) return fail(result.reason);
+
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+      socket.send(JSON.stringify({
+        type: '__quest_claim_result',
+        ...result,
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    // ログインボーナスはクエスト受取とは別枠。報酬もその場でサーバー付与する。
+    if (data.type === '__login_bonus_claim') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const fail = (reason) => {
+        socket.send(JSON.stringify({ type: '__login_bonus_result', ok: false, reason }));
+      };
+      if (!clientId) return fail('no_profile');
+      if (myClientId && myClientId !== clientId) return fail('invalid_client');
+      const profile = getOrCreateProfile(clientId);
+      if (!profile) return fail('no_profile');
+      myClientId = clientId;
+
+      const result = quest.claimLoginBonus(profile, addGearFragments);
+      if (!result.ok) return fail(result.reason);
+
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+      socket.send(JSON.stringify({
+        type: '__login_bonus_result',
+        ...result,
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    // ================================================================
+    // --- ショップ購入（Phase2）---
+    // data: { type:'__shop_purchase', clientId, kind:'shot'|'ult'|'tactic'|'ult_random', id }
+    // 価格・所持判定・コイン残高は全てサーバー側で検証する。
+    // ================================================================
+    if (data.type === '__shop_purchase') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      const fail = (reason) => {
+        socket.send(JSON.stringify({ type: '__shop_result', ok: false, reason }));
+      };
+      if (!profile) return fail('no_profile');
+
+      const kind = String(data.kind || '');
+      const id = String(data.id || '');
+      let price = 0;
+      let grantedId = null;
+      let grantedKind = kind;
+
+      if (kind === 'shot') {
+        if (!VALID_SHOT_IDS.includes(id)) return fail('invalid_id');
+        if (profile.unlockedShots.includes(id)) return fail('already_owned');
+        price = SHOP_PRICE_SHOT;
+        grantedId = id;
+      } else if (kind === 'ult') {
+        if (!VALID_ULT_IDS.includes(id)) return fail('invalid_id');
+        if (profile.unlockedUlts.includes(id)) return fail('already_owned');
+        price = SHOP_PRICE_ULT;
+        grantedId = id;
+      } else if (kind === 'ult_random') {
+        // 未所持のULTの中から抽選で1つ。抽選はサーバー側で行う。
+        const candidates = VALID_ULT_IDS.filter(u => !profile.unlockedUlts.includes(u));
+        if (candidates.length === 0) return fail('all_owned');
+        price = SHOP_PRICE_ULT_RANDOM;
+        grantedId = candidates[Math.floor(Math.random() * candidates.length)];
+        grantedKind = 'ult';
+      } else if (kind === 'tactic') {
+        if (!VALID_TACTIC_IDS.includes(id)) return fail('invalid_id');
+        if (profile.unlockedTactics.includes(id)) return fail('already_owned');
+        // 設計書2-4節：ショップ経由では、対応するULT本体を所持していないと購入不可。
+        // （ガチャ直撃での入手だけが例外だが、それはPhase3で別経路として実装する）
+        const parentUlt = id.split('_')[0];
+        if (!profile.unlockedUlts.includes(parentUlt)) return fail('ult_required');
+        price = SHOP_PRICE_TACTIC;
+        grantedId = id;
+      } else {
+        return fail('invalid_kind');
+      }
+
+      if (profile.coins < price) return fail('not_enough_coins');
+
+      profile.coins -= price;
+      if (grantedKind === 'shot') profile.unlockedShots.push(grantedId);
+      else if (grantedKind === 'ult') profile.unlockedUlts.push(grantedId);
+      else if (grantedKind === 'tactic') profile.unlockedTactics.push(grantedId);
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+
+      socket.send(JSON.stringify({
+        type: '__shop_result',
+        ok: true,
+        kind: grantedKind,
+        grantedId,
+        spent: price,
+        wasRandom: kind === 'ult_random',
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    // ================================================================
+    // --- ガチャ（Phase3）---
+    // data: { type:'__gacha_pull', clientId, times: 1|10 }
+    // 抽選は必ずサーバー側で行う。timesは1回引きと10連引きのみ許可（不正な回数は拒否）。
+    // ================================================================
+    if (data.type === '__gacha_pull') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      if (!profile) {
+        socket.send(JSON.stringify({ type: '__gacha_result', ok: false, reason: 'no_profile' }));
+        return;
+      }
+
+      const times = (data.times === 10) ? 10 : 1;
+      const totalCost = GACHA_COST * times;
+      if (profile.coins < totalCost) {
+        socket.send(JSON.stringify({ type: '__gacha_result', ok: false, reason: 'not_enough_coins' }));
+        return;
+      }
+
+      profile.coins -= totalCost;
+      const pulls = [];
+      let gearCompletedGained = 0;
+      for (let i = 0; i < times; i++) {
+        const detail = runGachaPull(profile);
+
+        // 天井チェック：このガチャ自体の結果とは別に、30連ごとに万能破片3個を確定付与する
+        profile.gachaPityCount += 1;
+        let pityTriggered = false;
+        if (profile.gachaPityCount >= GACHA_PITY_MAX) {
+          profile.gachaPityCount = 0;
+          profile.universalFragments += GACHA_PITY_UNIVERSAL_REWARD;
+          pityTriggered = true;
+        }
+
+        gearCompletedGained += (detail.kind === 'gear') ? 1 : (Number(detail.completedGained) || 0);
+        pulls.push({ ...detail, pityTriggered, pityCountAfter: profile.gachaPityCount });
+      }
+
+      quest.recordProgress(profile, 'gachaPull', times);
+      quest.registerGearCompletion(profile, gearCompletedGained);
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+
+      socket.send(JSON.stringify({
+        type: '__gacha_result',
+        ok: true,
+        pulls,
+        spent: totalCost,
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    // ================================================================
+    // --- 万能破片の使用（Phase3）---
+    // data: { type:'__gacha_use_universal', clientId, gearId, amount }
+    // 万能破片を指定したギアIDの破片としてamount個消費する。
+    // ================================================================
+    if (data.type === '__gacha_use_universal') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      const fail = (reason) => socket.send(JSON.stringify({ type: '__gacha_use_universal_result', ok: false, reason }));
+      if (!profile) return fail('no_profile');
+
+      const gearId = String(data.gearId || '');
+      if (!GEAR_IDS.includes(gearId)) return fail('invalid_id');
+
+      let amount = Number(data.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return fail('invalid_amount');
+      amount = Math.floor(amount);
+      if (amount > profile.universalFragments) return fail('not_enough_fragments');
+
+      profile.universalFragments -= amount;
+      const completedGained = addGearFragments(profile, gearId, amount);
+      quest.registerGearCompletion(profile, completedGained);
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+
+      socket.send(JSON.stringify({
+        type: '__gacha_use_universal_result',
+        ok: true,
+        gearId,
+        amount,
+        completedGained,
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    // ================================================================
+    // --- ギアスロット装備（Phase4）---
+    // メイン切替時、旧メインは自動的に外れて消滅＋キャッシュバックされ、
+    // 新メインのサブ枠数に収まらない分のサブも同様に自動退避される。
+    // ================================================================
+    if (data.type === '__gear_equip_main') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      const fail = (reason) => socket.send(JSON.stringify({ type: '__gear_equip_main_result', ok: false, reason }));
+      if (!profile) return fail('no_profile');
+
+      const gearId = String(data.gearId || '');
+      if (!GEAR_IDS.includes(gearId)) return fail('invalid_id');
+      if (profile.equippedGear.main === gearId) return fail('already_equipped');
+      if ((profile.completedGear[gearId] || 0) < 1) return fail('not_enough_inventory');
+      if (profile.coins < GEAR_MAIN_EQUIP_COST) return fail('not_enough_coins');
+
+      const removed = { oldMain: null, trimmedSubs: [] };
+
+      // 1. 旧メインがあれば外す（消滅＋キャッシュバック）。コストはかからない。
+      if (profile.equippedGear.main) {
+        destroyEquippedGear(profile, profile.equippedGear.main);
+        removed.oldMain = profile.equippedGear.main;
+      }
+
+      // 2. 新メインを装備（在庫を1消費、コインを支払う）
+      profile.completedGear[gearId] -= 1;
+      if (profile.completedGear[gearId] <= 0) delete profile.completedGear[gearId];
+      profile.coins -= GEAR_MAIN_EQUIP_COST;
+      profile.equippedGear.main = gearId;
+
+      // 3. 新メインのサブ枠数に収まらないサブは末尾から自動退避（消滅＋キャッシュバック）
+      const newSlots = GEAR_META[gearId].mainSubSlots;
+      while (profile.equippedGear.subs.length > newSlots) {
+        const trimmedId = profile.equippedGear.subs.pop();
+        destroyEquippedGear(profile, trimmedId);
+        removed.trimmedSubs.push(trimmedId);
+      }
+
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+
+      socket.send(JSON.stringify({
+        type: '__gear_equip_main_result',
+        ok: true,
+        gearId,
+        spent: GEAR_MAIN_EQUIP_COST,
+        removedOldMain: removed.oldMain,
+        trimmedSubs: removed.trimmedSubs,
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    if (data.type === '__gear_equip_sub') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      const fail = (reason) => socket.send(JSON.stringify({ type: '__gear_equip_sub_result', ok: false, reason }));
+      if (!profile) return fail('no_profile');
+
+      const gearId = String(data.gearId || '');
+      if (!GEAR_IDS.includes(gearId)) return fail('invalid_id');
+      if (GEAR_META[gearId].subOnly) return fail('main_only_gear');
+      if (!profile.equippedGear.main) return fail('no_main_equipped');
+
+      const maxSlots = GEAR_META[profile.equippedGear.main].mainSubSlots;
+      if (profile.equippedGear.subs.length >= maxSlots) return fail('sub_slots_full');
+      if ((profile.completedGear[gearId] || 0) < 1) return fail('not_enough_inventory');
+      if (profile.coins < GEAR_SUB_EQUIP_COST) return fail('not_enough_coins');
+
+      profile.completedGear[gearId] -= 1;
+      if (profile.completedGear[gearId] <= 0) delete profile.completedGear[gearId];
+      profile.coins -= GEAR_SUB_EQUIP_COST;
+      profile.equippedGear.subs.push(gearId);
+
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+
+      socket.send(JSON.stringify({
+        type: '__gear_equip_sub_result',
+        ok: true,
+        gearId,
+        spent: GEAR_SUB_EQUIP_COST,
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    if (data.type === '__gear_unequip_main') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      const fail = (reason) => socket.send(JSON.stringify({ type: '__gear_unequip_main_result', ok: false, reason }));
+      if (!profile) return fail('no_profile');
+      if (!profile.equippedGear.main) return fail('no_main_equipped');
+
+      const removedMain = profile.equippedGear.main;
+      destroyEquippedGear(profile, removedMain);
+      profile.equippedGear.main = null;
+
+      // メインが無い状態ではサブ枠は0になるため、装備中のサブも全て道連れで外れる
+      const removedSubs = profile.equippedGear.subs.slice();
+      removedSubs.forEach(id => destroyEquippedGear(profile, id));
+      profile.equippedGear.subs = [];
+
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+
+      socket.send(JSON.stringify({
+        type: '__gear_unequip_main_result',
+        ok: true,
+        removedMain,
+        removedSubs,
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    if (data.type === '__gear_unequip_sub') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      const fail = (reason) => socket.send(JSON.stringify({ type: '__gear_unequip_sub_result', ok: false, reason }));
+      if (!profile) return fail('no_profile');
+
+      const index = Number(data.index);
+      if (!Number.isInteger(index) || index < 0 || index >= profile.equippedGear.subs.length) {
+        return fail('invalid_index');
+      }
+
+      const [removedId] = profile.equippedGear.subs.splice(index, 1);
+      destroyEquippedGear(profile, removedId);
+
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+
+      socket.send(JSON.stringify({
+        type: '__gear_unequip_sub_result',
+        ok: true,
+        removedId,
+        index,
+        profile: publicProfilePayload(profile)
+      }));
       return;
     }
 
@@ -628,12 +1251,6 @@ wss.on('connection', (socket) => {
       const startRate = joinProfile ? joinProfile.rate
         : (Number.isFinite(Number(data.rate)) ? Number(data.rate) : DEFAULT_RATE);
 
-      // 緑の勲章（1回のレート戦で3000m以上移動）判定用に、
-      // このマッチ開始時点でのプロフィール累計移動距離を基準値として控えておく。
-      const joinMatchStartDistance = (room.mode === 'rate' && joinProfile)
-        ? joinProfile.progress.totalDistanceM
-        : 0;
-
       room.members.set(myId, {
         ws: socket,
         name: String(data.name || '魔導士').slice(0, 20),
@@ -642,12 +1259,8 @@ wss.on('connection', (socket) => {
         kills: 0,
         deaths: 0,
         clientId: myClientId,
-        // --- Ver5: 勲章達成条件トラッキング（このマッチ内での値） ---
-        matchJumps: 0,          // 黄の勲章: このレート戦でのジャンプ回数
-        matchDamageTaken: 0,    // 紫の勲章: このレート戦での合計被ダメージ
-        matchUsedExUlt: false,  // 橙の勲章: このレート戦でEX ULTを使用したか
-        matchStartDistance: joinMatchStartDistance, // 緑の勲章判定用の基準値（プロフィール側の累計距離）
-        isFirstSpawnOfSession: true // 白の勲章: 初回スポーンかどうか
+        // レート戦終了時のEX ULT発動コインボーナス判定用
+        matchUsedExUlt: false
       });
 
       // レート戦は対戦相手（2人目）が揃った時点でマッチを開始扱いにする。
@@ -689,6 +1302,28 @@ wss.on('connection', (socket) => {
     if (!room) return;
     const currentMember = room.members.get(myId);
 
+    // クライアント側で発生した戦闘系クエストイベントのバッチ。
+    // 訓練場はそもそもこのWebSocketへ参加しないため対象外。
+    if (data.type === '__quest_event_batch') {
+      if (!currentMember || !myClientId || String(data.clientId || '') !== String(myClientId)) return;
+      if (room.mode !== 'free' && room.mode !== 'rate') return;
+      const events = data.events && typeof data.events === 'object' ? data.events : {};
+      const profile = getOrCreateProfile(myClientId);
+      if (!profile) return;
+
+      let changed = false;
+      for (const [eventType, rawAmount] of Object.entries(events)) {
+        const amount = Number(rawAmount);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        if (quest.recordClientEvent(profile, eventType, amount)) changed = true;
+      }
+      if (changed) {
+        profile.updatedAt = Date.now();
+        scheduleProfileSave();
+      }
+      return;
+    }
+
     // --- 移動同期 ＆ サーバー側位置履歴の記録 ---
     if (data.type === 'move') {
       if (currentMember) {
@@ -709,39 +1344,7 @@ wss.on('connection', (socket) => {
       return;
     }
 
-    // ================================================================
-    // --- Ver5: 勲章の達成条件トラッキング（クライアントからの申告値） ---
-    // これらはチート耐性が高い項目ではないが、勲章はパッシブ強化に留まり
-    // 対戦バランスへの影響が限定的なため、簡易的な申告ベースで運用する。
-    // ================================================================
-
-    // 移動距離の加算申告（フレーム単位で細かく送ると負荷が高いため、
-    // クライアント側である程度まとめて送る想定）
-    if (data.type === '__report_distance') {
-      const meters = Number(data.meters);
-      if (currentMember && Number.isFinite(meters) && meters > 0 && meters < 50) {
-        // 明らかな異常値（1回の報告で50m超）は無視してチート耐性を持たせる
-        const profile = myClientId ? getOrCreateProfile(myClientId) : null;
-        if (profile) {
-          profile.progress.totalDistanceM += meters;
-          scheduleProfileSave();
-          // 緑の勲章（1回のレート戦で3000m以上移動する）の判定は
-          // finishRateMatch() でマッチ内移動距離（現在値-matchStartDistance）
-          // を使って行うため、ここでは累計値を積算するのみ。
-        }
-      }
-      return;
-    }
-
-    // ジャンプ報告（レート戦中のみ加算。黄の勲章判定用）
-    if (data.type === '__report_jump') {
-      if (currentMember && room.mode === 'rate' && room.matchActive) {
-        currentMember.matchJumps += 1;
-      }
-      return;
-    }
-
-    // EX ULT使用報告（橙の勲章判定用）
+    // EX ULT使用報告（レート戦のコインボーナス判定用）
     if (data.type === '__report_ex_ult_used') {
       if (currentMember && room.mode === 'rate' && room.matchActive) {
         currentMember.matchUsedExUlt = true;
@@ -749,16 +1352,6 @@ wss.on('connection', (socket) => {
       return;
     }
 
-    // 被ダメージ報告（紫の勲章判定用。被弾者本人が実際に受けた「軽減後」のダメージを申告する。
-    // シールド・ガード等の軽減はクライアント側でしか正確に計算できないため、
-    // 通常弾のhit_claimでの生ダメージ加算ではなく、被弾者本人の自己申告に一元化している）
-    if (data.type === '__report_damage_taken') {
-      const dmg = Number(data.amount);
-      if (currentMember && room.mode === 'rate' && room.matchActive && Number.isFinite(dmg) && dmg > 0 && dmg < 1000) {
-        currentMember.matchDamageTaken += dmg;
-      }
-      return;
-    }
 
     // --- シューター優先の着弾申請（遅延補償・巻き戻し検証） ---
     if (data.type === 'hit_claim') {
@@ -779,7 +1372,7 @@ wss.on('connection', (socket) => {
 
       const targetMember = room.members.get(data.targetId);
       if (!targetMember) return;
-      if (data.targetId === myId) return; // 自傷申請は無視（勲章集計への誤加算防止も兼ねる）
+      if (data.targetId === myId) return; // 自傷申請は無視
 
       // 相手の過去の位置を巻き戻して復元
       const targetPos = getHistoricalPosition(targetMember.history, clientHitTime);
@@ -824,15 +1417,8 @@ wss.on('connection', (socket) => {
         for (const m of room.members.values()) {
           m.kills = 0;
           m.deaths = 0;
-          // Ver5: 勲章のマッチ内トラッキング値も次戦に備えて確実にリセットする
-          // （finishRateMatchで既にリセット済みのはずだが、念のための防御）
-          m.matchJumps = 0;
-          m.matchDamageTaken = 0;
+          // 次戦のEX ULT発動コインボーナス判定をリセット
           m.matchUsedExUlt = false;
-          // 緑の勲章判定用の基準値も、finishRateMatch側の更新に依存せず
-          // ここで直接プロフィールの最新累計距離から取り直しておく（念のための防御）
-          const rematchProfile = m.clientId ? getOrCreateProfile(m.clientId) : null;
-          m.matchStartDistance = rematchProfile ? rematchProfile.progress.totalDistanceM : m.matchStartDistance;
         }
         room.matchActive = true;
         broadcastToRoom(joinedRoom, { type: '__rematch_start' });
@@ -928,7 +1514,8 @@ setInterval(() => {
 
 // Upstashからプロフィールデータを読み込み終えてからlistenを開始する。
 // こうしないと、起動直後のアクセスが「空のprofileDB」を見てしまう可能性がある。
-loadProfileDBOnStartup().then(() => {
+loadProfileDBOnStartup().then(async () => {
+  await purgeLegacyMedalData();
   server.listen(PORT, () => {
     console.log(`Rewind & CCD Authoritative Server listening on port ${PORT}`);
   });
