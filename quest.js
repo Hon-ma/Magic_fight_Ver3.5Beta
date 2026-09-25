@@ -126,16 +126,6 @@ function cloneReward(reward) {
   return { ...(reward || {}) };
 }
 
-function cloneQuestDefinition(def) {
-  return {
-    id: def.id,
-    title: def.title,
-    event: def.event,
-    target: def.target,
-    reward: cloneReward(def.reward)
-  };
-}
-
 function sampleWithoutReplacement(source, count) {
   const pool = source.slice();
   const out = [];
@@ -162,11 +152,11 @@ function isValidQuestState(state, defs, count) {
   if (!Array.isArray(state.quests) || state.quests.length !== count) return false;
   const validIds = new Set(defs.map(q => q.id));
   const seen = new Set();
-  for (const q of state.quests) {
+  return state.quests.every(q => {
     if (!q || typeof q.id !== 'string' || !validIds.has(q.id) || seen.has(q.id)) return false;
     seen.add(q.id);
-  }
-  return true;
+    return true;
+  });
 }
 
 function createInitialQuestState() {
@@ -177,10 +167,10 @@ function createInitialQuestState() {
   const weeklyDefs = sampleWithoutReplacement(WEEKLY_POOL, WEEKLY_COUNT);
   return {
     loginBonus: { lastClaimDate: null, streak: 0 },
+    monthlyLoginStreak: { periodKey: monthlyKey, streak: 0 },
     dailyQuests: baseQuestState('daily', dailyKey, dailyDefs),
     weeklyQuests: baseQuestState('weekly', weeklyKey, weeklyDefs),
     monthlyQuests: baseQuestState('monthly', monthlyKey, MONTHLY_QUESTS),
-    monthlyLoginStreak: 0,
     monthlyCoinEarned: 0
   };
 }
@@ -196,27 +186,6 @@ function normalizeLoginBonus(state) {
   return { lastClaimDate, streak };
 }
 
-function normalizeQuestEntries(state, defsById, currentPeriodKey, expectedCount, randomDefs) {
-  if (!state || typeof state !== 'object') {
-    return baseQuestState('', currentPeriodKey, randomDefs);
-  }
-  if (state.periodKey !== currentPeriodKey || !Array.isArray(state.quests)) {
-    return baseQuestState('', currentPeriodKey, randomDefs);
-  }
-  if (state.quests.length !== expectedCount) {
-    return baseQuestState('', currentPeriodKey, randomDefs);
-  }
-  const valid = state.quests.every(q => q && typeof q.id === 'string' && defsById.has(q.id));
-  if (!valid) return baseQuestState('', currentPeriodKey, randomDefs);
-  return {
-    periodKey: currentPeriodKey,
-    quests: state.quests.map(q => ({
-      id: q.id,
-      progress: Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0,
-      claimed: q.claimed === true
-    }))
-  };
-}
 
 function ensureQuestState(profile) {
   if (!profile || typeof profile !== 'object') return profile;
@@ -226,55 +195,55 @@ function ensureQuestState(profile) {
   const monthlyKey = getJstMonthKey();
 
   const existingDaily = profile.dailyQuests;
-  const dailyIds = existingDaily && Array.isArray(existingDaily.quests) ? existingDaily.quests.map(q => q?.id).filter(Boolean) : [];
-  const dailyDefs = sampleWithoutReplacement(
-    DAILY_POOL.filter(def => dailyIds.includes(def.id)),
-    DAILY_COUNT
-  );
   // When the current state is valid, preserve it. Only sample when the period/shape is stale.
   if (!existingDaily || existingDaily.periodKey !== dailyKey || !isValidQuestState(existingDaily, DAILY_POOL, DAILY_COUNT)) {
     profile.dailyQuests = baseQuestState('daily', dailyKey, sampleWithoutReplacement(DAILY_POOL, DAILY_COUNT));
   } else {
-    for (const q of existingDaily.quests) {
-      q.progress = Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0;
-      q.claimed = q.claimed === true;
-    }
+    profile.dailyQuests.quests = existingDaily.quests.map(q => ({
+      id: q.id,
+      progress: Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0,
+      claimed: q.claimed === true
+    }));
   }
 
   const existingWeekly = profile.weeklyQuests;
   if (!existingWeekly || existingWeekly.periodKey !== weeklyKey || !isValidQuestState(existingWeekly, WEEKLY_POOL, WEEKLY_COUNT)) {
     profile.weeklyQuests = baseQuestState('weekly', weeklyKey, sampleWithoutReplacement(WEEKLY_POOL, WEEKLY_COUNT));
   } else {
-    for (const q of existingWeekly.quests) {
-      q.progress = Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0;
-      q.claimed = q.claimed === true;
-    }
+    profile.weeklyQuests.quests = existingWeekly.quests.map(q => ({
+      id: q.id,
+      progress: Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0,
+      claimed: q.claimed === true
+    }));
   }
 
   const existingMonthly = profile.monthlyQuests;
   const monthlyPeriodChanged = !existingMonthly || existingMonthly.periodKey !== monthlyKey;
   if (!existingMonthly || existingMonthly.periodKey !== monthlyKey || !isValidQuestState(existingMonthly, MONTHLY_QUESTS, MONTHLY_QUESTS.length)) {
     profile.monthlyQuests = baseQuestState('monthly', monthlyKey, MONTHLY_QUESTS);
-    if (monthlyPeriodChanged) {
-      profile.monthlyCoinEarned = 0;
-      profile.monthlyLoginStreak = 0;
-    }
+    if (monthlyPeriodChanged) profile.monthlyCoinEarned = 0;
   } else {
-    for (const q of existingMonthly.quests) {
-      q.progress = Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0;
-      q.claimed = q.claimed === true;
-    }
+    profile.monthlyQuests.quests = existingMonthly.quests.map(q => ({
+      id: q.id,
+      progress: Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0,
+      claimed: q.claimed === true
+    }));
   }
 
   if (!Number.isFinite(Number(profile.monthlyCoinEarned)) || Number(profile.monthlyCoinEarned) < 0) {
     profile.monthlyCoinEarned = 0;
   }
   profile.monthlyCoinEarned = Math.floor(profile.monthlyCoinEarned);
-  if (!Number.isFinite(Number(profile.monthlyLoginStreak)) || Number(profile.monthlyLoginStreak) < 0) {
-    profile.monthlyLoginStreak = 0;
-  }
-  profile.monthlyLoginStreak = Math.min(7, Math.floor(profile.monthlyLoginStreak));
   profile.loginBonus = normalizeLoginBonus(profile.loginBonus);
+
+  if (!profile.monthlyLoginStreak || typeof profile.monthlyLoginStreak !== 'object'
+      || profile.monthlyLoginStreak.periodKey !== monthlyKey) {
+    profile.monthlyLoginStreak = { periodKey: monthlyKey, streak: 0 };
+  } else {
+    let monthlyStreak = Number(profile.monthlyLoginStreak.streak);
+    if (!Number.isFinite(monthlyStreak) || monthlyStreak < 0) monthlyStreak = 0;
+    profile.monthlyLoginStreak.streak = Math.min(7, Math.floor(monthlyStreak));
+  }
 
   syncSpecialMonthlyProgress(profile);
   return profile;
@@ -305,7 +274,7 @@ function syncSpecialMonthlyProgress(profile) {
   const monthlyMap = new Map(profile.monthlyQuests.quests.map(q => [q.id, q]));
 
   const loginQuest = monthlyMap.get('monthly_login_streak_7');
-  if (loginQuest) loginQuest.progress = Math.min(7, Math.max(loginQuest.progress, profile.monthlyLoginStreak || 0));
+  if (loginQuest) loginQuest.progress = Math.min(7, Math.max(loginQuest.progress, profile.monthlyLoginStreak?.streak || 0));
 
   const coinQuest = monthlyMap.get('monthly_coin_15000');
   if (coinQuest) coinQuest.progress = Math.min(15000, Math.max(coinQuest.progress, profile.monthlyCoinEarned || 0));
@@ -340,6 +309,7 @@ function recordProgress(profile, eventType, amount = 1) {
     profile.monthlyCoinEarned = Math.min(2147483647, profile.monthlyCoinEarned + Math.floor(value));
     changed = true;
   }
+
 
   syncSpecialMonthlyProgress(profile);
   return changed;
@@ -446,20 +416,21 @@ function claimLoginBonus(profile, addGearFragmentsFn) {
   const yesterdayKey = new Date(todayUtc.getTime() - 86400000).toISOString().slice(0, 10);
 
   let streak = 1;
-  const currentMonthKey = getJstMonthKey();
-  let monthlyStreak = 1;
-  const lastMonthKey = lastUtc ? getJstMonthKey(lastUtc) : null;
   if (lastUtc && login.lastClaimDate === yesterdayKey && login.streak >= 1 && login.streak < 7) {
     streak = login.streak + 1;
   }
-  if (lastUtc && login.lastClaimDate === yesterdayKey && lastMonthKey === currentMonthKey && profile.monthlyLoginStreak >= 1 && profile.monthlyLoginStreak < 7) {
-    monthlyStreak = profile.monthlyLoginStreak + 1;
-  }
 
   const reward = LOGIN_BONUS_REWARDS[streak - 1];
+  const monthlyPeriodKey = getJstMonthKey();
+  const monthlyState = (profile.monthlyLoginStreak && profile.monthlyLoginStreak.periodKey === monthlyPeriodKey)
+    ? profile.monthlyLoginStreak
+    : { periodKey: monthlyPeriodKey, streak: 0 };
+  const monthlyWasConsecutive = monthlyState.streak >= 1 && login.lastClaimDate === yesterdayKey;
+  monthlyState.streak = monthlyWasConsecutive ? Math.min(7, monthlyState.streak + 1) : 1;
+  profile.monthlyLoginStreak = monthlyState;
+
   login.lastClaimDate = today;
   login.streak = streak;
-  profile.monthlyLoginStreak = monthlyStreak;
 
   const result = {
     ok: true,
@@ -473,7 +444,6 @@ function claimLoginBonus(profile, addGearFragmentsFn) {
     result.reward.fragmentReward = applyRandomGearFragmentReward(profile, reward.fragments, addGearFragmentsFn);
   }
 
-  syncSpecialMonthlyProgress(profile);
   ensureQuestState(profile);
   return result;
 }
@@ -493,10 +463,14 @@ function recordClientEvent(profile, eventType, amount) {
     'exUltUsed'
   ]);
   if (!allowed.has(eventType)) return false;
+
   let value = Number(amount);
   if (!Number.isFinite(value) || value <= 0) return false;
-  if (eventType === 'kill' || eventType === 'exUltUsed') value = Math.floor(value);
-  return value > 0 && recordProgress(profile, eventType, value);
+  if (eventType === 'kill' || eventType === 'exUltUsed') {
+    value = Math.floor(value);
+    if (value <= 0) return false;
+  }
+  return recordProgress(profile, eventType, value);
 }
 
 function questEntrySnapshot(category, entry) {
@@ -535,13 +509,17 @@ function getLoginBonusSnapshot(profile) {
   ensureQuestState(profile);
   const today = getJstDateKey();
   const claimedToday = profile.loginBonus.lastClaimDate === today;
-  const nextDay = claimedToday
-    ? profile.loginBonus.streak
-    : (profile.loginBonus.streak >= 7 ? 1 : Math.max(1, profile.loginBonus.streak + 1));
+  const todayUtc = getJstDateUtcMidnight();
+  const yesterdayKey = new Date(todayUtc.getTime() - 86400000).toISOString().slice(0, 10);
+  let nextDay = 1;
+  if (claimedToday) {
+    nextDay = Math.max(1, Math.min(7, profile.loginBonus.streak || 1));
+  } else if (profile.loginBonus.lastClaimDate === yesterdayKey && profile.loginBonus.streak >= 1 && profile.loginBonus.streak < 7) {
+    nextDay = profile.loginBonus.streak + 1;
+  }
   return {
     lastClaimDate: profile.loginBonus.lastClaimDate,
     streak: profile.loginBonus.streak,
-    monthlyStreak: profile.monthlyLoginStreak || 0,
     claimedToday,
     nextDay,
     rewards: LOGIN_BONUS_REWARDS.map(x => ({ ...x }))
