@@ -467,6 +467,20 @@
       padding: 26px; box-shadow: 0 8px 34px rgba(0,0,0,0.6);
     }
     #gear-box h2 { color: #55efc4; font-size: 22px; margin-bottom: 4px; text-shadow: 0 0 12px #55efc4; }
+    #gear-capacity-summary {
+      display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+      background:rgba(85,239,196,0.06); border:1px solid rgba(85,239,196,0.28);
+      border-radius:10px; padding:8px 12px; margin:10px 0 12px;
+    }
+    .gear-capacity-title { font-size:11px; color:#b2bec3; }
+    .gear-capacity-value { font-size:13px; font-weight:bold; color:#55efc4; }
+    .gear-capacity-value.full { color:#ff7675; }
+    .gear-capacity-value.none { color:#74808a; }
+    .gear-capacity-slots { display:flex; gap:5px; align-items:center; }
+    .gear-capacity-dot { width:18px; height:18px; border-radius:5px; border:1px solid rgba(255,255,255,0.22); background:rgba(255,255,255,0.04); }
+    .gear-capacity-dot.used { border-color:#55efc4; background:rgba(85,239,196,0.22); box-shadow:0 0 6px rgba(85,239,196,0.25); }
+    .gear-capacity-dot.available { border-color:#74b9ff; background:rgba(116,185,255,0.12); }
+    .gear-capacity-dot.locked { border-style:dashed; opacity:0.42; }
     #gear-coin-row {
       display: flex; justify-content: space-between; align-items: center;
       background: rgba(85, 239, 196, 0.1); border: 1px solid rgba(85, 239, 196, 0.35);
@@ -485,6 +499,10 @@
     .gear-slot-card .gsc-label { font-size: 9.5px; color: #b2bec3; }
     .gear-slot-card .gsc-name { font-weight: bold; color: #ffeaa7; font-size: 12px; margin: 4px 0; }
     .gear-slot-card .gsc-empty { color: #74808a; text-align: center; margin: auto; }
+    .gear-slot-card.sub-available { border-color: rgba(116,185,255,0.42); background: rgba(116,185,255,0.05); }
+    .gear-slot-card.sub-used { border-color: rgba(85,239,196,0.72); background: rgba(85,239,196,0.09); }
+    .gear-slot-card .gsc-slot-state { font-size:9.5px; color:#74b9ff; margin-top:3px; }
+    .gear-slot-card.sub-used .gsc-slot-state { color:#55efc4; }
     .gear-slot-card .gsc-unequip-btn {
       align-self: flex-end; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer;
       background: #ff7675; color: #2d3436; font-weight: bold; font-size: 10px;
@@ -496,9 +514,15 @@
       background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.15);
       border-radius: 10px; padding: 10px 12px; font-size: 11px; display: flex; flex-direction: column; gap: 5px;
     }
-    .gear-inv-item.subonly { border-left: 3px solid #fd79a8; }
+    .gear-inv-item.subonly { border-left: 4px solid #fd79a8; background:rgba(253,121,168,0.055); }
+    .gear-inv-item.subonly .gii-name { color:#ffd6e8; }
     .gear-inv-item .gii-name { font-weight: bold; color: #ffeaa7; font-size: 12px; }
-    .gii-desc-main, .gii-desc-sub { color: #b2bec3; font-size: 9.5px; line-height: 1.4; }
+    .gii-badge-row { display:flex; align-items:center; gap:5px; flex-wrap:wrap; min-height:18px; }
+    .gii-badge { display:inline-flex; align-items:center; padding:2px 6px; border-radius:6px; font-size:9px; font-weight:bold; line-height:1.2; }
+    .gii-badge.main-only { color:#2d1020; background:#fd79a8; border:1px solid #ff9bc1; }
+    .gii-badge.sub-ok { color:#103044; background:#74b9ff; border:1px solid #9bcfff; }
+    .gii-badge.main-slots { color:#173226; background:#55efc4; border:1px solid #8ff5dc; }
+    .gii-desc-main, .gii-desc-sub { color:#b2bec3; font-size:9.5px; line-height:1.4; }
     .gii-count { color: #55efc4; font-weight: bold; font-size: 10.5px; }
     .gii-btn-row { display: flex; gap: 6px; margin-top: 3px; }
     .gii-equip-btn {
@@ -506,9 +530,39 @@
       background: #55efc4; color: #1e1b2e; font-weight: bold; font-size: 10.5px;
     }
     .gii-equip-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; cursor: not-allowed; }
-    #gear-message { min-height: 20px; font-size: 13px; font-weight: bold; margin: 12px 0; text-align: center; }
-    #gear-message.ok { color: #55efc4; }
-    #gear-message.ng { color: #ff7675; }
+    #gear-message {
+      position:sticky; top:0; z-index:5; min-height:34px; font-size:13px; font-weight:bold; margin:12px 0;
+      padding:8px 12px; border-radius:9px; text-align:center; background:rgba(8,12,18,0.94);
+      border:1px solid rgba(255,255,255,0.08); box-shadow:0 5px 16px rgba(0,0,0,0.35);
+    }
+    #gear-message:empty { visibility:hidden; background:transparent; border-color:transparent; box-shadow:none; }
+    #gear-message.ok { color:#55efc4; border-color:rgba(85,239,196,0.25); }
+    #gear-message.ng { color:#ff7675; border-color:rgba(255,118,117,0.28); background:rgba(34,10,14,0.96); }
+
+    #training-gear-add-sub-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; box-shadow: none; cursor: not-allowed; transform: none; }
+
+    #training-gear-message {
+      min-height:34px; margin-top:10px; padding:8px 11px; border-radius:8px;
+      background:rgba(12,18,28,0.82); border:1px solid rgba(255,255,255,0.10);
+      font-size:11px; font-weight:bold; text-align:center; line-height:1.4;
+    }
+    #training-gear-message:empty { display:none; }
+    #training-gear-message.ok { color:#55efc4; border-color:rgba(85,239,196,0.3); }
+    #training-gear-message.ng { color:#ff7675; border-color:rgba(255,118,117,0.35); background:rgba(40,12,16,0.86); }
+    #training-gear-capacity {
+      display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+      margin:7px 0 9px; padding:8px 10px; border-radius:8px;
+      background:rgba(116,185,255,0.05); border:1px solid rgba(116,185,255,0.22);
+    }
+    #training-gear-capacity .tgc-label { font-size:10px; color:#b2bec3; }
+    #training-gear-capacity .tgc-value { font-size:12px; font-weight:bold; color:#74b9ff; }
+    #training-gear-capacity .tgc-value.full { color:#ff7675; }
+    .training-gear-slot-dots { display:flex; gap:4px; align-items:center; }
+    .training-gear-slot-dot { width:15px; height:15px; border-radius:4px; border:1px solid rgba(255,255,255,0.20); }
+    .training-gear-slot-dot.used { border-color:#55efc4; background:rgba(85,239,196,0.28); }
+    .training-gear-slot-dot.available { border-color:#74b9ff; background:rgba(116,185,255,0.14); }
+    .training-gear-slot-dot.locked { border-style:dashed; opacity:0.4; }
+    #training-gear-select option.gear-main-only { color:#fd79a8; }
     #profile-box {
       width: 100%; max-width: 720px; max-height: 88vh; overflow-y: auto;
       background: rgba(20, 26, 36, 0.98); border: 2px solid #00cec9; border-radius: 14px;
@@ -910,8 +964,9 @@
 
       <div class="gear-section-title">🧩 現在の装備</div>
       <div id="gear-equipped-row"></div>
+      <div id="gear-capacity-summary" aria-live="polite"></div>
 
-      <div id="gear-message"></div>
+      <div id="gear-message" aria-live="polite"></div>
 
       <div class="gear-section-title">🎒 所持ギア（完成品）</div>
       <div id="gear-inventory-grid"></div>
@@ -1208,10 +1263,14 @@
         <div style="font-size:13px; font-weight:bold; color:#55efc4; margin-bottom:4px;">⚙️ 訓練場：自由ギア設定</div>
         <div style="font-size:10.5px; color:#b2bec3; margin-bottom:10px;">訓練場では所持・コインに関係なく全てのギアを自由に試せます（この設定は訓練場限定で、実戦には反映されません）。</div>
         <div id="training-gear-equipped-row" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
-        <select id="training-gear-select" style="padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:#1e1b2e; color:#fff; font-size:11.5px; margin-right:6px;"></select>
-        <button type="button" id="training-gear-add-main-btn" class="btn" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">メインにする</button>
-        <button type="button" id="training-gear-add-sub-btn" class="btn" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">サブに追加</button>
-        <button type="button" id="training-gear-clear-btn" class="btn back" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">全解除</button>
+        <div id="training-gear-capacity" aria-live="polite"></div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <select id="training-gear-select" style="padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:#1e1b2e; color:#fff; font-size:11.5px; margin-right:2px;"></select>
+          <button type="button" id="training-gear-add-main-btn" class="btn" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">メインにする</button>
+          <button type="button" id="training-gear-add-sub-btn" class="btn" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">サブに追加</button>
+          <button type="button" id="training-gear-clear-btn" class="btn back" style="padding:6px 12px; font-size:11.5px; display:inline-block; width:auto;">全解除</button>
+        </div>
+        <div id="training-gear-message" aria-live="polite"></div>
       </div>
 
       <div class="btn-row">
@@ -1296,10 +1355,7 @@
         universalFragments: 0,
         completedGear: {},
         equippedGear: { main: null, subs: [] },
-        gachaPityCount: 0,
-        quests: { daily: { periodKey: '', quests: [] }, weekly: { periodKey: '', quests: [] }, monthly: { periodKey: '', quests: [] } },
-        loginBonus: { lastClaimDate: null, streak: 0, monthlyStreak: 0, claimedToday: false, nextDay: 1, rewards: [] },
-        monthlyCoinEarned: 0
+        gachaPityCount: 0
       };
     }
 
@@ -1684,6 +1740,47 @@
       return trainingFreeGear.main ? GEAR_MASTER[trainingFreeGear.main].mainSubSlots : 0;
     }
 
+    function showTrainingGearMessage(text, ok) {
+      const el = document.getElementById('training-gear-message');
+      if (!el) return;
+      el.innerText = text || '';
+      el.className = text ? (ok ? 'ok' : 'ng') : '';
+    }
+
+    function getSelectedTrainingGearId() {
+      const el = document.getElementById('training-gear-select');
+      return el ? el.value : '';
+    }
+
+    function refreshTrainingGearControls() {
+      const selectEl = document.getElementById('training-gear-select');
+      const addSubBtn = document.getElementById('training-gear-add-sub-btn');
+      if (!selectEl || !addSubBtn) return;
+      const gearId = getSelectedTrainingGearId();
+      const meta = GEAR_MASTER[gearId];
+      const hasMain = !!trainingFreeGear.main;
+      const full = hasMain && trainingFreeGear.subs.length >= trainingMaxSlots();
+      const invalid = !hasMain || !!(meta && meta.subOnly) || full;
+      addSubBtn.disabled = invalid;
+      addSubBtn.innerText = 'サブに追加';
+      addSubBtn.title = invalid ? '現在はこのギアをサブに追加できません。' : '選択中のギアをサブに追加します。';
+
+      const cap = document.getElementById('training-gear-capacity');
+      if (cap) {
+        const maxSlots = trainingMaxSlots();
+        const used = trainingFreeGear.subs.length;
+        const left = Math.max(0, maxSlots - used);
+        const valueClass = !hasMain ? 'none' : (left === 0 ? 'full' : '');
+        let dots = '';
+        for (let i = 0; i < 3; i++) {
+          const cls = !hasMain ? 'locked' : (i < used ? 'used' : (i < maxSlots ? 'available' : 'locked'));
+          dots += `<span class="training-gear-slot-dot ${cls}"></span>`;
+        }
+        const text = !hasMain ? 'メイン未設定（サブ枠 0）' : `サブ枠 ${used} / ${maxSlots}　あと ${left} 枠`;
+        cap.innerHTML = `<span class="tgc-label">${text}</span><span class="tgc-value ${valueClass}">${!hasMain ? '—' : (left === 0 ? 'FULL' : `残り${left}`)}</span><span class="training-gear-slot-dots">${dots}</span>`;
+      }
+    }
+
     function refreshTrainingGearPanel() {
       const panel = document.getElementById('training-gear-panel');
       if (!panel) return;
@@ -1694,9 +1791,11 @@
       const selectEl = document.getElementById('training-gear-select');
       if (selectEl && selectEl.options.length === 0) {
         GEAR_IDS.forEach(gearId => {
+          const meta = GEAR_MASTER[gearId];
           const opt = document.createElement('option');
           opt.value = gearId;
-          opt.innerText = GEAR_MASTER[gearId].name;
+          opt.className = meta.subOnly ? 'gear-main-only' : '';
+          opt.innerText = meta.subOnly ? `⛔ ${meta.name}（メイン専用／サブ不可）` : `${meta.name}（サブ可）`;
           selectEl.appendChild(opt);
         });
       }
@@ -1733,40 +1832,57 @@
       trainingFreeGear.subs.forEach((subId, idx) => {
         row.appendChild(chip(`サブ${idx + 1}`, subId, () => {
           trainingFreeGear.subs.splice(idx, 1);
+          showTrainingGearMessage(`サブ${idx + 1}を外しました。`, true);
           refreshTrainingGearPanel();
         }));
       });
+      refreshTrainingGearControls();
     }
 
+    document.getElementById('training-gear-select').addEventListener('change', () => {
+      const gearId = getSelectedTrainingGearId();
+      const meta = GEAR_MASTER[gearId];
+      if (meta && meta.subOnly) {
+        showTrainingGearMessage(`「${meta.name}」はメイン専用です。サブには装備できません。`, false);
+      } else {
+        showTrainingGearMessage(meta ? `「${meta.name}」はサブ装備できます。` : '', true);
+      }
+      refreshTrainingGearControls();
+    });
     document.getElementById('training-gear-add-main-btn').addEventListener('click', () => {
-      const gearId = document.getElementById('training-gear-select').value;
+      const gearId = getSelectedTrainingGearId();
+      if (!gearId) return;
       trainingFreeGear.main = gearId;
       // メインを切り替えたら、新しいサブ枠数に収まらない分は先頭から間引く
       const maxSlots = GEAR_MASTER[gearId].mainSubSlots;
       if (trainingFreeGear.subs.length > maxSlots) {
         trainingFreeGear.subs = trainingFreeGear.subs.slice(0, maxSlots);
       }
+      showTrainingGearMessage(`メインを「${GEAR_MASTER[gearId].name}」に設定しました。サブ枠は ${maxSlots} 枠です。`, true);
       refreshTrainingGearPanel();
     });
     document.getElementById('training-gear-add-sub-btn').addEventListener('click', () => {
-      const gearId = document.getElementById('training-gear-select').value;
+      const gearId = getSelectedTrainingGearId();
+      const meta = GEAR_MASTER[gearId];
       if (!trainingFreeGear.main) {
-        addBattleLog('<span style="color:#ffd93d">先にメインギアを設定してください。</span>');
+        showTrainingGearMessage('先にメインギアを設定してください。', false);
         return;
       }
-      if (GEAR_MASTER[gearId].subOnly) {
-        addBattleLog('<span style="color:#ffd93d">このギアはメイン専用で、サブには置けません。</span>');
+      if (meta && meta.subOnly) {
+        showTrainingGearMessage(`「${meta.name}」はメイン専用です。サブには装備できません。`, false);
         return;
       }
       if (trainingFreeGear.subs.length >= trainingMaxSlots()) {
-        addBattleLog('<span style="color:#ffd93d">サブスロットの空きがありません。</span>');
+        showTrainingGearMessage(`サブスロットの空きがありません。現在 ${trainingFreeGear.subs.length} / ${trainingMaxSlots()} 枠です。`, false);
         return;
       }
       trainingFreeGear.subs.push(gearId);
+      showTrainingGearMessage(`サブに「${meta.name}」を追加しました。`, true);
       refreshTrainingGearPanel();
     });
     document.getElementById('training-gear-clear-btn').addEventListener('click', () => {
       trainingFreeGear = { main: null, subs: [] };
+      showTrainingGearMessage('ギア設定を全解除しました。', true);
       refreshTrainingGearPanel();
     });
 
@@ -2023,6 +2139,7 @@
           mainCard.innerHTML = `
             <div class="gsc-label">メイン</div>
             <div class="gsc-name">${GEAR_MASTER[mainId].name}</div>
+            <div class="gsc-slot-state">サブ枠 ${maxSlots}</div>
           `;
           const btn = document.createElement('button');
           btn.className = 'gsc-unequip-btn';
@@ -2040,14 +2157,16 @@
           const card = document.createElement('div');
           card.className = 'gear-slot-card' + (subId ? ' filled' : '');
           if (subId) {
-            card.innerHTML = `<div class="gsc-label">サブ${i + 1}</div><div class="gsc-name">${GEAR_MASTER[subId].name}</div>`;
+            card.classList.add('sub-used');
+            card.innerHTML = `<div class="gsc-label">サブ${i + 1}</div><div class="gsc-name">${GEAR_MASTER[subId].name}</div><div class="gsc-slot-state">使用中</div>`;
             const btn = document.createElement('button');
             btn.className = 'gsc-unequip-btn';
             btn.innerText = '外す';
             btn.addEventListener('click', () => requestUnequipSub(i));
             card.appendChild(btn);
           } else {
-            card.innerHTML = `<div class="gsc-label">サブ${i + 1}</div><div class="gsc-empty">空き</div>`;
+            card.classList.add('sub-available');
+            card.innerHTML = `<div class="gsc-label">サブ${i + 1}</div><div class="gsc-empty">＋ 空き</div><div class="gsc-slot-state">装備可能</div>`;
           }
           row.appendChild(card);
         }
@@ -2057,6 +2176,23 @@
           note.innerText = 'メインを装備するとサブ枠が開放されます。';
           row.appendChild(note);
         }
+      }
+
+      const capacityEl = document.getElementById('gear-capacity-summary');
+      if (capacityEl) {
+        const used = equipped.subs.length;
+        const left = Math.max(0, maxSlots - used);
+        const valueClass = !mainId ? 'none' : (left === 0 ? 'full' : '');
+        let dots = '';
+        for (let i = 0; i < 3; i++) {
+          const cls = !mainId ? 'locked' : (i < used ? 'used' : (i < maxSlots ? 'available' : 'locked'));
+          dots += `<span class="gear-capacity-dot ${cls}" title="サブ${i + 1}"></span>`;
+        }
+        const title = mainId
+          ? `メイン「${GEAR_MASTER[mainId].name}」のサブ枠`
+          : 'サブ枠';
+        const value = !mainId ? 'メイン未装備' : `あと ${left} 枠（${used} / ${maxSlots}）`;
+        capacityEl.innerHTML = `<span class="gear-capacity-title">${title}</span><span class="gear-capacity-slots">${dots}</span><span class="gear-capacity-value ${valueClass}">${value}</span>`;
       }
 
       // --- 所持ギア（完成品）一覧 ---
@@ -2076,8 +2212,12 @@
 
           el.innerHTML = `
             <div class="gii-name">${meta.name} <span class="gii-count">×${count}</span></div>
+            <div class="gii-badge-row">
+              <span class="gii-badge main-slots">メイン時：サブ${meta.mainSubSlots}枠</span>
+              ${meta.subOnly ? '<span class="gii-badge main-only">⛔ メイン専用・サブ不可</span>' : '<span class="gii-badge sub-ok">✓ サブ装備可</span>'}
+            </div>
             <div class="gii-desc-main">メイン: ${meta.mainDesc}</div>
-            ${meta.subOnly ? '<div class="gii-desc-sub">（サブ不可）</div>' : `<div class="gii-desc-sub">サブ: ${meta.subDesc}</div>`}
+            ${meta.subOnly ? '<div class="gii-desc-sub">サブ：このギアはサブ枠に使用できません</div>' : `<div class="gii-desc-sub">サブ: ${meta.subDesc}</div>`}
           `;
 
           const btnRow = document.createElement('div');
@@ -2094,7 +2234,8 @@
             const subBtn = document.createElement('button');
             subBtn.className = 'gii-equip-btn';
             subBtn.innerText = `サブに装備 (${GEAR_SUB_EQUIP_COST.toLocaleString()})`;
-            subBtn.disabled = subFull || coins < GEAR_SUB_EQUIP_COST;
+            subBtn.disabled = subFull || !mainId || coins < GEAR_SUB_EQUIP_COST;
+            subBtn.title = 'サブに装備';
             subBtn.addEventListener('click', () => requestEquipSub(gearId));
             btnRow.appendChild(subBtn);
           }
@@ -3527,9 +3668,6 @@
     }
 
     function handleRateMatchResult(data) {
-      // 試合終了直前の1秒バッチを先に送ってから、以後の戦闘イベントを停止する。
-      flushQuestEvents();
-      clearQuestEventBuffer();
       isRateMatchOver = true;
       clearInputs();
       releasePointerLock();
