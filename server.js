@@ -123,12 +123,11 @@ const GACHA_COST = 300;
 const GACHA_PITY_MAX = 30;                 // 30連ごとに天井
 const GACHA_PITY_UNIVERSAL_REWARD = 3;     // 天井到達で万能破片3個（通常の抽選結果に加えて付与）
 const GACHA_FRAGMENTS_PER_GEAR = 10;       // 破片10個で完成ギア1個
-const GACHA_FRAGMENT_MIN = 1;
-const GACHA_FRAGMENT_MAX = 3;
+const GACHA_FRAGMENT_XY_DIST = [[1, 0.50], [2, 0.25], [3, 0.13], [4, 0.08], [5, 0.04]];
 
 // 排出テーブルの基礎重み。実際の抽選時は、shot/ult/tacticのいずれかが
 // 「全種所持済み（コンプ）」であれば、そのカテゴリの重みを0にして
-// 丸ごとfragmentへ上乗せする（被り救済の万能破片は廃止）。
+// 丸ごとfragmentへ上乗せする。
 const GACHA_BASE_WEIGHTS = { fragment: 95.0, shot: 0.8, ult: 0.5, tactic: 0.7, gear: 3.0 };
 
 // プロフィールの所持状況を見て、コンプ済みカテゴリの重みをfragmentへ再配分した
@@ -181,26 +180,67 @@ function destroyEquippedGear(profile, gearId) {
 }
 
 // 1回分の抽選結果を計算し、profileへ直接反映する（コイン消費は呼び出し側の責務）。
-// 被り救済（万能破片5個）は廃止：shot/ult/tacticのいずれかがコンプ済みなら、
-// そのカテゴリはそもそも抽選対象から除外される（computeGachaWeights側で重み0）。
+// shot/ult/tacticのいずれかがコンプ済みなら、そのカテゴリは抽選対象から除外される。
+function pickGachaFragmentXY() {
+  const choose = () => {
+    const r = Math.random();
+    let acc = 0;
+    for (const [value, weight] of GACHA_FRAGMENT_XY_DIST) {
+      acc += weight;
+      if (r < acc) return value;
+    }
+    return GACHA_FRAGMENT_XY_DIST[GACHA_FRAGMENT_XY_DIST.length - 1][0];
+  };
+  return { x: choose(), y: choose() };
+}
+
+function sampleDistinctGearIds(count) {
+  const pool = [...GEAR_IDS];
+  const selected = [];
+  while (selected.length < count) {
+    const index = Math.floor(Math.random() * pool.length);
+    selected.push(pool.splice(index, 1)[0]);
+  }
+  return selected;
+}
+
+function classifyGachaRarity(x, y) {
+  const sum = x + y;
+  return sum >= 10 ? 'super' : sum >= 7 ? 'great' : sum >= 5 ? 'hit' : 'normal';
+}
+
+// 1回分の抽選結果を計算し、profileへ直接反映する（コイン消費は呼び出し側の責務）。
+// 破片枠はX/Y方式：1〜5種類のギアを重複なしで選び、各ギアへY個ずつ付与する。
 function runGachaPull(profile) {
   const weights = computeGachaWeights(profile);
   const kind = pickWeightedFromMap(weights);
   const detail = { kind };
 
   if (kind === 'fragment') {
-    const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
-    const amount = GACHA_FRAGMENT_MIN + Math.floor(Math.random() * (GACHA_FRAGMENT_MAX - GACHA_FRAGMENT_MIN + 1));
-    const completedGained = addGearFragments(profile, gearId, amount);
-    Object.assign(detail, { gearId, amount, completedGained });
+    const { x, y } = pickGachaFragmentXY();
+    const gearIds = sampleDistinctGearIds(x);
+    let completedGained = 0;
+    for (const gearId of gearIds) {
+      completedGained += addGearFragments(profile, gearId, y);
+    }
+    Object.assign(detail, {
+      x,
+      y,
+      gearIds,
+      totalPieces: x * y,
+      className: classifyGachaRarity(x, y),
+      completedGained
+    });
   } else if (kind === 'shot') {
     const candidates = VALID_SHOT_IDS.filter(id => !profile.unlockedShots.includes(id));
     // computeGachaWeightsで既に除外されているはずだが、万一の不整合に備えた保険。
     // 報酬を捏造せず、破片1個の当たりとして処理する（見た目上は「はずれ枠が無い」ことを保つ）。
     if (candidates.length === 0) {
-      const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
-      const completedGained = addGearFragments(profile, gearId, GACHA_FRAGMENT_MIN);
-      Object.assign(detail, { kind: 'fragment', gearId, amount: GACHA_FRAGMENT_MIN, completedGained });
+      const { x, y } = { x: 1, y: 1 };
+      const gearIds = sampleDistinctGearIds(x);
+      let completedGained = 0;
+      for (const gearId of gearIds) completedGained += addGearFragments(profile, gearId, y);
+      Object.assign(detail, { kind: 'fragment', x, y, gearIds, totalPieces: x * y, className: classifyGachaRarity(x, y), completedGained });
     } else {
       const id = candidates[Math.floor(Math.random() * candidates.length)];
       profile.unlockedShots.push(id);
@@ -209,9 +249,11 @@ function runGachaPull(profile) {
   } else if (kind === 'ult') {
     const candidates = VALID_ULT_IDS.filter(id => !profile.unlockedUlts.includes(id));
     if (candidates.length === 0) {
-      const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
-      const completedGained = addGearFragments(profile, gearId, GACHA_FRAGMENT_MIN);
-      Object.assign(detail, { kind: 'fragment', gearId, amount: GACHA_FRAGMENT_MIN, completedGained });
+      const { x, y } = { x: 1, y: 1 };
+      const gearIds = sampleDistinctGearIds(x);
+      let completedGained = 0;
+      for (const gearId of gearIds) completedGained += addGearFragments(profile, gearId, y);
+      Object.assign(detail, { kind: 'fragment', x, y, gearIds, totalPieces: x * y, className: classifyGachaRarity(x, y), completedGained });
     } else {
       const id = candidates[Math.floor(Math.random() * candidates.length)];
       profile.unlockedUlts.push(id);
@@ -221,9 +263,11 @@ function runGachaPull(profile) {
     // 設計書3-1：ガチャ直撃の戦術タイプは対応ULT未所持でも入手・保持可（2-4の例外）
     const candidates = VALID_TACTIC_IDS.filter(id => !profile.unlockedTactics.includes(id));
     if (candidates.length === 0) {
-      const gearId = GEAR_IDS[Math.floor(Math.random() * GEAR_IDS.length)];
-      const completedGained = addGearFragments(profile, gearId, GACHA_FRAGMENT_MIN);
-      Object.assign(detail, { kind: 'fragment', gearId, amount: GACHA_FRAGMENT_MIN, completedGained });
+      const { x, y } = { x: 1, y: 1 };
+      const gearIds = sampleDistinctGearIds(x);
+      let completedGained = 0;
+      for (const gearId of gearIds) completedGained += addGearFragments(profile, gearId, y);
+      Object.assign(detail, { kind: 'fragment', x, y, gearIds, totalPieces: x * y, className: classifyGachaRarity(x, y), completedGained });
     } else {
       const id = candidates[Math.floor(Math.random() * candidates.length)];
       profile.unlockedTactics.push(id);
@@ -269,6 +313,7 @@ function defaultProfile(clientId) {
     completedGear: {},              // { gearId: 完成在庫数 }
     equippedGear: { main: null, subs: [] }, // 装備中のギア（サブ枠数はメインのギア種によって可変）
     gachaPityCount: 0,              // 天井までのガチャ回数カウント（30到達で万能破片3個→0にリセット）
+    gachaFreeLastClaimDate: null,   // JST基準：その日の無料ガチャを最後に使った日付
     ...quest.createInitialQuestState(),
     updatedAt: Date.now()
   };
@@ -480,6 +525,11 @@ function getOrCreateProfile(clientId) {
   }
   p.gachaPityCount = Math.floor(p.gachaPityCount) % GACHA_PITY_MAX;
 
+  // 1日1回無料ガチャ用の日付キー。JST（Asia/Tokyo）で1日を区切る。
+  if (typeof p.gachaFreeLastClaimDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.gachaFreeLastClaimDate)) {
+    p.gachaFreeLastClaimDate = null;
+  }
+
   // Quest system: existing profiles are lazily migrated and period rollover is checked here.
   const questBefore = JSON.stringify({ loginBonus: p.loginBonus, monthlyLoginStreak: p.monthlyLoginStreak, dailyQuests: p.dailyQuests, weeklyQuests: p.weeklyQuests, monthlyQuests: p.monthlyQuests, monthlyCoinEarned: p.monthlyCoinEarned });
   quest.ensureQuestState(p);
@@ -512,6 +562,8 @@ function publicProfilePayload(p) {
     completedGear: p.completedGear,
     equippedGear: p.equippedGear,
     gachaPityCount: p.gachaPityCount,
+    gachaFreeLastClaimDate: p.gachaFreeLastClaimDate,
+    gachaFreeAvailable: p.gachaFreeLastClaimDate !== quest.getJstDateKey(),
     quests: quest.getQuestSnapshot(p),
     loginBonus: quest.getLoginBonusSnapshot(p),
     monthlyCoinEarned: p.monthlyCoinEarned
@@ -961,7 +1013,19 @@ wss.on('connection', (socket) => {
       }
 
       const times = (data.times === 10) ? 10 : 1;
-      const totalCost = GACHA_COST * times;
+      const isFreeDaily = data.freeDaily === true;
+      if (isFreeDaily && times !== 1) {
+        socket.send(JSON.stringify({ type: '__gacha_result', ok: false, reason: 'invalid_free_gacha' }));
+        return;
+      }
+
+      const todayJst = quest.getJstDateKey();
+      if (isFreeDaily && profile.gachaFreeLastClaimDate === todayJst) {
+        socket.send(JSON.stringify({ type: '__gacha_result', ok: false, reason: 'free_gacha_used' }));
+        return;
+      }
+
+      const totalCost = isFreeDaily ? 0 : GACHA_COST * times;
       if (profile.coins < totalCost) {
         socket.send(JSON.stringify({ type: '__gacha_result', ok: false, reason: 'not_enough_coins' }));
         return;
@@ -986,6 +1050,10 @@ wss.on('connection', (socket) => {
         pulls.push({ ...detail, pityTriggered, pityCountAfter: profile.gachaPityCount });
       }
 
+      if (isFreeDaily) {
+        profile.gachaFreeLastClaimDate = todayJst;
+      }
+
       quest.recordProgress(profile, 'gachaPull', times);
       quest.registerGearCompletion(profile, gearCompletedGained);
       profile.updatedAt = Date.now();
@@ -996,6 +1064,7 @@ wss.on('connection', (socket) => {
         ok: true,
         pulls,
         spent: totalCost,
+        freeDaily: isFreeDaily,
         profile: publicProfilePayload(profile)
       }));
       return;
