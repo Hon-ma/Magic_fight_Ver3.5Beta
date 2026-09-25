@@ -530,6 +530,7 @@
       background: #55efc4; color: #1e1b2e; font-weight: bold; font-size: 10.5px;
     }
     .gii-equip-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; cursor: not-allowed; }
+    .gii-equip-btn.gii-sub-full { background:rgba(255,118,117,0.10); color:#ff7675; border:1px solid rgba(255,118,117,0.28); }
     #gear-message {
       position:sticky; top:0; z-index:5; min-height:34px; font-size:13px; font-weight:bold; margin:12px 0;
       padding:8px 12px; border-radius:9px; text-align:center; background:rgba(8,12,18,0.94);
@@ -538,8 +539,6 @@
     #gear-message:empty { visibility:hidden; background:transparent; border-color:transparent; box-shadow:none; }
     #gear-message.ok { color:#55efc4; border-color:rgba(85,239,196,0.25); }
     #gear-message.ng { color:#ff7675; border-color:rgba(255,118,117,0.28); background:rgba(34,10,14,0.96); }
-
-    #training-gear-add-sub-btn:disabled { background: rgba(255,255,255,0.15); color: #74808a; box-shadow: none; cursor: not-allowed; transform: none; }
 
     #training-gear-message {
       min-height:34px; margin-top:10px; padding:8px 11px; border-radius:8px;
@@ -1301,7 +1300,6 @@
 
     // --- サーバーとの時刻同期 ＆ Ping測定 ---
     let serverTimeOffset = 0;
-    let currentPing = 0;
     let pingIntervalTimer = null;
     function getServerTime() {
       return Date.now() + serverTimeOffset;
@@ -1762,8 +1760,19 @@
       const full = hasMain && trainingFreeGear.subs.length >= trainingMaxSlots();
       const invalid = !hasMain || !!(meta && meta.subOnly) || full;
       addSubBtn.disabled = invalid;
-      addSubBtn.innerText = 'サブに追加';
-      addSubBtn.title = invalid ? '現在はこのギアをサブに追加できません。' : '選択中のギアをサブに追加します。';
+      addSubBtn.title = !hasMain
+        ? '先にメインギアを設定してください。'
+        : (meta && meta.subOnly ? 'このギアはメイン専用で、サブには置けません。'
+          : (full ? 'サブスロットの空きがありません。' : '選択中のギアをサブに追加します。'));
+      if (meta && meta.subOnly) {
+        addSubBtn.innerText = 'サブ不可';
+      } else if (!hasMain) {
+        addSubBtn.innerText = '先にメイン設定';
+      } else if (full) {
+        addSubBtn.innerText = 'サブ枠いっぱい';
+      } else {
+        addSubBtn.innerText = 'サブに追加';
+      }
 
       const cap = document.getElementById('training-gear-capacity');
       if (cap) {
@@ -2232,10 +2241,10 @@
 
           if (!meta.subOnly) {
             const subBtn = document.createElement('button');
-            subBtn.className = 'gii-equip-btn';
-            subBtn.innerText = `サブに装備 (${GEAR_SUB_EQUIP_COST.toLocaleString()})`;
-            subBtn.disabled = subFull || !mainId || coins < GEAR_SUB_EQUIP_COST;
-            subBtn.title = 'サブに装備';
+            subBtn.className = 'gii-equip-btn' + (subFull ? ' gii-sub-full' : '');
+            subBtn.innerText = subFull ? 'サブ枠いっぱい' : `サブに装備 (${GEAR_SUB_EQUIP_COST.toLocaleString()})`;
+            subBtn.disabled = subFull || coins < GEAR_SUB_EQUIP_COST;
+            subBtn.title = subFull ? `サブ枠がいっぱいです（${equipped.subs.length} / ${maxSlots}）` : '選択したギアをサブに装備';
             subBtn.addEventListener('click', () => requestEquipSub(gearId));
             btnRow.appendChild(subBtn);
           }
@@ -2291,7 +2300,6 @@
     const SET_COMMENT_HOLD_MS = 400;          // 0キーをこの時間以上押し続けると一覧表示
     let lastDigitKeyPressed = null;
     let lastDigitKeyTime = 0;
-    let zeroKeyDownTime = 0;
     let zeroKeyHoldTimer = null;
     let setCommentOverlayShown = false;
 
@@ -2367,8 +2375,9 @@
     // ================================================================
     // --- ギア効果の数値定義（Phase5）---
     // メイン/サブ両対応14種のみ対象。type:'flat'は単純加算、type:'pct'は
-    // パーセントポイントとして合算し、最終的に (1 + 合計/100) の倍率にする
-    // （設計書4-3節：割合系は重複しても掛け算ではなく足し算）。
+    // 通常の倍率系パーセント、type:'additivePct'は実値へのパーセントポイント加算。
+    // 通常のpct系は (1 + 合計/100) の倍率にするが、gear12は
+    // 「20%→24%」のように4ポイントを直接足す。
     // メイン専用6種（gear15〜20）は特殊発動条件付きのため、この表には含めず
     // 個別ロジックとして実装する。
     // ================================================================
@@ -2385,7 +2394,7 @@
       gear09: { key: 'shieldMpCostReductionPct', type: 'pct', main: 20, sub: 5 },
       gear10: { key: 'invincibleExtendFlat', type: 'flat', main: 2, sub: 0.5 },
       gear11: { key: 'mpCostReductionFlat', type: 'flat', main: 4, sub: 1 },
-      gear12: { key: 'ultChargeBonusPct', type: 'pct', main: 4, sub: 1 },
+      gear12: { key: 'ultChargeBonusPct', type: 'additivePct', main: 4, sub: 1 },
       gear13: { key: 'guardSlowReductionPct', type: 'pct', main: 10, sub: 3 },
       gear14: { key: 'debuffDurationReductionPct', type: 'pct', main: 20, sub: 5 }
     };
@@ -2428,6 +2437,11 @@
     // 追加の一時的%ボーナスを同じ土俵で合算するために渡す（省略可）。
     function getGearPctMultiplier(effectKey, extraPct = 0) {
       return 1 + (getGearBonusTotal(effectKey) + extraPct) / 100;
+    }
+
+    // パーセントポイントを実値へ直接加算するタイプ（例：ULT 20%→24%）。
+    function getGearAdditivePct(effectKey) {
+      return getGearBonusTotal(effectKey);
     }
 
     // 現在メインスロットに装備しているギアIDが gearId と一致するか。
@@ -2959,7 +2973,7 @@
       headTag.position.set(0, 2.7, 0);
       group.add(body, head, headTag);
       scene.add(group);
-      return { group, headTag, body };
+      return { group, headTag };
     }
 
     function spawnDummy(type, x, z) {
@@ -2969,7 +2983,7 @@
       if (type === 'jump') { col = 0xfdcb6e; name = "ジャンプマネキン"; }
       if (type === 'shooter') { col = 0xff7675; name = "反撃マネキン"; }
 
-      const { group, headTag, body } = createDummyMesh(col, name);
+      const { group, headTag } = createDummyMesh(col, name);
       group.position.set(x, 0, z);
       group.rotation.y = Math.PI;
 
@@ -3816,7 +3830,7 @@
     }
 
     // ★ 爆弾の爆風処理（着弾地点で半径1.8mの球形爆発＆ノックバック＋ダメージ）
-    function executeBombExplosion(blastCenter, shooterId, directHitTarget = null) {
+    function executeBombExplosion(blastCenter, shooterId) {
       // 1. カースショック風の爆風拡大エフェクト
       triggerBombBlastVisual(blastCenter, 1.8);
       createExplosion(blastCenter, 0xff793f, false, 1.8);
@@ -4623,7 +4637,6 @@
         if (data.type === '__pong') {
           const now = Date.now();
           const rtt = now - data.clientTime;
-          currentPing = Math.round(rtt / 2);
           serverTimeOffset = data.serverTime + (rtt / 2) - now;
           return;
         }
@@ -4817,6 +4830,13 @@
       } else if (data.type === 'hit_rejected') {
         if (data.reason === 'high_latency') {
           addBattleLog(`<span style="color:#e17055">⚠️ 高遅延のため着弾が無効化されました (Ping:${data.delay}ms / ノーレジ)</span>`);
+        } else if (data.reason === 'no_history') {
+          addBattleLog(`<span style="color:#e17055">⚠️ サーバー側に位置履歴がなく、着弾判定が無効化されました</span>`);
+        } else if (data.reason === 'out_of_bounds') {
+          const distText = Number.isFinite(Number(data.dist)) ? ` (${Number(data.dist).toFixed(2)}m)` : '';
+          addBattleLog(`<span style="color:#b2bec3">着弾検証範囲外として無効化されました${distText}</span>`);
+        } else {
+          addBattleLog(`<span style="color:#b2bec3">⚠️ サーバー着弾検証で無効化されました</span>`);
         }
       } else if (data.type === 'hit_approved') {
         // シューター側の処理
@@ -4825,7 +4845,9 @@
           let baseAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
           if (data.isCurseTarget) baseAmt *= 0.5;
           // Phase5: gear12（ULTチャージ効率）
-          baseAmt *= getGearPctMultiplier('ultChargeBonusPct');
+          // 「+4%」は倍率1.04倍ではなく、20%→24%のような
+          // ULTチャージのパーセントポイント加算として扱う。
+          baseAmt += getGearAdditivePct('ultChargeBonusPct');
           addUltCharge(baseAmt, false);
 
           if (fullShieldTimer > 0 && isExFullShieldActive) {
@@ -5058,8 +5080,8 @@
 
       if (autoHealTimer > 0) {
         if (myHp - finalDmg <= 0) {
-          const actualDmg = myHp - 1; // オートヒール不死身：実質HP1まで減った分だけが「受けたダメージ」
           myHp = 1;
+          queueQuestEvent('damageTaken', finalDmg);
           spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
           updateHudBars();
           addBattleLog(`<span style="color:#ff4757">★ オートヒール不死身発動！HP1で耐えた！</span>`);
@@ -5072,6 +5094,7 @@
       if (isMainGear('gear17') && deathAvoidCharge && (myHp - finalDmg) <= 0) {
         myHp = 1;
         deathAvoidCharge = false;
+        queueQuestEvent('damageTaken', finalDmg);
         spawnDamagePopup(playerPos, finalDmg, isCrit, isReflect);
         updateHudBars();
         addBattleLog(`<span style="color:#ffd93d">★ 即死回避発動！HP1で耐えた！（リスポーンまで再発動不可）</span>`);
@@ -5447,7 +5470,6 @@
 
       // --- Ver5: 0キー長押しでセットコメント一覧を表示（試合中いつでも確認可） ---
       if (isGameStarted && isLocked && e.code === 'Digit0' && !e.repeat) {
-        zeroKeyDownTime = Date.now();
         if (zeroKeyHoldTimer) clearTimeout(zeroKeyHoldTimer);
         zeroKeyHoldTimer = setTimeout(() => {
           if (keys['Digit0']) showSetCommentOverlay();
@@ -6784,7 +6806,9 @@
               let chargeAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
               if (d.curseDebuffTimer > 0) chargeAmt *= 0.5;
               // Phase5: gear12（ULTチャージ効率）
-              chargeAmt *= getGearPctMultiplier('ultChargeBonusPct');
+              // 「+4%」は倍率1.04倍ではなく、20%→24%のような
+              // ULTチャージのパーセントポイント加算として扱う。
+              chargeAmt += getGearAdditivePct('ultChargeBonusPct');
               addUltCharge(chargeAmt, false);
 
               if (fullShieldTimer > 0 && isExFullShieldActive) {
