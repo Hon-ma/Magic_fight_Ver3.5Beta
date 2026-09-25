@@ -2180,10 +2180,10 @@
       return rank === 4 ? '超大当たり演出…！' : rank === 3 ? '大当たり演出…！' : rank === 2 ? '当たり演出…！' : '抽選結果が確定しました';
     }
     function rarityStageDuration(rank) {
-      // 紫→青 330ms、青→赤 990ms、赤→金 2970ms。
+      // 昇格するにつれ待ち時間が伸びる。
       if (rank === 1) return 330;
       if (rank === 2) return 990;
-      if (rank === 3) return 2970;
+      if (rank === 3) return 1650;
       return 700;
     }
 
