@@ -369,13 +369,6 @@ function writeProfileDBToDisk() {
     console.error('[profiles] Upstash保存失敗（ローカルファイルには保存済み）:', e.message);
   });
 }
-function flushProfileSaveNow() {
-  if (profileSaveTimer) {
-    clearTimeout(profileSaveTimer);
-    profileSaveTimer = null;
-  }
-  writeProfileDBToDisk();
-}
 function scheduleProfileSave() {
   if (profileSaveTimer) return;
   profileSaveTimer = setTimeout(() => {
@@ -451,17 +444,36 @@ function getOrCreateProfile(clientId) {
   if (!p.equippedGear || typeof p.equippedGear !== 'object') p.equippedGear = { main: null, subs: [] };
   if (p.equippedGear.main !== null && !GEAR_IDS.includes(p.equippedGear.main)) p.equippedGear.main = null;
   if (!Array.isArray(p.equippedGear.subs)) p.equippedGear.subs = [];
-  // Phase4: サブ枠には subOnly（メイン専用）ギアを置けない。
-  p.equippedGear.subs = p.equippedGear.subs.filter(id => GEAR_IDS.includes(id) && !GEAR_META[id].subOnly);
-  // メインが無ければサブ枠は常に0（メインなしでサブだけ装備している状態を許さない）。
+  let gearNormalizationChanged = false;
+  // 不正/旧状態でサブに残っているメイン専用ギアや、メイン不在時のサブは
+  // 通常の「外す」と同じく3破片へ戻してから除去する。
+  const normalizedSubs = [];
+  for (const id of p.equippedGear.subs) {
+    if (!GEAR_IDS.includes(id)) continue;
+    if (GEAR_META[id].subOnly) {
+      destroyEquippedGear(p, id);
+      gearNormalizationChanged = true;
+      continue;
+    }
+    normalizedSubs.push(id);
+  }
+  p.equippedGear.subs = normalizedSubs;
+  // メインが無ければサブ枠は常に0。既存サブは破片へ戻す。
   if (!p.equippedGear.main) {
+    if (p.equippedGear.subs.length > 0) gearNormalizationChanged = true;
+    p.equippedGear.subs.forEach(id => destroyEquippedGear(p, id));
     p.equippedGear.subs = [];
   } else {
-    // メインのサブ枠数を超えている分は末尾から切り詰める（超過分の破片救済はここでは行わない：
-    // 起動時の保険的な正規化のため、通常運用では __gear_equip_main 側で正しく処理される）
+    // メインのサブ枠を超える分は末尾から外し、破片を返す。
     const maxSlots = GEAR_META[p.equippedGear.main].mainSubSlots;
-    if (p.equippedGear.subs.length > maxSlots) p.equippedGear.subs = p.equippedGear.subs.slice(0, maxSlots);
+    while (p.equippedGear.subs.length > maxSlots) {
+      const trimmedId = p.equippedGear.subs.pop();
+      destroyEquippedGear(p, trimmedId);
+      gearNormalizationChanged = true;
+    }
   }
+
+  if (gearNormalizationChanged) scheduleProfileSave();
 
   if (typeof p.gachaPityCount !== 'number' || !Number.isFinite(p.gachaPityCount) || p.gachaPityCount < 0) {
     p.gachaPityCount = 0;
@@ -469,9 +481,9 @@ function getOrCreateProfile(clientId) {
   p.gachaPityCount = Math.floor(p.gachaPityCount) % GACHA_PITY_MAX;
 
   // Quest system: existing profiles are lazily migrated and period rollover is checked here.
-  const questBefore = JSON.stringify({ loginBonus: p.loginBonus, dailyQuests: p.dailyQuests, weeklyQuests: p.weeklyQuests, monthlyQuests: p.monthlyQuests, monthlyLoginStreak: p.monthlyLoginStreak, monthlyCoinEarned: p.monthlyCoinEarned });
+  const questBefore = JSON.stringify({ loginBonus: p.loginBonus, monthlyLoginStreak: p.monthlyLoginStreak, dailyQuests: p.dailyQuests, weeklyQuests: p.weeklyQuests, monthlyQuests: p.monthlyQuests, monthlyCoinEarned: p.monthlyCoinEarned });
   quest.ensureQuestState(p);
-  const questAfter = JSON.stringify({ loginBonus: p.loginBonus, dailyQuests: p.dailyQuests, weeklyQuests: p.weeklyQuests, monthlyQuests: p.monthlyQuests, monthlyLoginStreak: p.monthlyLoginStreak, monthlyCoinEarned: p.monthlyCoinEarned });
+  const questAfter = JSON.stringify({ loginBonus: p.loginBonus, monthlyLoginStreak: p.monthlyLoginStreak, dailyQuests: p.dailyQuests, weeklyQuests: p.weeklyQuests, monthlyQuests: p.monthlyQuests, monthlyCoinEarned: p.monthlyCoinEarned });
   if (questBefore !== questAfter) scheduleProfileSave();
 
   return p;
@@ -647,9 +659,13 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
     const didLose = id !== winnerId;
     const { total: baseTotal } = calcRateChange(me.rate, avgOppRate, me.kills, me.deaths, didLose);
 
-    // 切断者には反則負けの追加ペナルティを科す
+    // 切断者には反則負けの追加ペナルティを科す。
+    // キル数・レート差による加点が大きくても、切断者の最終変動が
+    // プラスになることは許可しない（少なくとも -DISCONNECT_PENALTY）。
     const disconnectPenalty = (id === disconnectedId) ? DISCONNECT_PENALTY : 0;
-    const total = baseTotal - disconnectPenalty;
+    const total = id === disconnectedId
+      ? Math.min(baseTotal - disconnectPenalty, -DISCONNECT_PENALTY)
+      : baseTotal;
 
     const newRate = Math.max(0, me.rate + total);
     const isWinner = id === winnerId;
@@ -1377,7 +1393,12 @@ wss.on('connection', (socket) => {
       // 相手の過去の位置を巻き戻して復元
       const targetPos = getHistoricalPosition(targetMember.history, clientHitTime);
       if (!targetPos) {
-        // 履歴がまだない場合は現在の最新位置で照合
+        // 履歴がまだない場合は着弾を明示的に却下して、
+        // シューター側へ理由を返す。黙ってreturnすると不発原因をUI/ログから追えない。
+        socket.send(JSON.stringify({
+          type: 'hit_rejected',
+          reason: 'no_history'
+        }));
         return;
       }
 
