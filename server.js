@@ -608,6 +608,8 @@ function getOrCreateRoom(roomName) {
       hostId: null,
       mode: 'free',
       matchActive: false,
+      rateResultActive: false,
+      rematchRequests: new Set(),
       members: new Map()
     });
   }
@@ -694,6 +696,9 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
   const room = rooms.get(roomName);
   if (!room || !room.matchActive) return;
   room.matchActive = false;
+  room.rateResultActive = true;
+  if (!room.rematchRequests) room.rematchRequests = new Set();
+  room.rematchRequests.clear();
 
   const ids = Array.from(room.members.keys());
   const results = [];
@@ -780,7 +785,7 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
     winnerId,
     disconnectedId,
     results
-  });
+  }, disconnectedId);
 
   // 次戦に備えて、キル/デスのみリセット（レートは維持）
   for (const m of room.members.values()) {
@@ -803,6 +808,58 @@ wss.on('connection', (socket) => {
 
   socket.isAlive = true;
   socket.on('pong', () => { socket.isAlive = true; });
+
+  // Explicit client-side leave. Do not wait for WebSocket close to update room state.
+  function leaveCurrentRoom() {
+    if (!joinedRoom || !myId) return;
+    const roomName = joinedRoom;
+    const leavingId = myId;
+    const room = rooms.get(roomName);
+    if (!room) { joinedRoom = null; myId = null; return; }
+
+    // Rate match disconnect: only a real 1v1 match is penalized.
+    // A rate room with only one member is not a match and is simply invalidated.
+    if (room.mode === 'rate' && room.matchActive) {
+      const opponentIds = Array.from(room.members.keys()).filter(id => id !== leavingId);
+      if (opponentIds.length > 0) finishRateMatch(roomName, opponentIds[0], leavingId);
+      else room.matchActive = false;
+    }
+
+    // Result screen: remaining opponent can no longer rematch.
+    if (room.mode === 'rate' && room.rateResultActive) {
+      const opponentIds = Array.from(room.members.keys()).filter(id => id !== leavingId);
+      for (const opponentId of opponentIds) {
+        const opponent = room.members.get(opponentId);
+        if (opponent?.ws && opponent.ws.readyState === opponent.ws.OPEN) {
+          opponent.ws.send(JSON.stringify({ type: '__rematch_opponent_left' }));
+        }
+      }
+      room.rematchRequests?.clear();
+    }
+
+    room.members.delete(leavingId);
+    const wasHost = room.hostId === leavingId;
+    if (wasHost) room.hostId = null;
+
+    if (wasHost && room.members.size > 0) {
+      const nextHostEntry = room.members.entries().next().value;
+      if (nextHostEntry) {
+        const [nextHostId, nextHostMember] = nextHostEntry;
+        room.hostId = nextHostId;
+        if (nextHostMember.ws && nextHostMember.ws.readyState === nextHostMember.ws.OPEN) {
+          nextHostMember.ws.send(JSON.stringify({ type: '__host_migrated', newHostId: nextHostId }));
+        }
+        broadcastToRoom(roomName, { type: '__host_changed', newHostId: nextHostId }, nextHostId);
+      }
+    }
+
+    broadcastToRoom(roomName, { type: '__left', id: leavingId, count: room.members.size }, leavingId);
+    if (room.members.size === 0) rooms.delete(roomName);
+
+    // Prevent the close event from performing the cleanup twice.
+    joinedRoom = null;
+    myId = null;
+  }
 
   socket.on('message', (raw) => {
     let data;
@@ -1387,6 +1444,11 @@ wss.on('connection', (socket) => {
     if (!room) return;
     const currentMember = room.members.get(myId);
 
+    if (data.type === '__leave') {
+      leaveCurrentRoom();
+      return;
+    }
+
     // クライアント側で発生した戦闘系クエストイベントのバッチ。
     // 訓練場はそもそもこのWebSocketへ参加しないため対象外。
     if (data.type === '__quest_event_batch') {
@@ -1501,17 +1563,35 @@ wss.on('connection', (socket) => {
       return;
     }
 
-    // --- レート戦の再戦（ホストのみ・決着済みの場合のみ） ---
-    if (data.type === '__rematch') {
-      if (room.hostId === myId && room.mode === 'rate' && !room.matchActive) {
+    // --- レート戦の再戦申込（ホスト/ゲスト双方、決着済みの場合のみ） ---
+    if (data.type === '__rematch_request' || data.type === '__rematch') {
+      if (room.mode !== 'rate' || room.matchActive || !room.rateResultActive) return;
+      const ids = Array.from(room.members.keys());
+      if (ids.length !== RATE_MATCH_MEMBERS || !room.members.has(myId)) {
+        socket.send(JSON.stringify({ type: '__rematch_opponent_left' }));
+        return;
+      }
+
+      if (!room.rematchRequests) room.rematchRequests = new Set();
+      room.rematchRequests.add(myId);
+
+      if (room.rematchRequests.size >= RATE_MATCH_MEMBERS) {
         for (const m of room.members.values()) {
           m.kills = 0;
           m.deaths = 0;
-          // 次戦のEX ULT発動コインボーナス判定をリセット
           m.matchUsedExUlt = false;
         }
+        room.rematchRequests.clear();
+        room.rateResultActive = false;
         room.matchActive = true;
         broadcastToRoom(joinedRoom, { type: '__rematch_start' });
+      } else {
+        const opponentId = ids.find(id => id !== myId);
+        const opponent = opponentId ? room.members.get(opponentId) : null;
+        if (opponent?.ws && opponent.ws.readyState === opponent.ws.OPEN) {
+          opponent.ws.send(JSON.stringify({ type: '__rematch_offer' }));
+        }
+        socket.send(JSON.stringify({ type: '__rematch_waiting' }));
       }
       return;
     }
@@ -1544,50 +1624,7 @@ wss.on('connection', (socket) => {
   });
 
   socket.on('close', () => {
-    if (!joinedRoom || !myId) return;
-    const room = rooms.get(joinedRoom);
-    if (!room) return;
-
-    // --- レート戦中の切断は問答無用で切断側の反則負け ---
-    // メンバーを削除する「前」に、切断時点のキル/デスでレート変動を確定させる。
-    // （finishRateMatch はメンバー一覧を参照するため、削除前に呼ぶ必要がある）
-    if (room.mode === 'rate' && room.matchActive) {
-      const opponentIds = Array.from(room.members.keys()).filter(id => id !== myId);
-      const winnerId = opponentIds.length > 0 ? opponentIds[0] : null;
-      if (winnerId) {
-        finishRateMatch(joinedRoom, winnerId, myId);
-      } else {
-        room.matchActive = false;
-      }
-    }
-
-    room.members.delete(myId);
-    const wasHost = (room.hostId === myId);
-    if (wasHost) room.hostId = null;
-
-    // --- バグ修正: ホスト自動引き継ぎ ---
-    // 以前はホストが抜けると即座に部屋を強制解散していたが、
-    // 「ホストが抜けたら、残っているメンバーの中で最も早く参加した人が
-    // 自動的に次のホストになる」という仕様を正しく機能させる。
-    // room.members は Map であり、Map は挿入順を保持するため、
-    // 残存メンバーの先頭（values().next()）が「最も早く参加した人」になる。
-    if (wasHost && room.members.size > 0) {
-      const nextHostEntry = room.members.entries().next().value; // [id, member]
-      if (nextHostEntry) {
-        const [nextHostId, nextHostMember] = nextHostEntry;
-        room.hostId = nextHostId;
-        // 新ホストにだけ「自分がホストになった」ことを通知し、
-        // クライアント側の isHost フラグ・UI（再戦ボタン等）を更新させる。
-        if (nextHostMember.ws && nextHostMember.ws.readyState === nextHostMember.ws.OPEN) {
-          nextHostMember.ws.send(JSON.stringify({ type: '__host_migrated', newHostId: nextHostId }));
-        }
-        // 他の残存メンバーにも、誰が新ホストになったかを周知する。
-        broadcastToRoom(joinedRoom, { type: '__host_changed', newHostId: nextHostId }, nextHostId);
-      }
-    }
-
-    broadcastToRoom(joinedRoom, { type: '__left', id: myId, count: room.members.size }, myId);
-    if (room.members.size === 0) rooms.delete(joinedRoom);
+    leaveCurrentRoom();
   });
 });
 
