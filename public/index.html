@@ -2703,9 +2703,9 @@
       gear04: { name: '弾速度UP', mainDesc: '通常弾速度8%増', subDesc: '通常弾速度2%増', mainSubSlots: 3, subOnly: false },
       gear05: { name: '跳躍力UP', mainDesc: 'ジャンプ力8%増、空中移動速度10%増', subDesc: 'ジャンプ力2%増、空中移動速度3%増', mainSubSlots: 3, subOnly: false },
       gear06: { name: 'MP回復UP', mainDesc: 'MP回復速度10%増', subDesc: 'MP回復速度3%増', mainSubSlots: 3, subOnly: false },
-      gear07: { name: 'ダメージ強化', mainDesc: '通常弾ダメージ+4', subDesc: '通常弾ダメージ+1', mainSubSlots: 2, subOnly: false },
-      gear08: { name: '被ダメージ軽減', mainDesc: '通常弾の被ダメージ-4', subDesc: '通常弾の被ダメージ-1', mainSubSlots: 3, subOnly: false },
-      gear09: { name: 'シールド強化', mainDesc: 'シールド持続MP消費20%減', subDesc: 'シールド持続MP消費5%減', mainSubSlots: 3, subOnly: false },
+      gear07: { name: 'ダメージ強化', mainDesc: '通常弾ダメージ+2', subDesc: '通常弾ダメージ+1', mainSubSlots: 2, subOnly: false },
+      gear08: { name: '被ダメージ軽減', mainDesc: '通常弾の被ダメージ-2', subDesc: '通常弾の被ダメージ-0.5', mainSubSlots: 2, subOnly: false },
+      gear09: { name: 'ガード効率UP', mainDesc: 'シールド持続MP消費20%減', subDesc: 'シールド持続MP消費5%減', mainSubSlots: 3, subOnly: false },
       gear10: { name: '無敵延長', mainDesc: 'リスポーン時無敵+2秒', subDesc: 'リスポーン時無敵+0.5秒', mainSubSlots: 3, subOnly: false },
       gear11: { name: 'MP効率UP', mainDesc: '通常弾MP消費量-4', subDesc: '通常弾MP消費量-1', mainSubSlots: 1, subOnly: false },
       gear12: { name: 'ULT効率UP', mainDesc: '通常弾によるULTチャージ+4%', subDesc: '通常弾によるULTチャージ+1%', mainSubSlots: 2, subOnly: false },
@@ -2737,8 +2737,8 @@
       gear05: { key: 'jumpPct', type: 'pct', main: 8, sub: 2 },
       gear05air: { key: 'airMoveSpeedPct', type: 'pct', main: 10, sub: 3 }, // gear05の「空中移動速度」側（同じgear05だが別キー）
       gear06: { key: 'mpRegenPct', type: 'pct', main: 10, sub: 3 },
-      gear07: { key: 'bulletDamageFlat', type: 'flat', main: 4, sub: 1 },
-      gear08: { key: 'damageReductionFlat', type: 'flat', main: 4, sub: 1 },
+      gear07: { key: 'bulletDamageFlat', type: 'flat', main: 2, sub: 1 },
+      gear08: { key: 'damageReductionFlat', type: 'flat', main: 2, sub: 0.5 },
       gear09: { key: 'shieldMpCostReductionPct', type: 'pct', main: 20, sub: 5 },
       gear10: { key: 'invincibleExtendFlat', type: 'flat', main: 2, sub: 0.5 },
       gear11: { key: 'mpCostReductionFlat', type: 'flat', main: 4, sub: 1 },
@@ -3965,7 +3965,9 @@
       const hpBar = document.getElementById('hp-bar');
       const hpClamped = Math.max(0, Math.min(maxHp, myHp));
       hpBar.style.width = `${(hpClamped / maxHp) * 100}%`;
-      document.getElementById('hp-text').innerText = `${Math.ceil(hpClamped)} / ${maxHp}`;
+      // HP本体は小数のまま保持・計算し、HUDの数字だけ切り上げて整数表示する。
+      const hpDisplay = Math.ceil(hpClamped);
+      document.getElementById('hp-text').innerText = `${hpDisplay} / ${maxHp}`;
 
       const mpBar = document.getElementById('mp-bar');
       const mpClamped = Math.max(0, Math.min(maxMp, myMp));
@@ -6924,7 +6926,7 @@
 
         if (superMagicTimer <= 0) {
           if (isGuarding) {
-            // Phase5: gear09（シールド強化）でガード中のMP消費速度を軽減
+            // Phase5: gear09（ガード効率UP）でガード中のMP消費速度を軽減
             const guardDrainRate = 15 * (1 - getGearBonusTotal('shieldMpCostReductionPct') / 100);
             myMp = Math.max(0, myMp - Math.max(0, guardDrainRate) * delta);
             if (myMp <= 0) triggerOverheat();
