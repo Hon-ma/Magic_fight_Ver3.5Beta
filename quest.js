@@ -56,7 +56,7 @@ const MONTHLY_QUESTS = [
   { id: 'monthly_rate_60', title: 'レート戦を60回行う', event: 'rateBattleCompleted', target: 60, reward: { fragments: 3 } },
   { id: 'monthly_rate_win_10', title: 'レート戦で10回勝利する', event: 'rateWin', target: 10, reward: { coins: 600 } },
   { id: 'monthly_rate_win_20', title: 'レート戦で20回勝利する', event: 'rateWin', target: 20, reward: { fragments: 5 } },
-  { id: 'monthly_coin_15000', title: '15000コイン獲得する', event: 'coinEarned', target: 15000, reward: { fragments: 3 } }
+  { id: 'monthly_coin_15000', title: '30000コイン獲得する', event: 'coinEarned', target: 30000, reward: { fragments: 3 } }
 ];
 
 const LOGIN_BONUS_REWARDS = [
@@ -136,6 +136,18 @@ function sampleWithoutReplacement(source, count) {
   return out;
 }
 
+function sampleQuestDefinitions(source, count) {
+  const picked = sampleWithoutReplacement(source, count);
+  const order = new Map(source.map((def, index) => [def.id, index]));
+  picked.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  return picked;
+}
+
+function sortQuestEntriesByDefinitionOrder(entries, defs) {
+  const order = new Map(defs.map((def, index) => [def.id, index]));
+  return entries.slice().sort((a, b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+}
+
 function baseQuestState(category, periodKey, defs) {
   return {
     periodKey,
@@ -163,8 +175,8 @@ function createInitialQuestState() {
   const dailyKey = getJstDateKey();
   const weeklyKey = getJstWeekKey();
   const monthlyKey = getJstMonthKey();
-  const dailyDefs = sampleWithoutReplacement(DAILY_POOL, DAILY_COUNT);
-  const weeklyDefs = sampleWithoutReplacement(WEEKLY_POOL, WEEKLY_COUNT);
+  const dailyDefs = sampleQuestDefinitions(DAILY_POOL, DAILY_COUNT);
+  const weeklyDefs = sampleQuestDefinitions(WEEKLY_POOL, WEEKLY_COUNT);
   return {
     loginBonus: { lastClaimDate: null, streak: 0 },
     monthlyLoginStreak: { periodKey: monthlyKey, streak: 0 },
@@ -197,24 +209,24 @@ function ensureQuestState(profile) {
   const existingDaily = profile.dailyQuests;
   // When the current state is valid, preserve it. Only sample when the period/shape is stale.
   if (!existingDaily || existingDaily.periodKey !== dailyKey || !isValidQuestState(existingDaily, DAILY_POOL, DAILY_COUNT)) {
-    profile.dailyQuests = baseQuestState('daily', dailyKey, sampleWithoutReplacement(DAILY_POOL, DAILY_COUNT));
+    profile.dailyQuests = baseQuestState('daily', dailyKey, sampleQuestDefinitions(DAILY_POOL, DAILY_COUNT));
   } else {
-    profile.dailyQuests.quests = existingDaily.quests.map(q => ({
+    profile.dailyQuests.quests = sortQuestEntriesByDefinitionOrder(existingDaily.quests.map(q => ({
       id: q.id,
       progress: Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0,
       claimed: q.claimed === true
-    }));
+    })), DAILY_POOL);
   }
 
   const existingWeekly = profile.weeklyQuests;
   if (!existingWeekly || existingWeekly.periodKey !== weeklyKey || !isValidQuestState(existingWeekly, WEEKLY_POOL, WEEKLY_COUNT)) {
-    profile.weeklyQuests = baseQuestState('weekly', weeklyKey, sampleWithoutReplacement(WEEKLY_POOL, WEEKLY_COUNT));
+    profile.weeklyQuests = baseQuestState('weekly', weeklyKey, sampleQuestDefinitions(WEEKLY_POOL, WEEKLY_COUNT));
   } else {
-    profile.weeklyQuests.quests = existingWeekly.quests.map(q => ({
+    profile.weeklyQuests.quests = sortQuestEntriesByDefinitionOrder(existingWeekly.quests.map(q => ({
       id: q.id,
       progress: Number.isFinite(Number(q.progress)) ? Math.max(0, Number(q.progress)) : 0,
       claimed: q.claimed === true
-    }));
+    })), WEEKLY_POOL);
   }
 
   const existingMonthly = profile.monthlyQuests;
@@ -277,7 +289,7 @@ function syncSpecialMonthlyProgress(profile) {
   if (loginQuest) loginQuest.progress = Math.min(7, Math.max(loginQuest.progress, profile.monthlyLoginStreak?.streak || 0));
 
   const coinQuest = monthlyMap.get('monthly_coin_15000');
-  if (coinQuest) coinQuest.progress = Math.min(15000, Math.max(coinQuest.progress, profile.monthlyCoinEarned || 0));
+  if (coinQuest) coinQuest.progress = Math.min(30000, Math.max(coinQuest.progress, profile.monthlyCoinEarned || 0));
 }
 
 function recordProgress(profile, eventType, amount = 1) {
