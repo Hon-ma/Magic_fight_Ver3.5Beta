@@ -100,7 +100,7 @@ const GEAR_META = {
   gear05: { mainSubSlots: 3, subOnly: false },
   gear06: { mainSubSlots: 3, subOnly: false },
   gear07: { mainSubSlots: 2, subOnly: false },
-  gear08: { mainSubSlots: 3, subOnly: false },
+  gear08: { mainSubSlots: 2, subOnly: false },
   gear09: { mainSubSlots: 3, subOnly: false },
   gear10: { mainSubSlots: 3, subOnly: false },
   gear11: { mainSubSlots: 1, subOnly: false },
