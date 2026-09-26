@@ -107,9 +107,9 @@ const GEAR_META = {
   gear12: { mainSubSlots: 2, subOnly: false },
   gear13: { mainSubSlots: 3, subOnly: false },
   gear14: { mainSubSlots: 3, subOnly: false },
-  gear15: { mainSubSlots: 2, subOnly: true },
+  gear15: { mainSubSlots: 1, subOnly: true },
   gear16: { mainSubSlots: 3, subOnly: true },
-  gear17: { mainSubSlots: 1, subOnly: true },
+  gear17: { mainSubSlots: 2, subOnly: true },
   gear18: { mainSubSlots: 2, subOnly: true },
   gear19: { mainSubSlots: 2, subOnly: true },
   gear20: { mainSubSlots: 2, subOnly: true } // スポーンチャージ（旧コンボチャージから置き換え。効果はクライアント側で処理）
