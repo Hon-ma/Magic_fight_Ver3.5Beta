@@ -2711,11 +2711,11 @@
       gear12: { name: 'ULT効率UP', mainDesc: '通常弾によるULTチャージ+4%', subDesc: '通常弾によるULTチャージ+1%', mainSubSlots: 2, subOnly: false },
       gear13: { name: 'ガード低速減少', mainDesc: 'ガード時移動速度低下10%減', subDesc: 'ガード時移動速度低下3%減', mainSubSlots: 3, subOnly: false },
       gear14: { name: 'デバフ短縮', mainDesc: '時間制限付きのデバフの効果時間20%減', subDesc: '時間制限付きのデバフの効果時間5%減', mainSubSlots: 3, subOnly: false },
-      gear15: { name: '起死回生', mainDesc: 'HPが最大の33%以下の時、移動速度が15%、通常弾ダメージが30%増', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear15: { name: '起死回生', mainDesc: 'HPが最大の30%未満の時、移動速度が20%、通常弾ダメージが20%強化', subDesc: null, mainSubSlots: 1, subOnly: true },
       gear16: { name: 'スタートダッシュ', mainDesc: 'リスポーンから20秒間、移動速度と通常弾ダメージが共に10%増', subDesc: null, mainSubSlots: 3, subOnly: true },
-      gear17: { name: '即死回避', mainDesc: 'HPが0になる攻撃を受けてもHP1で耐える（1回のみ、リスポーンで回数復活）', subDesc: null, mainSubSlots: 1, subOnly: true },
-      gear18: { name: 'のろい', mainDesc: 'デス時、倒した相手のキルヒールを30減らす', subDesc: null, mainSubSlots: 2, subOnly: true },
-      gear19: { name: '忍者スタート', mainDesc: 'リスポーンから3秒間透明化', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear17: { name: '即死回避', mainDesc: 'HPが0になる攻撃を受けてもHP1で耐える（1回のみ、リスポーンで回数復活）', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear18: { name: 'のろい', mainDesc: 'デス時、自分を倒したことによる相手のキルヒールを30減らす', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear19: { name: '忍者スタート', mainDesc: 'リスポーンから5秒間透明化', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear20: { name: 'スポーンチャージ', mainDesc: 'リスポーン時、ULTチャージ+15%', subDesc: null, mainSubSlots: 2, subOnly: true }
     };
     const GEAR_IDS = Object.keys(GEAR_MASTER);
@@ -2801,7 +2801,7 @@
 
     // --- メイン専用ギア（gear15〜20）の一時的な特殊ボーナス ---
     // 起死回生とスタートダッシュは「移動速度」と「通常弾ダメージ」で上昇幅が異なる
-    // （起死回生は速度+15%/ダメージ+30%、スタートダッシュは両方+10%）ため、
+    // （起死回生は速度+20%/ダメージ+20%、スタートダッシュは両方+10%）ため、
     // 速度用・ダメージ用を別関数として算出する。
     let dashBuffTimer = 0;        // gear16 スタートダッシュ残り時間
     let deathAvoidCharge = false; // gear17 即死回避：1回分のチャージがあるか
@@ -2811,13 +2811,13 @@
 
     function specialGearOffenseSpeedPct() {
       let pct = 0;
-      if (isMainGear('gear15') && getMaxHp() > 0 && myHp <= getMaxHp() * 0.33) pct += 15; // 起死回生：移動速度+15%
+      if (isMainGear('gear15') && getMaxHp() > 0 && myHp < getMaxHp() * 0.30) pct += 20; // 起死回生：HP30%未満で移動速度+20%
       if (isMainGear('gear16') && dashBuffTimer > 0) pct += 10; // スタートダッシュ：移動速度+10%
       return pct;
     }
     function specialGearOffenseDamagePct() {
       let pct = 0;
-      if (isMainGear('gear15') && getMaxHp() > 0 && myHp <= getMaxHp() * 0.33) pct += 30; // 起死回生：通常弾ダメージ+30%
+      if (isMainGear('gear15') && getMaxHp() > 0 && myHp < getMaxHp() * 0.30) pct += 20; // 起死回生：HP30%未満で通常弾ダメージ+20%
       if (isMainGear('gear16') && dashBuffTimer > 0) pct += 10; // スタートダッシュ：通常弾ダメージ+10%
       return pct;
     }
@@ -3922,8 +3922,8 @@
       // Phase5: メイン専用ギアのリスポーン時リセット/再チャージ
       dashBuffTimer = isMainGear('gear16') ? 20.0 : 0;             // スタートダッシュ：20秒間の速度・ダメージバフ
       deathAvoidCharge = isMainGear('gear17');                     // 即死回避：リスポーンのたびに1回分再チャージ
-      if (isMainGear('gear19')) {                                  // 忍者スタート：3秒間透明化（既存のinvisibilityTimerを流用）
-        invisibilityTimer = Math.max(invisibilityTimer, 3.0);
+      if (isMainGear('gear19')) {                                  // 忍者スタート：5秒間透明化（既存のinvisibilityTimerを流用）
+        invisibilityTimer = Math.max(invisibilityTimer, 5.0);
       }
 
       beamCharging = false;
@@ -3966,7 +3966,7 @@
       const hpClamped = Math.max(0, Math.min(maxHp, myHp));
       hpBar.style.width = `${(hpClamped / maxHp) * 100}%`;
       // HP本体は小数のまま保持・計算し、HUDの数字だけ切り上げて整数表示する。
-      const hpDisplay = Math.ceil(hpClamped);
+      const hpDisplay = Math.round(hpClamped);
       document.getElementById('hp-text').innerText = `${hpDisplay} / ${maxHp}`;
 
       const mpBar = document.getElementById('mp-bar');
@@ -5365,7 +5365,7 @@
             addBattleLog(`<span style="color:#f1c40f">★ 撃破！ (${myKills}/3キル)</span>`);
           }
           const baseHealBonus = (selectedUltType === 'heal' && selectedUltSubtype === 'B') ? 50 : 30;
-          // Phase5: gear18（のろい）。倒した相手がのろいを装備していた場合、キルヒールを30減らす（最低0）。
+          // Phase5: gear18（のろい）。自分を倒した相手のキルヒールを30減らす（最低0）。
           const healBonus = Math.max(0, baseHealBonus - (data.hasCurseGear ? 30 : 0));
           const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + healBonus) - myHp);
           myHp += healedHp;
@@ -6055,7 +6055,7 @@
         type: 'player_died',
         x: playerPos.x, y: playerPos.y, z: playerPos.z, rot: yaw,
         killerId,
-        hasCurseGear: isMainGear('gear18') // Phase5: のろい。死亡した本人の装備を、キル側のヒール減算に使ってもらう
+        hasCurseGear: isMainGear('gear18') // Phase5: のろい。死亡した本人の装備を、キルした相手のヒール減算に使う
       });
 
       let killerName = "誰か";
@@ -6911,7 +6911,7 @@
       if (thunderSpeedTimer > 0) buffList.push(`<span style="color:#f1c40f">雷速UP(+${Math.round((thunderSpeedMultiplier-1)*100)}%)</span>`);
       // Phase5: ギアバフの発動中インジケーター（5-2節：未着手事項だったもの）
       if (isMainGear('gear16') && dashBuffTimer > 0) buffList.push(`<span style="color:#fab1a0">スタートダッシュ (${dashBuffTimer.toFixed(1)}s)</span>`);
-      if (isMainGear('gear15') && myHp > 0 && myHp <= getMaxHp() * 0.33) buffList.push(`<span style="color:#ff6b6b">起死回生 発動中</span>`);
+      if (isMainGear('gear15') && myHp > 0 && myHp < getMaxHp() * 0.30) buffList.push(`<span style="color:#ff6b6b">起死回生 発動中</span>`);
       if (isMainGear('gear17') && deathAvoidCharge) buffList.push(`<span style="color:#ffd93d">即死回避 チャージ済み</span>`);
       document.getElementById('active-buff').innerHTML = buffList.join(' | ');
 
