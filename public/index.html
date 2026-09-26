@@ -426,7 +426,7 @@
   #draw-result-tag.great { background:#ff4757; color:#fff; }
   #draw-result-tag.super { background:#ffd93d; color:#2d3436; }
   #draw-result-tag.special { background:#55efc4; color:#0b2b22; }
-  #draw-result-text { font-size:19px; font-weight:900; line-height:1.65; white-space:pre-line; color:#fff; }
+  #draw-result-text { font-size:19px; font-weight:900; line-height:1.65; white-space:pre-line; }
   #draw-next { display:none; margin-top:14px; padding:9px 16px; border:0; border-radius:9px; background:#a29bfe; color:#1e1b2e; font-weight:900; cursor:pointer; }
   #draw-next.show { display:inline-block; }
   #draw-counter { position:absolute; top:26px; left:26px; color:#b2bec3; font-size:11px; }
@@ -2180,10 +2180,10 @@
       return rank === 4 ? '超大当たり演出…！' : rank === 3 ? '大当たり演出…！' : rank === 2 ? '当たり演出…！' : '抽選結果が確定しました';
     }
     function rarityStageDuration(rank) {
-      // 昇格するにつれ待ち時間が伸びる。
+      // 紫→青 330ms、青→赤 990ms、赤→金 2970ms。
       if (rank === 1) return 330;
       if (rank === 2) return 990;
-      if (rank === 3) return 1650;
+      if (rank === 3) return 2970;
       return 700;
     }
 
@@ -3135,7 +3135,7 @@
       return mesh;
     }
 
-    // 全ステージの「壁」は高さを1.5倍にする。低い足場・障害物は対象外。
+    // 全ステージの外周壁だけ高さを1.5倍にする。ステージ内部の壁・障害物は元の高さを維持。
     const STAGE_WALL_HEIGHT_SCALE = 1.5;
     function addWall(x, y, z, w, h, d, color = 0xb5aa98, useLambert = false) {
       return addBox(x, y, z, w, h * STAGE_WALL_HEIGHT_SCALE, d, color, useLambert);
@@ -3450,7 +3450,7 @@
           [-16, -16, 12, 2], [-16, 16, 12, 2], [16, -16, 12, 2], [16, 16, 12, 2],
           [-22, 0, 2, 16], [22, 0, 2, 16], [-8, -24, 2, 10], [8, -24, 2, 10]
         ];
-        mazeWalls.forEach(([x, z, w, d]) => addWall(x, 0, z, w, 6.5, d, 0x7a6f60));
+        mazeWalls.forEach(([x, z, w, d]) => addBox(x, 0, z, w, 6.5, d, 0x7a6f60));
         [[-12, -8], [12, -8], [-12, 8], [12, 8]].forEach(([x, z]) => addCylinder(x, 0, z, 1.3, 8.0, 0xdfd9ce));
 
         safeSpawns = [ { x: 0, z: -28 }, { x: 0, z: 28 }, { x: -28, z: 0 }, { x: 28, z: 0 } ];
