@@ -206,6 +206,16 @@
     .rr-row .rr-delta.pos { color: #55efc4; }
     .rr-row .rr-delta.neg { color: #ff4757; }
     #rate-result-box .btn { margin: 6px; }
+    #rate-rematch-status {
+      min-height: 20px; margin: 4px 0 10px; font-size: 13px; font-weight: bold; color: #ffeaa7;
+    }
+    #rate-rematch-status.offer { color: #55efc4; animation: pulse 0.7s infinite alternate; }
+    #rate-rematch-status.waiting { color: #ffeaa7; }
+    #rate-rematch-status.left { color: #74808a; }
+    #rate-rematch-btn:disabled, #rate-rematch-btn.rematch-disabled {
+      background: rgba(255,255,255,0.12); color: #74808a; border-color: rgba(255,255,255,0.15);
+      cursor: not-allowed; transform: none; box-shadow: none;
+    }
 
     /* ================================================================
        Ver5: プロフィール画面 ＆ セットコメント関連
@@ -426,7 +436,7 @@
   #draw-result-tag.great { background:#ff4757; color:#fff; }
   #draw-result-tag.super { background:#ffd93d; color:#2d3436; }
   #draw-result-tag.special { background:#55efc4; color:#0b2b22; }
-  #draw-result-text { font-size:19px; font-weight:900; line-height:1.65; white-space:pre-line; }
+  #draw-result-text { font-size:19px; font-weight:900; line-height:1.65; white-space:pre-line; color:#fff; }
   #draw-next { display:none; margin-top:14px; padding:9px 16px; border:0; border-radius:9px; background:#a29bfe; color:#1e1b2e; font-weight:900; cursor:pointer; }
   #draw-next.show { display:inline-block; }
   #draw-counter { position:absolute; top:26px; left:26px; color:#b2bec3; font-size:11px; }
@@ -1123,7 +1133,8 @@
       <h2 id="rate-result-title">VICTORY</h2>
       <div id="rate-result-list"></div>
       <div id="rate-result-coins" style="margin-bottom:14px; font-size:15px; color:#ffd93d;"></div>
-      <button id="rate-rematch-btn" class="btn" style="display:none;">もう一戦する</button>
+      <div id="rate-rematch-status"></div>
+      <button id="rate-rematch-btn" class="btn" style="display:none;">再戦を申し込む</button>
       <button id="rate-leave-btn" class="btn back">ロビーへ戻る</button>
     </div>
   </div>
@@ -1483,6 +1494,8 @@
     // --- レート戦の試合内状態 ---
     let isRateMatch = false;      // 現在の部屋がレート戦かどうか
     let isRateMatchOver = false;  // このマッチが既に決着しているか（多重終了防止）
+    let rematchRequestSent = false;
+    let rematchOpponentLeft = false;
     // 新しい試合の開始時だけ、試合をまたいで持ち越さない状態を初期化し、
     // gear20のスポーンチャージを1回だけ適用するためのフラグ。
     let pendingNewMatchStart = true;
@@ -4019,7 +4032,16 @@
       // Ver5: レート戦決着で戦績・コイン等が更新されるため、プロフィールを再取得しておく
       requestMyProfile();
 
-      document.getElementById('rate-rematch-btn').style.display = isHost ? 'inline-block' : 'none';
+      rematchRequestSent = false;
+      rematchOpponentLeft = false;
+      const rematchBtn = document.getElementById('rate-rematch-btn');
+      const rematchStatus = document.getElementById('rate-rematch-status');
+      rematchBtn.style.display = 'inline-block';
+      rematchBtn.disabled = false;
+      rematchBtn.classList.remove('rematch-disabled');
+      rematchBtn.innerText = '再戦を申し込む';
+      rematchStatus.className = '';
+      rematchStatus.innerText = '相手も再戦を申し込むと次のレート戦が始まります。';
       document.getElementById('rate-result-overlay').style.display = 'flex';
 
       if (data.disconnectedId === myPeerId) {
@@ -4034,8 +4056,15 @@
     }
 
     document.getElementById('rate-rematch-btn').addEventListener('click', () => {
-      sendToServer({ type: '__rematch' });
-      document.getElementById('rate-result-overlay').style.display = 'none';
+      if (rematchOpponentLeft || rematchRequestSent) return;
+      rematchRequestSent = true;
+      const btn = document.getElementById('rate-rematch-btn');
+      const status = document.getElementById('rate-rematch-status');
+      btn.disabled = true;
+      btn.innerText = '再戦申込済み（相手待ち）';
+      status.className = 'waiting';
+      status.innerText = '再戦を申し込みました。相手の操作を待っています…';
+      sendToServer({ type: '__rematch_request' });
     });
 
     document.getElementById('rate-leave-btn').addEventListener('click', () => {
@@ -5008,7 +5037,6 @@
         if (data.type === '__host_migrated') {
           isHost = true;
           addBattleLog(`<span style="color:#f1c40f">★ ホストが退出したため、あなたが新しいホストになりました。</span>`);
-          document.getElementById('rate-rematch-btn').style.display = (isRateMatch && isRateMatchOver) ? 'inline-block' : 'none';
           setNetStatus('あなたが新しいホストです');
           return;
         }
@@ -5024,7 +5052,43 @@
           return;
         }
 
+        if (data.type === '__rematch_offer') {
+          if (!isRateMatchOver) return;
+          const rematchStatus = document.getElementById('rate-rematch-status');
+          const rematchBtn = document.getElementById('rate-rematch-btn');
+          rematchStatus.className = 'offer';
+          rematchStatus.innerText = '相手に再戦を申し込まれました！';
+          rematchBtn.disabled = false;
+          rematchBtn.classList.remove('rematch-disabled');
+          return;
+        }
+
+        if (data.type === '__rematch_waiting') {
+          rematchRequestSent = true;
+          const rematchStatus = document.getElementById('rate-rematch-status');
+          const rematchBtn = document.getElementById('rate-rematch-btn');
+          rematchBtn.disabled = true;
+          rematchBtn.innerText = '再戦申込済み（相手待ち）';
+          rematchStatus.className = 'waiting';
+          rematchStatus.innerText = '再戦を申し込みました。相手の操作を待っています…';
+          return;
+        }
+
+        if (data.type === '__rematch_opponent_left') {
+          rematchOpponentLeft = true;
+          const rematchStatus = document.getElementById('rate-rematch-status');
+          const rematchBtn = document.getElementById('rate-rematch-btn');
+          rematchBtn.disabled = true;
+          rematchBtn.classList.add('rematch-disabled');
+          rematchBtn.innerText = '相手は退出しました';
+          rematchStatus.className = 'left';
+          rematchStatus.innerText = '相手は退出しました。ロビーへ戻ってください。';
+          return;
+        }
+
         if (data.type === '__rematch_start') {
+          rematchRequestSent = false;
+          rematchOpponentLeft = false;
           isRateMatchOver = false;
           myKills = 0;
           myDeaths = 0;
@@ -5493,7 +5557,13 @@
       clearQuestEventBuffer();
 
       if (pingIntervalTimer) { clearInterval(pingIntervalTimer); pingIntervalTimer = null; }
-      if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+      if (ws) {
+        try {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: '__leave' }));
+          ws.close();
+        } catch (e) {}
+        ws = null;
+      }
       isHost = false;
       clearAllRemotePlayers();
       clearDummies();
@@ -5509,6 +5579,16 @@
 
       isRateMatch = false;
       isRateMatchOver = false;
+      rematchRequestSent = false;
+      rematchOpponentLeft = false;
+      const rematchResetBtn = document.getElementById('rate-rematch-btn');
+      const rematchResetStatus = document.getElementById('rate-rematch-status');
+      if (rematchResetBtn) {
+        rematchResetBtn.disabled = false;
+        rematchResetBtn.classList.remove('rematch-disabled');
+        rematchResetBtn.innerText = '再戦を申し込む';
+      }
+      if (rematchResetStatus) { rematchResetStatus.className = ''; rematchResetStatus.innerText = ''; }
       myKills = 0;
       myDeaths = 0;
       updateRateHud();
