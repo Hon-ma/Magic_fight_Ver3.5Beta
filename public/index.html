@@ -509,8 +509,11 @@
     #quest-login-message.ng { color:#ff7675; }
     #quest-login-claim-btn { margin-top:10px; width:100%; }
     .quest-tabs { display:flex; gap:8px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.12); }
-    .quest-tab { padding:8px 14px; font-size:13px; color:#b2bec3; cursor:pointer; border-bottom:2px solid transparent; }
+    .quest-tab { padding:8px 14px; font-size:13px; color:#b2bec3; cursor:pointer; border-bottom:2px solid transparent; display:inline-flex; align-items:center; gap:6px; }
     .quest-tab.active { color:#74b9ff; border-bottom-color:#74b9ff; }
+    .quest-tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px; padding:0 4px; border-radius:999px; background:#ff4757; color:#fff; font-size:9px; line-height:1; font-weight:900; box-shadow:0 0 8px rgba(255,71,87,.65); animation:questBadgePulse 1s ease-in-out infinite alternate; }
+    .quest-tab-badge.hidden { display:none; }
+    @keyframes questBadgePulse { from { transform:scale(.92); opacity:.78; } to { transform:scale(1.08); opacity:1; } }
     .quest-list { display:none; flex-direction:column; gap:8px; }
     .quest-list.active { display:flex; }
     .quest-item { background:rgba(255,255,255,0.04); border:1.5px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px 12px; }
@@ -1094,9 +1097,9 @@
       </div>
 
       <div class="quest-tabs">
-        <div class="quest-tab active" data-quest-tab="daily">デイリー</div>
-        <div class="quest-tab" data-quest-tab="weekly">ウィークリー</div>
-        <div class="quest-tab" data-quest-tab="monthly">マンスリー</div>
+        <div class="quest-tab active" data-quest-tab="daily">デイリー <span class="quest-tab-badge hidden" data-quest-badge="daily">!</span></div>
+        <div class="quest-tab" data-quest-tab="weekly">ウィークリー <span class="quest-tab-badge hidden" data-quest-badge="weekly">!</span></div>
+        <div class="quest-tab" data-quest-tab="monthly">マンスリー <span class="quest-tab-badge hidden" data-quest-badge="monthly">!</span></div>
       </div>
 
       <div id="quest-period"></div>
@@ -2038,6 +2041,8 @@
     let currentGachaQueueIndex = 0;
     let gachaAnimationRunning = false;
     let gachaRequestPending = false;
+    let currentDrawMode = 'gacha';
+    let questRewardAnimationRunning = false;
 
     function showGachaMessage(text, ok) {
       const el = document.getElementById('gacha-message');
@@ -2260,9 +2265,12 @@
     }
 
     function startGachaAnimation(pulls) {
+      currentDrawMode = 'gacha';
       currentGachaQueue = Array.isArray(pulls) ? pulls : [];
       currentGachaQueueIndex = 0;
       gachaAnimationRunning = currentGachaQueue.length > 0;
+      document.getElementById('draw-title').textContent = 'MAGIC GACHA';
+      document.getElementById('draw-next').textContent = '次の結果';
       document.getElementById('draw-overlay').classList.add('show');
       document.getElementById('draw-result-card').classList.remove('show');
       document.getElementById('draw-next').classList.remove('show');
@@ -2274,13 +2282,64 @@
       currentGachaQueue = [];
       currentGachaQueueIndex = 0;
       gachaAnimationRunning = false;
+      currentDrawMode = 'gacha';
       document.getElementById('draw-overlay').classList.remove('show');
       renderGachaUI();
       renderGachaResults(window.lastGachaPulls || []);
       showGachaMessage('ガチャ結果を更新しました！', true);
     }
 
+    async function showQuestRewardAnimation(fragmentReward) {
+      const fragments = Array.isArray(fragmentReward?.fragments) ? fragmentReward.fragments : [];
+      if (!fragments.length) return;
+
+      currentDrawMode = 'quest';
+      questRewardAnimationRunning = true;
+      document.getElementById('draw-title').textContent = 'QUEST REWARD';
+      document.getElementById('draw-counter').textContent = 'クエスト報酬';
+      document.getElementById('draw-result-card').classList.remove('show');
+      document.getElementById('draw-next').classList.remove('show');
+      document.getElementById('draw-next').textContent = '閉じる';
+      document.getElementById('draw-overlay').classList.add('show');
+
+      const orb = document.getElementById('draw-orb');
+      const flash = document.getElementById('draw-flash');
+      const status = document.getElementById('draw-status');
+      orb.className = 'special';
+      flash.className = 'special';
+      status.textContent = 'クエスト報酬を確認しています…';
+      await waitGacha(520);
+      orb.className = 'special-green';
+      flash.className = 'special-green';
+      status.textContent = 'ランダム破片を獲得！';
+      await waitGacha(720);
+
+      const lines = fragments.map(x => {
+        const name = GEAR_MASTER[x.gearId]?.name || x.gearId;
+        return `${name} ×${Number(x.amount || 0)}`;
+      });
+      document.getElementById('draw-result-tag').textContent = 'クエスト報酬';
+      document.getElementById('draw-result-tag').className = 'draw-result-tag special';
+      document.getElementById('draw-result-text').textContent = lines.join('\n');
+      document.getElementById('draw-result-card').classList.add('show');
+      document.getElementById('draw-next').classList.add('show');
+    }
+
+    function finishQuestRewardAnimation() {
+      questRewardAnimationRunning = false;
+      currentDrawMode = 'gacha';
+      document.getElementById('draw-overlay').classList.remove('show');
+      document.getElementById('draw-title').textContent = 'MAGIC GACHA';
+      document.getElementById('draw-counter').textContent = '';
+      document.getElementById('draw-next').textContent = '次の結果';
+      renderQuestUI();
+    }
+
     document.getElementById('draw-next').addEventListener('click', async () => {
+      if (currentDrawMode === 'quest') {
+        finishQuestRewardAnimation();
+        return;
+      }
       currentGachaQueueIndex++;
       await showNextGachaAnimationResult();
     });
@@ -4483,6 +4542,7 @@
           const fr = reward.fragmentReward?.fragments || [];
           if (fr.length) msg += ` / ギア破片×${fr.reduce((s, x) => s + Number(x.amount || 0), 0)}`;
           setQuestMessage(msg, true);
+          if (fr.length) showQuestRewardAnimation(reward.fragmentReward);
         } else {
           setQuestMessage(questErrorText(data.reason), false);
         }
@@ -4705,6 +4765,16 @@
       btn.innerText = info?.claimedToday ? '本日は受け取り済み' : `${info?.nextDay || 1}日目のログインボーナスを受け取る`;
     }
 
+    function updateQuestTabBadges() {
+      ['daily', 'weekly', 'monthly'].forEach(category => {
+        const badge = document.querySelector(`[data-quest-badge="${category}"]`);
+        if (!badge) return;
+        const quests = myProfile?.quests?.[category]?.quests || [];
+        const hasClaimable = quests.some(q => q.completed && !q.claimed);
+        badge.classList.toggle('hidden', !hasClaimable);
+      });
+    }
+
     function renderQuestList(category) {
       const snapshot = myProfile?.quests?.[category];
       const list = document.getElementById(`quest-list-${category}`);
@@ -4763,6 +4833,7 @@
       if (!myProfile) return;
       renderQuestLoginBonus();
       ['daily', 'weekly', 'monthly'].forEach(renderQuestList);
+      updateQuestTabBadges();
       const active = document.querySelector('.quest-tab.active');
       const category = active ? active.dataset.questTab : 'daily';
       const period = myProfile?.quests?.[category]?.periodKey || '';
