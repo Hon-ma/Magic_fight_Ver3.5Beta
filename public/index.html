@@ -1302,7 +1302,7 @@
         </div>
         <div class="char-card" data-ult="curse">
           <div class="name">③ カースショック <span class="cost">20%</span></div>
-          <div class="desc">半径15mの敵MPを0＋6秒鈍足弱体化。</div>
+          <div class="desc">半径10mの敵MPを0＋6秒鈍足弱体化。</div>
           <div class="ex-desc">【EX】さらに敵の現在残りHPの33%を削り取る！</div>
         </div>
         <div class="char-card" data-ult="super">
@@ -1317,8 +1317,8 @@
         </div>
         <div class="char-card" data-ult="heal">
           <div class="name">⑥ オートヒール <span class="cost">20%</span></div>
-          <div class="desc">5秒間毎秒10回復＋効果中は致命傷もHP1で耐える！</div>
-          <div class="ex-desc">【EX】かかっている全てのデバフを即時解除！</div>
+          <div class="desc">デバフを全解除し、5秒間毎秒7HP回復する。</div>
+          <div class="ex-desc">【EX】致死ダメージを受けても発動中はHP1で耐える！</div>
         </div>
         <div class="char-card" data-ult="upgrade">
           <div class="name">⑦ グレードアップ <span class="cost">20%</span></div>
@@ -2289,14 +2289,14 @@
       showGachaMessage('ガチャ結果を更新しました！', true);
     }
 
-    async function showQuestRewardAnimation(fragmentReward) {
+    async function showQuestRewardAnimation(fragmentReward, modeLabel = 'クエスト報酬') {
       const fragments = Array.isArray(fragmentReward?.fragments) ? fragmentReward.fragments : [];
       if (!fragments.length) return;
 
       currentDrawMode = 'quest';
       questRewardAnimationRunning = true;
-      document.getElementById('draw-title').textContent = 'QUEST REWARD';
-      document.getElementById('draw-counter').textContent = 'クエスト報酬';
+      document.getElementById('draw-title').textContent = 'REWARD';
+      document.getElementById('draw-counter').textContent = modeLabel;
       document.getElementById('draw-result-card').classList.remove('show');
       document.getElementById('draw-next').classList.remove('show');
       document.getElementById('draw-next').textContent = '閉じる';
@@ -2307,7 +2307,7 @@
       const status = document.getElementById('draw-status');
       orb.className = 'special';
       flash.className = 'special';
-      status.textContent = 'クエスト報酬を確認しています…';
+      status.textContent = `${modeLabel}を確認しています…`;
       await waitGacha(520);
       orb.className = 'special-green';
       flash.className = 'special-green';
@@ -2318,7 +2318,7 @@
         const name = GEAR_MASTER[x.gearId]?.name || x.gearId;
         return `${name} ×${Number(x.amount || 0)}`;
       });
-      document.getElementById('draw-result-tag').textContent = 'クエスト報酬';
+      document.getElementById('draw-result-tag').textContent = modeLabel;
       document.getElementById('draw-result-tag').className = 'draw-result-tag special';
       document.getElementById('draw-result-text').textContent = lines.join('\n');
       document.getElementById('draw-result-card').classList.add('show');
@@ -2715,7 +2715,7 @@
       gear16: { name: 'スタートダッシュ', mainDesc: 'リスポーンから20秒間、移動速度と通常弾ダメージが共に10%増', subDesc: null, mainSubSlots: 3, subOnly: true },
       gear17: { name: '即死回避', mainDesc: 'HPが0になる攻撃を受けてもHP1で耐える（1回のみ、リスポーンで回数復活）', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear18: { name: 'のろい', mainDesc: 'デス時、自分を倒したことによる相手のキルヒールを30減らす', subDesc: null, mainSubSlots: 2, subOnly: true },
-      gear19: { name: '忍者スタート', mainDesc: 'リスポーンから5秒間透明化', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear19: { name: '忍者の心得', mainDesc: 'ダメージを受けると2秒間透明になる', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear20: { name: 'スポーンチャージ', mainDesc: 'リスポーン時、ULTチャージ+15%', subDesc: null, mainSubSlots: 2, subOnly: true }
     };
     const GEAR_IDS = Object.keys(GEAR_MASTER);
@@ -3036,7 +3036,7 @@
         name: "カースショック",
         baseHitCharge: 20.0,
         typeA: { title: "マナドレイン", desc: "カースショックで相手が失ったMPの50%、自身のMPを回復する" },
-        typeB: { title: "広域拡散", desc: "カースショックの効果半径+5m（15m → 20mへ拡大）" }
+        typeB: { title: "広域拡散", desc: "カースショックの効果半径+5m（10m → 15mへ拡大）" }
       },
       super: {
         name: "スーパーマジック",
@@ -3048,12 +3048,12 @@
         name: "クイックワープ",
         baseHitCharge: 33.4,
         typeA: { title: "もう一我慢", desc: "ULTの時間制限が6秒になる（通常3秒 → 6秒）" },
-        typeB: { title: "バックスタブ", desc: "テレポート時に相手に20ダメージを与える" }
+        typeB: { title: "バックスタブ", desc: "テレポート時に相手に15ダメージを与える" }
       },
       heal: {
         name: "オートヒール",
         baseHitCharge: 20.0,
-        typeA: { title: "モア・オートヒール", desc: "オートヒールの効果時間が7.5秒になる（通常5.0秒）" },
+        typeA: { title: "モア・オートヒール", desc: "オートヒールの効果時間が7秒になる（通常5秒＋2秒）" },
         typeB: { title: "モア・キルヒール", desc: "敵撃破時のHP回復が50になる（通常30 → 50）" }
       },
       upgrade: {
@@ -3747,6 +3747,7 @@
     let isExFullShieldActive = false;
     let respawnInvincibleTimer = 0;
     let autoHealTimer = 0;
+    let autoHealUndying = false;
     let warpExpireTimer = 0;
     let isVulnerable = false;
     let stunTimer = 0;
@@ -3879,6 +3880,7 @@
       fullShieldTimer = 0;
       isExFullShieldActive = false;
       autoHealTimer = 0;
+      autoHealUndying = false;
       warpExpireTimer = 0;
       isVulnerable = false;
       stunTimer = 0;
@@ -3922,9 +3924,7 @@
       // Phase5: メイン専用ギアのリスポーン時リセット/再チャージ
       dashBuffTimer = isMainGear('gear16') ? 20.0 : 0;             // スタートダッシュ：20秒間の速度・ダメージバフ
       deathAvoidCharge = isMainGear('gear17');                     // 即死回避：リスポーンのたびに1回分再チャージ
-      if (isMainGear('gear19')) {                                  // 忍者スタート：5秒間透明化（既存のinvisibilityTimerを流用）
-        invisibilityTimer = Math.max(invisibilityTimer, 5.0);
-      }
+      // gear19「忍者の心得」は被ダメージ時に2秒透明化するため、リスポーン時の自動透明化は行わない。
 
       beamCharging = false;
       beamFiring = false;
@@ -4562,6 +4562,7 @@
           const fr = reward.fragmentReward?.fragments || [];
           if (fr.length) msg += ` / ギア破片×${fr.reduce((sum, x) => sum + Number(x.amount || 0), 0)}`;
           setQuestLoginMessage(msg, true);
+          if (fr.length) showQuestRewardAnimation(reward.fragmentReward, 'ログインボーナス');
         } else {
           setQuestLoginMessage(data.reason === 'already_claimed' ? '今日はすでに受け取り済みです。' : 'ログインボーナスを受け取れませんでした。', false);
         }
@@ -5505,7 +5506,13 @@
         finalDmg *= 0.5;
       }
 
-      if (autoHealTimer > 0) {
+      // gear19「忍者の心得」：実際にダメージを受けたら2秒間透明化。
+      // オートヒールEXや即死回避でHP1耐えしたダメージも「ダメージを受けた」扱いで発動する。
+      if (finalDmg > 0 && isMainGear('gear19')) {
+        invisibilityTimer = Math.max(invisibilityTimer, 2.0);
+      }
+
+      if (autoHealTimer > 0 && autoHealUndying) {
         if (myHp - finalDmg <= 0) {
           myHp = 1;
           queueQuestEvent('damageTaken', finalDmg);
@@ -5516,8 +5523,7 @@
         }
       }
 
-      // Phase5: gear17（即死回避、メイン専用）：1回のリスポーンにつき1回だけ、致死ダメージをHP1で耐える。
-      // オートヒール不死身が発動中の場合はそちらが優先され、この判定には来ない。
+      // gear17（即死回避、メイン専用）：1回のリスポーンにつき1回だけ、致死ダメージをHP1で耐える。
       if (isMainGear('gear17') && deathAvoidCharge && (myHp - finalDmg) <= 0) {
         myHp = 1;
         deathAvoidCharge = false;
@@ -6132,12 +6138,16 @@
           }
         }
       } else if (selectedUltType === 'heal') {
-        autoHealTimer = (selectedUltSubtype === 'A') ? 7.5 : 5.0;
+        autoHealTimer = (selectedUltSubtype === 'A') ? 7.0 : 5.0;
+        autoHealUndying = !!isEx;
+        // 通常・EX共通：デバフを全解除。
+        curseDebuffTimer = 0;
+        isVulnerable = false;
+        stunTimer = 0;
         if (isEx) {
-          curseDebuffTimer = 0;
-          isVulnerable = false;
-          stunTimer = 0;
-          addBattleLog(`<span style="color:#55efc4">★ EXヒール：全状態異常・デバフを即座に消去！</span>`);
+          addBattleLog(`<span style="color:#55efc4">★ EXオートヒール：デバフ全解除＋発動中は致死ダメージをHP1で耐える！</span>`);
+        } else {
+          addBattleLog(`<span style="color:#55efc4">★ オートヒール：デバフ全解除＋5秒間毎秒7HP回復！</span>`);
         }
       } else if (selectedUltType === 'upgrade') {
         if (upgradeLevel < 4) {
@@ -6281,13 +6291,13 @@
 
       if (selectedUltType === 'warp' && selectedUltSubtype === 'B') {
         if (currentStage === 'training' && targetEnemy.dummyRef) {
-          targetEnemy.dummyRef.hp -= 20;
-          spawnDamagePopup(targetEnemy.dummyRef.mesh.position, 20, true);
+          targetEnemy.dummyRef.hp -= 15;
+          spawnDamagePopup(targetEnemy.dummyRef.mesh.position, 15, true);
           createExplosion(targetEnemy.dummyRef.mesh.position, 0xff7675);
         } else if (targetEnemy.peerId) {
-          broadcastMsg({ type: 'warp_damage', targetId: targetEnemy.peerId, dmg: 20 });
+          broadcastMsg({ type: 'warp_damage', targetId: targetEnemy.peerId, dmg: 15 });
         }
-        addBattleLog(`<span style="color:#fd79a8">💥 背後急襲バックスタブ！敵に20ダメージ！</span>`);
+        addBattleLog(`<span style="color:#fd79a8">💥 背後急襲バックスタブ！敵に15ダメージ！</span>`);
       }
 
       if (isEx) {
@@ -6425,7 +6435,7 @@
 
     function activateCurseShock(isEx = false) {
       const centerPos = new THREE.Vector3(playerPos.x, playerPos.y + 0.9, playerPos.z);
-      const curseRadius = (selectedUltType === 'curse' && selectedUltSubtype === 'B') ? 20.0 : 15.0;
+      const curseRadius = (selectedUltType === 'curse' && selectedUltSubtype === 'B') ? 15.0 : 10.0;
 
       triggerCurseSphereVisual(centerPos, isEx, curseRadius);
       broadcastMsg({ type: 'curse_sphere_anim', x: centerPos.x, y: centerPos.y, z: centerPos.z, isEx, radius: curseRadius });
@@ -6682,9 +6692,13 @@
 
       if (autoHealTimer > 0) {
         autoHealTimer -= delta;
-        const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + 10 * delta) - myHp);
+        const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + 7 * delta) - myHp);
         myHp += healedHp;
         if (healedHp > 0) queueQuestEvent('hpRecovered', healedHp);
+        if (autoHealTimer <= 0) {
+          autoHealTimer = 0;
+          autoHealUndying = false;
+        }
         updateHudBars();
       }
 
@@ -6737,7 +6751,7 @@
         crossStatusContainer.innerHTML += `<div class="status-pill pill-super">✨ スーパーマジック (MP無限)</div>`;
       }
       if (autoHealTimer > 0) {
-        crossStatusContainer.innerHTML += `<div class="status-pill pill-undying">❤️‍🔥 不死身中 (HP1耐え)</div>`;
+        if (autoHealUndying) crossStatusContainer.innerHTML += `<div class="status-pill pill-undying">❤️‍🔥 不死身中 (HP1耐え)</div>`;
         crossStatusContainer.innerHTML += `<div class="status-pill pill-heal">💚 オートヒール中 (${autoHealTimer.toFixed(1)}s)</div>`;
       }
       if (thunderSpeedTimer > 0) {
@@ -6898,7 +6912,10 @@
         buffList.push(`<span style="color:#a29bfe">強化: ${upTxt}</span>`);
       }
       if (respawnInvincibleTimer > 0) buffList.push(`<span style="color:#f1c40f">無敵 (${respawnInvincibleTimer.toFixed(1)}s)</span>`);
-      if (autoHealTimer > 0) buffList.push(`<span style="color:#2ecc71">ヒール/不死身 (${autoHealTimer.toFixed(1)}s)</span>`);
+      if (autoHealTimer > 0) {
+        buffList.push(`<span style="color:#2ecc71">オートヒール (${autoHealTimer.toFixed(1)}s)</span>`);
+        if (autoHealUndying) buffList.push(`<span style="color:#ff4757">不死身</span>`);
+      }
       if (superMagicTimer > 0) buffList.push(`MP無限 (${superMagicTimer.toFixed(1)}s)`);
       if (invisibilityTimer > 0) {
         const isGhost = (selectedUltType === 'super' && selectedUltSubtype === 'B');
@@ -7057,7 +7074,7 @@
             isGuarding,
             hasFullShield: fullShieldTimer > 0,
             hasSuperMagic: superMagicTimer > 0,
-            hasUndying: autoHealTimer > 0,
+            hasUndying: autoHealTimer > 0 && autoHealUndying,
             isGrounded,
             curseTimer: curseDebuffTimer,
             isVulnerable,
