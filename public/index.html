@@ -1266,7 +1266,7 @@
         </div>
         <div class="bullet-card" data-bullet="sniper">
           <div class="b-name">狙撃弾 <span class="b-cost">MP25</span></div>
-          <div class="b-desc">遠距離ほど威力UP(10〜35)。高速・極小判定の長距離狙撃用。</div>
+          <div class="b-desc">威力10〜35。22ダメを基準に、与ダメに応じてULTチャージ補正が付く高速狙撃弾。</div>
         </div>
         <div class="bullet-card" data-bullet="heavy">
           <div class="b-name">重量弾 <span class="b-cost">MP25</span></div>
@@ -1322,7 +1322,7 @@
         </div>
         <div class="char-card" data-ult="upgrade">
           <div class="name">⑦ グレードアップ <span class="cost">20%</span></div>
-          <div class="desc">第3段階で弾ダメ1.25倍、第4で誘導弾。</div>
+          <div class="desc">第3段階で通常弾ダメージ+4、第4で誘導弾。</div>
           <div class="ex-desc">【EX】(最終段階後) 次の弾が超強力ホーミング！</div>
         </div>
         <div class="char-card" data-ult="highjump">
@@ -2848,11 +2848,11 @@
       sniper: {
         name: "狙撃弾",
         mpCost: 25,
-        baseDmg: 10,
+        baseDmg: 22,
         speed: 76,
         scale: 0.6,
         colorHex: 0x00cec9,
-        desc: "遠距離特化弾"
+        desc: "遠距離特化・ULTチャージ補正弾"
       },
       heavy: {
         name: "重量弾",
@@ -4207,8 +4207,9 @@
       triggerBombBlastVisual(blastCenter, 1.8);
       createExplosion(blastCenter, 0xff793f, false, 1.8);
 
-      let splashDamage = 5;
-      if (upgradeLevel >= 3) splashDamage = Math.round(splashDamage * 1.25);
+      // 爆風は攻撃側のダメージ強化を一切受けず、常に基礎5ダメージ。
+      // グレードアップ・ギア・発動中バフ等は爆風には適用しない。
+      const splashDamage = 5;
 
       // ソロ・訓練場での爆風判定
       if (currentStage === 'training') {
@@ -5268,6 +5269,9 @@
         if (data.shooterId === myPeerId || data.shooterId === 'player') {
           queueQuestEvent('damageDealt', Number(data.rawDmg) || 0);
           let baseAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
+                    if (Number.isFinite(Number(data.sniperChargeBonus))) {
+            baseAmt += Number(data.sniperChargeBonus);
+          }
           if (data.isCurseTarget) baseAmt *= 0.5;
           // Phase5: gear12（ULTチャージ効率）
           // 「+4%」は倍率1.04倍ではなく、20%→24%のような
@@ -6153,7 +6157,7 @@
         if (upgradeLevel < 4) {
           upgradeLevel++;
           if (upgradeLevel === 3) {
-            addBattleLog(`<span style="color:#a29bfe">★ グレードアップ第3段階到達！全通常弾のダメージが1.25倍に強化！</span>`, 'upgrade');
+            addBattleLog(`<span style="color:#a29bfe">★ グレードアップ第3段階到達！全通常弾のダメージが+4に強化！</span>`, 'upgrade');
           } else {
             addBattleLog(`<span style="color:#a29bfe">★ グレードアップ進化！第${upgradeLevel}段階へ到達！</span>`, 'upgrade');
           }
@@ -6606,28 +6610,41 @@
     }
 
     // ダメージ計算用ヘルパー
-    function computeBulletDamage(bType, originPos, hitPos, isExHoming) {
+    // 強化前の素の通常弾ダメージを独立して求める。
+    // 狙撃弾のULTチャージ補正では、ギア・グレードアップ・その他の強化を含めないこの値を使う。
+    function computeUnbuffedBulletDamage(bType, originPos, hitPos, isExHoming) {
       let base;
       if (isExHoming) {
         base = 35;
+      } else if (bType === 'sniper') {
+        const dist = originPos.distanceTo(hitPos);
+        const t = Math.min(1.0, dist / 35.0);
+        base = 10 + t * 25;
+      } else if (bType === 'heavy') {
+        base = 30;
+      } else if (bType === 'bomb') {
+        base = 15; // 直撃ダメージ
+      } else if (bType === 'ricochet') {
+        base = 15;
       } else {
-        if (bType === 'sniper') {
-          const dist = originPos.distanceTo(hitPos);
-          const t = Math.min(1.0, dist / 35.0);
-          base = 10 + t * 25;
-        } else if (bType === 'heavy') {
-          base = 30;
-        } else if (bType === 'bomb') {
-          base = 15; // 直撃ダメージ
-        } else if (bType === 'ricochet') {
-          base = 15;
-        } else {
-          base = 20;
-        }
+        base = 20;
+      }
+      return Math.round(base);
+    }
 
-        if (upgradeLevel >= 3) {
-          base *= 1.25;
-        }
+    // 狙撃弾専用：22ダメージを基準に、強化前ダメージに応じてULTチャージを補正する。
+    // 例：30ダメ → +4%、10ダメ → -6%。
+    function getSniperUltChargeBonus(unbuffedDamage) {
+      if (!Number.isFinite(unbuffedDamage)) return 0;
+      return (unbuffedDamage - 22) * 0.5;
+    }
+
+    function computeBulletDamage(bType, originPos, hitPos, isExHoming) {
+      let base = computeUnbuffedBulletDamage(bType, originPos, hitPos, isExHoming);
+
+      // グレードアップ第3段階：通常弾ダメージ固定+4。
+      if (upgradeLevel >= 3) {
+        base += 4;
       }
 
       // Phase5: gear07（固定値ダメージ強化）＋ gear15/16（発動時の%ダメージバフ）を反映
@@ -6908,7 +6925,7 @@
       const ultMeta = ultMasterData[selectedUltType];
       buffList.push(`<span style="color:#00cec9">ULT: ${ultMeta.name}[${subtypeLabel(selectedUltSubtype)}]</span>`);
       if (selectedUltType === 'upgrade') {
-        const upTxt = (upgradeLevel >= 3) ? `第${upgradeLevel}段階 (弾ダメ1.25倍)` : `第${upgradeLevel}段階`;
+        const upTxt = (upgradeLevel >= 3) ? `第${upgradeLevel}段階 (弾ダメ+4)` : `第${upgradeLevel}段階`;
         buffList.push(`<span style="color:#a29bfe">強化: ${upTxt}</span>`);
       }
       if (respawnInvincibleTimer > 0) buffList.push(`<span style="color:#f1c40f">無敵 (${respawnInvincibleTimer.toFixed(1)}s)</span>`);
@@ -7264,6 +7281,10 @@
               spawnDamagePopup(d.mesh.position, dmg, isCrit);
 
               let chargeAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
+                            if (s.bulletType === 'sniper') {
+                const unbuffedDamage = computeUnbuffedBulletDamage(s.bulletType, s.startPos, hitPoint, s.isExSuperHoming);
+                chargeAmt += getSniperUltChargeBonus(unbuffedDamage);
+              }
               if (d.curseDebuffTimer > 0) chargeAmt *= 0.5;
               // Phase5: gear12（ULTチャージ効率）
               // 「+4%」は倍率1.04倍ではなく、20%→24%のような
@@ -7296,7 +7317,10 @@
               sendToServer({
                 type: 'hit_claim',
                 targetId: pid,
-                hitTime: getServerTime(),
+              sniperChargeBonus: s.bulletType === 'sniper'
+                ? getSniperUltChargeBonus(computeUnbuffedBulletDamage(s.bulletType, s.startPos, hitPoint, s.isExSuperHoming))
+                : 0,
+              hitTime: getServerTime(),
                 bulletPos: { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
                 rawDmg: rawDamage,
                 bulletScale: s.scale,
