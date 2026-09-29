@@ -1548,6 +1548,7 @@ wss.on('connection', (socket) => {
           shooterId: myId,
           targetId: data.targetId,
           rawDmg: data.rawDmg,
+          sniperChargeBonus: Number(data.sniperChargeBonus) || 0,
           isExSuperHoming: !!data.isExSuperHoming,
           bulletPos: bp,
           bulletScale: data.bulletScale || 1.0,
