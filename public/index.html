@@ -2112,7 +2112,8 @@
     }
 
     function requestGachaPull(times, freeDaily = false) {
-      if (gachaAnimationRunning || gachaRequestPending) return;
+      // クエスト／ログインボーナスの破片報酬表示中は、ガチャ処理を開始しない。
+      if (questRewardAnimationRunning || gachaAnimationRunning || gachaRequestPending) return;
       gachaRequestPending = true;
       renderGachaUI();
       showGachaMessage('抽選中…', true);
@@ -2265,6 +2266,8 @@
     }
 
     function startGachaAnimation(pulls) {
+      // 破片報酬表示が優先。ログインボーナス等からガチャ演出へ混入しない。
+      if (questRewardAnimationRunning) return;
       currentDrawMode = 'gacha';
       currentGachaQueue = Array.isArray(pulls) ? pulls : [];
       currentGachaQueueIndex = 0;
@@ -2293,6 +2296,11 @@
       const fragments = Array.isArray(fragmentReward?.fragments) ? fragmentReward.fragments : [];
       if (!fragments.length) return;
 
+      // 既存のガチャ演出キューを完全に切り離し、
+      // クエスト／ログインボーナスの破片報酬だけを表示する。
+      currentGachaQueue = [];
+      currentGachaQueueIndex = 0;
+      gachaAnimationRunning = false;
       currentDrawMode = 'quest';
       questRewardAnimationRunning = true;
       document.getElementById('draw-title').textContent = 'REWARD';
@@ -2327,6 +2335,9 @@
 
     function finishQuestRewardAnimation() {
       questRewardAnimationRunning = false;
+      currentGachaQueue = [];
+      currentGachaQueueIndex = 0;
+      gachaAnimationRunning = false;
       currentDrawMode = 'gacha';
       document.getElementById('draw-overlay').classList.remove('show');
       document.getElementById('draw-title').textContent = 'MAGIC GACHA';
@@ -2345,7 +2356,7 @@
     });
 
     function openGachaOverlay() {
-      if (gachaAnimationRunning) return;
+      if (questRewardAnimationRunning || gachaAnimationRunning) return;
       document.getElementById('gacha-overlay').style.display = 'flex';
       showGachaMessage('', true);
       document.getElementById('gacha-result-list').innerHTML = '';
