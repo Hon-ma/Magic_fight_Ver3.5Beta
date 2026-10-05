@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+  <!-- MagicFight control settings patch --> Ver8.8
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="game-version" content="Ver6">
@@ -670,6 +671,37 @@
     .profile-stat-card .val { font-size: 22px; font-weight: bold; color: #00cec9; }
     .profile-stat-card .label { font-size: 11px; color: #b2bec3; margin-top: 2px; }
 
+    /* 操作設定 */
+    .control-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+    .control-setting-card {
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(0,206,201,0.22); border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .control-setting-card.full { grid-column: 1 / -1; }
+    .control-setting-title { font-size: 12px; font-weight: 800; color: #dfe6e9; margin-bottom: 8px; }
+    .control-setting-help { font-size: 10.5px; line-height: 1.5; color: #8f9aa0; margin-top: 6px; }
+    .control-range-row { display: flex; align-items: center; gap: 10px; }
+    .control-range-row input[type="range"] { flex: 1; accent-color: #00cec9; }
+    .control-range-value { min-width: 38px; text-align: right; font-size: 14px; font-weight: 900; color: #81ecec; }
+    .control-select { width: 100%; padding: 9px 10px; border-radius: 7px; border: 2px solid rgba(0,206,201,0.28); background: #1e272e; color: #fff; outline: none; }
+    .keybind-row { display: flex; align-items: center; gap: 10px; }
+    .keybind-btn {
+      min-width: 92px; padding: 9px 12px; border-radius: 8px; border: 2px solid rgba(0,206,201,0.45);
+      background: #1e272e; color: #81ecec; font-size: 13px; font-weight: 900; cursor: pointer;
+    }
+    .keybind-btn:hover { background: rgba(0,206,201,0.12); border-color: #00cec9; }
+    .keybind-btn.capturing { border-color: #ffd93d; color: #ffeaa7; box-shadow: 0 0 12px rgba(255,217,61,0.22); }
+    .control-reset-btn { margin-top: 14px; border-color: rgba(255,118,117,0.48) !important; color: #ff7675 !important; }
+    .control-reset-btn:hover { background: rgba(255,118,117,0.10) !important; }
+    #control-settings-status { min-height: 18px; margin-top: 8px; font-size: 11px; color: #ffeaa7; }
+    .control-toggle-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .control-toggle-row label { font-size: 12px; color:#dfe6e9; }
+    .control-checkbox { width: 18px; height: 18px; accent-color: #00cec9; cursor:pointer; }
+    @media (max-width: 640px) {
+      .control-settings-grid { grid-template-columns: 1fr; }
+      .control-setting-card.full { grid-column: auto; }
+    }
+
     .set-comment-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
     .set-comment-slot { display: flex; flex-direction: column; gap: 3px; }
     .set-comment-slot label { font-size: 11px; color: #ffeaa7; font-weight: bold; }
@@ -903,7 +935,7 @@
   <div id="thunder-flash"></div>
   <div id="rainbow-flash"></div>
   <div id="esc-notice">ESCをもう一度押すとロビーへ退出</div>
-  <div id="ex-notification">🌈 EX ULT READY!! 【E】で超必殺技！</div>
+  <div id="ex-notification">🌈 EX ULT READY!! 【<span id="ex-notification-key">E</span>】で超必殺技！</div>
 
   <!-- Ver5: プロフィール画面 -->
   <div id="profile-overlay">
@@ -923,6 +955,7 @@
       <div class="profile-tabs">
         <div class="profile-tab active" data-pane="stats">📊 戦績</div>
         <div class="profile-tab" data-pane="comments">💬 セットコメント</div>
+        <div class="profile-tab" data-pane="controls">🎮 操作設定</div>
       </div>
 
       <div class="profile-pane active" id="profile-pane-stats">
@@ -938,6 +971,66 @@
       <div class="profile-pane" id="profile-pane-comments">
         <div class="section-title" style="margin-bottom:0;">1〜9キーを2連続押しで発言（他ログと区別して黄色で表示）</div>
         <div class="set-comment-grid" id="set-comment-grid"></div>
+      </div>
+
+      <div class="profile-pane" id="profile-pane-controls">
+        <div class="section-title" style="margin-bottom:0;">ゲーム中の操作方法を変更できます。</div>
+        <div class="control-settings-grid">
+          <div class="control-setting-card">
+            <div class="control-setting-title">視点感度（横）</div>
+            <div class="control-range-row">
+              <input type="range" id="control-sens-x" min="10" max="50" step="1" value="30">
+              <div class="control-range-value" id="control-sens-x-value">30</div>
+            </div>
+            <div class="control-setting-help">10〜50 / 標準 30</div>
+          </div>
+
+          <div class="control-setting-card">
+            <div class="control-setting-title">視点感度（縦）</div>
+            <div class="control-range-row">
+              <input type="range" id="control-sens-y" min="10" max="50" step="1" value="30">
+              <div class="control-range-value" id="control-sens-y-value">30</div>
+            </div>
+            <div class="control-setting-help">10〜50 / 標準 30</div>
+          </div>
+
+          <div class="control-setting-card">
+            <div class="control-setting-title">移動ボタン変更</div>
+            <select id="control-movement" class="control-select">
+              <option value="wasd">WASD</option>
+              <option value="arrows">矢印キー</option>
+            </select>
+            <div class="control-setting-help">標準はWASDです。</div>
+          </div>
+
+          <div class="control-setting-card">
+            <div class="control-setting-title">ULTボタン設定</div>
+            <div class="keybind-row">
+              <button type="button" class="keybind-btn" id="control-ult-key">E</button>
+              <div class="control-setting-help" style="margin:0;">クリック後、使いたいキーを押してください。</div>
+            </div>
+          </div>
+
+          <div class="control-setting-card">
+            <div class="control-setting-title">ガードボタン設定</div>
+            <div class="keybind-row">
+              <button type="button" class="keybind-btn" id="control-guard-key">F</button>
+              <div class="control-setting-help" style="margin:0;">移動・ジャンプ・コメント等と重複するキーは設定できません。</div>
+            </div>
+          </div>
+
+          <div class="control-setting-card">
+            <div class="control-toggle-row">
+              <div>
+                <div class="control-setting-title" style="margin-bottom:2px;">可変ジャンプ ON / OFF</div>
+                <div class="control-setting-help" style="margin:0;">ON：長押しで通常の高さ、チョン押しで低いジャンプ</div>
+              </div>
+              <input type="checkbox" id="control-variable-jump" class="control-checkbox">
+            </div>
+          </div>
+        </div>
+        <div id="control-settings-status"></div>
+        <button type="button" class="btn back control-reset-btn" id="control-reset-btn">↺ 全部標準に戻す</button>
       </div>
 
 
@@ -1494,6 +1587,215 @@
     let savedData = loadSavedData();
     let myRate = savedData.rate;
 
+    // ================================================================
+    // --- 操作設定（端末ごとにlocalStorageへ保存） ---
+    // ================================================================
+    const CONTROL_SETTINGS_KEY = 'magicFightControlSettings_v1';
+    const DEFAULT_CONTROL_SETTINGS = {
+      horizontalSensitivity: 30,
+      verticalSensitivity: 30,
+      movementScheme: 'wasd',
+      ultKey: 'KeyE',
+      guardKey: 'KeyF',
+      variableJump: false
+    };
+
+    function clampInt(value, min, max, fallback) {
+      const n = Number(value);
+      return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : fallback;
+    }
+
+    function loadControlSettings() {
+      try {
+        const raw = localStorage.getItem(CONTROL_SETTINGS_KEY);
+        if (!raw) return { ...DEFAULT_CONTROL_SETTINGS };
+        const parsed = JSON.parse(raw);
+        return {
+          horizontalSensitivity: clampInt(parsed.horizontalSensitivity, 10, 50, DEFAULT_CONTROL_SETTINGS.horizontalSensitivity),
+          verticalSensitivity: clampInt(parsed.verticalSensitivity, 10, 50, DEFAULT_CONTROL_SETTINGS.verticalSensitivity),
+          movementScheme: parsed.movementScheme === 'arrows' ? 'arrows' : 'wasd',
+          ultKey: typeof parsed.ultKey === 'string' ? parsed.ultKey : DEFAULT_CONTROL_SETTINGS.ultKey,
+          guardKey: typeof parsed.guardKey === 'string' ? parsed.guardKey : DEFAULT_CONTROL_SETTINGS.guardKey,
+          variableJump: parsed.variableJump === true
+        };
+      } catch (e) {
+        return { ...DEFAULT_CONTROL_SETTINGS };
+      }
+    }
+
+    function saveControlSettings() {
+      try {
+        localStorage.setItem(CONTROL_SETTINGS_KEY, JSON.stringify(controlSettings));
+      } catch (e) {}
+    }
+
+    let controlSettings = loadControlSettings();
+    let keyBindCaptureTarget = null;
+
+    function getMovementKeyCodes() {
+      // 戻り値の順序は [前, 後, 右, 左]。
+      // 以前は A/D と ←/→ が逆順だったため、左右移動が反転していた。
+      return controlSettings.movementScheme === 'arrows'
+        ? ['ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft']
+        : ['KeyW', 'KeyS', 'KeyD', 'KeyA'];
+    }
+
+    function getControlKeyLabel(code) {
+      if (!code) return '未設定';
+      const labels = {
+        ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+        Space: 'SPACE', ShiftLeft: 'SHIFT', ShiftRight: 'SHIFT',
+        Tab: 'TAB', Enter: 'ENTER', Backspace: 'BACKSPACE',
+        Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'",
+        BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=', Backquote: '`',
+        Numpad0: 'NUM 0', Numpad1: 'NUM 1', Numpad2: 'NUM 2', Numpad3: 'NUM 3', Numpad4: 'NUM 4',
+        Numpad5: 'NUM 5', Numpad6: 'NUM 6', Numpad7: 'NUM 7', Numpad8: 'NUM 8', Numpad9: 'NUM 9'
+      };
+      if (labels[code]) return labels[code];
+      if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+      if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+      return String(code).replace(/^Numpad/, 'NUM ');
+    }
+
+    function getCurrentReservedControlKeys(excludeBinding = null) {
+      const reserved = new Set([
+        'Escape', 'Space', 'ShiftLeft', 'ShiftRight',
+        'Digit0', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9',
+        ...getMovementKeyCodes()
+      ]);
+      if (excludeBinding !== 'ult') reserved.add(controlSettings.ultKey);
+      if (excludeBinding !== 'guard') reserved.add(controlSettings.guardKey);
+      return reserved;
+    }
+
+    function refreshControlSettingsUI() {
+      const sx = document.getElementById('control-sens-x');
+      const sxv = document.getElementById('control-sens-x-value');
+      const sy = document.getElementById('control-sens-y');
+      const syv = document.getElementById('control-sens-y-value');
+      const move = document.getElementById('control-movement');
+      const ult = document.getElementById('control-ult-key');
+      const guard = document.getElementById('control-guard-key');
+      const jump = document.getElementById('control-variable-jump');
+      if (sx) sx.value = String(controlSettings.horizontalSensitivity);
+      if (sxv) sxv.innerText = String(controlSettings.horizontalSensitivity);
+      if (sy) sy.value = String(controlSettings.verticalSensitivity);
+      if (syv) syv.innerText = String(controlSettings.verticalSensitivity);
+      if (move) move.value = controlSettings.movementScheme;
+      if (ult) ult.innerText = getControlKeyLabel(controlSettings.ultKey);
+      if (guard) guard.innerText = getControlKeyLabel(controlSettings.guardKey);
+      if (jump) jump.checked = controlSettings.variableJump;
+      const exKey = document.getElementById('ex-notification-key');
+      if (exKey) exKey.innerText = getControlKeyLabel(controlSettings.ultKey);
+      const ultLabel = document.getElementById('ult-label');
+      if (ultLabel) ultLabel.innerText = `ULT (【${getControlKeyLabel(controlSettings.ultKey)}】キー発動)`;
+    }
+
+    function setControlSettingsStatus(message = '') {
+      const el = document.getElementById('control-settings-status');
+      if (el) el.innerText = message;
+    }
+
+    function normalizeControlBindingsForMovement() {
+      const movementKeys = new Set(getMovementKeyCodes());
+      const alwaysReserved = new Set([
+        'Escape', 'Space', 'ShiftLeft', 'ShiftRight',
+        'Digit0', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'
+      ]);
+      const isUsableBinding = (code) => typeof code === 'string' && !alwaysReserved.has(code) && !movementKeys.has(code)
+        && !/^F([1-9]|1[0-2])$/.test(code)
+        && !['MetaLeft','MetaRight','ControlLeft','ControlRight','AltLeft','AltRight','CapsLock','ContextMenu','Tab','Enter','Backspace'].includes(code);
+      if (!isUsableBinding(controlSettings.ultKey)) {
+        controlSettings.ultKey = DEFAULT_CONTROL_SETTINGS.ultKey;
+      }
+      if (!isUsableBinding(controlSettings.guardKey) || controlSettings.guardKey === controlSettings.ultKey) {
+        controlSettings.guardKey = DEFAULT_CONTROL_SETTINGS.guardKey;
+        if (controlSettings.guardKey === controlSettings.ultKey) controlSettings.guardKey = 'KeyR';
+      }
+    }
+
+    function beginKeyBindCapture(target) {
+      keyBindCaptureTarget = target;
+      const button = document.getElementById(`control-${target}-key`);
+      if (button) {
+        button.classList.add('capturing');
+        button.innerText = 'キー入力中…';
+      }
+      setControlSettingsStatus('設定したいキーを押してください。ESCでキャンセルできます。');
+    }
+
+    function finishKeyBindCapture() {
+      if (!keyBindCaptureTarget) return;
+      const button = document.getElementById(`control-${keyBindCaptureTarget}-key`);
+      if (button) button.classList.remove('capturing');
+      keyBindCaptureTarget = null;
+    }
+
+    function assignControlKey(code) {
+      const target = keyBindCaptureTarget;
+      if (!target) return;
+      const reserved = getCurrentReservedControlKeys(target);
+      const disallowed = new Set([
+        'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
+        'MetaLeft','MetaRight','ControlLeft','ControlRight','AltLeft','AltRight','CapsLock','ContextMenu',
+        'Tab','Enter','Backspace'
+      ]);
+      if (reserved.has(code) || disallowed.has(code)) {
+        setControlSettingsStatus('そのキーは他の操作で使用中、またはゲーム用には設定できません。別のキーを選んでください。');
+        return;
+      }
+      if (target === 'ult') controlSettings.ultKey = code;
+      if (target === 'guard') controlSettings.guardKey = code;
+      saveControlSettings();
+      refreshControlSettingsUI();
+      setControlSettingsStatus(`${target === 'ult' ? 'ULT' : 'ガード'}を「${getControlKeyLabel(code)}」に変更しました。`);
+      finishKeyBindCapture();
+    }
+
+    function resetControlSettings() {
+      if (!confirm('操作設定をすべて標準に戻しますか？')) return;
+      finishKeyBindCapture();
+      controlSettings = { ...DEFAULT_CONTROL_SETTINGS };
+      saveControlSettings();
+      refreshControlSettingsUI();
+      setControlSettingsStatus('操作設定を標準に戻しました。');
+    }
+
+    function setupControlSettingsUI() {
+      const sx = document.getElementById('control-sens-x');
+      const sy = document.getElementById('control-sens-y');
+      const move = document.getElementById('control-movement');
+      const ult = document.getElementById('control-ult-key');
+      const guard = document.getElementById('control-guard-key');
+      const jump = document.getElementById('control-variable-jump');
+      if (sx) sx.addEventListener('input', () => {
+        controlSettings.horizontalSensitivity = clampInt(sx.value, 10, 50, 30);
+        saveControlSettings(); refreshControlSettingsUI();
+      });
+      if (sy) sy.addEventListener('input', () => {
+        controlSettings.verticalSensitivity = clampInt(sy.value, 10, 50, 30);
+        saveControlSettings(); refreshControlSettingsUI();
+      });
+      if (move) move.addEventListener('change', () => {
+        controlSettings.movementScheme = move.value === 'arrows' ? 'arrows' : 'wasd';
+        normalizeControlBindingsForMovement();
+        saveControlSettings(); refreshControlSettingsUI();
+        setControlSettingsStatus('移動キーを変更しました。');
+      });
+      if (ult) ult.addEventListener('click', () => beginKeyBindCapture('ult'));
+      if (guard) guard.addEventListener('click', () => beginKeyBindCapture('guard'));
+      if (jump) jump.addEventListener('change', () => {
+        controlSettings.variableJump = !!jump.checked;
+        saveControlSettings();
+        setControlSettingsStatus(controlSettings.variableJump ? '可変ジャンプをONにしました。' : '可変ジャンプをOFFにしました。');
+      });
+      const reset = document.getElementById('control-reset-btn');
+      if (reset) reset.addEventListener('click', resetControlSettings);
+      normalizeControlBindingsForMovement();
+      saveControlSettings();
+      refreshControlSettingsUI();
+    }
+
     // --- レート戦の試合内状態 ---
     let isRateMatch = false;      // 現在の部屋がレート戦かどうか
     let isRateMatchOver = false;  // このマッチが既に決着しているか（多重終了防止）
@@ -1519,7 +1821,10 @@
     // --- Ver5: プロフィール画面 ＆ セットコメント UI ---
     // ================================================================
 
+    setupControlSettingsUI();
+
     function renderProfileUI() {
+      refreshControlSettingsUI();
       if (!myProfile) return;
 
       // ヘッダー（名前・レート）
@@ -1583,9 +1888,12 @@
     // --- プロフィール画面の開閉・タブ切り替え ---
     function openProfileOverlay() {
       document.getElementById('profile-overlay').style.display = 'flex';
+      refreshControlSettingsUI();
       requestMyProfile();
     }
     function closeProfileOverlay() {
+      finishKeyBindCapture();
+      refreshControlSettingsUI();
       document.getElementById('profile-overlay').style.display = 'none';
     }
 
@@ -3781,6 +4089,8 @@
     let exNoticeTimeout = null;
     function triggerExNotification() {
       const el = document.getElementById('ex-notification');
+      const keyEl = document.getElementById('ex-notification-key');
+      if (keyEl) keyEl.innerText = getControlKeyLabel(controlSettings.ultKey);
       el.style.opacity = '1';
       clearTimeout(exNoticeTimeout);
       exNoticeTimeout = setTimeout(() => { el.style.opacity = '0'; }, 1800);
@@ -4006,11 +4316,11 @@
         l2.className = 'ult-ready-ex';
         l1.className = '';
         if (selectedUltType === 'warp' && warpExpireTimer > 0) {
-          ultLabel.innerText = `🌈 EXワープ発動【E】(背後急襲&MP全快！残り${warpExpireTimer.toFixed(1)}s)`;
+          ultLabel.innerText = `🌈 EXワープ発動【${getControlKeyLabel(controlSettings.ultKey)}】(背後急襲&MP全快！残り${warpExpireTimer.toFixed(1)}s)`;
           ultLabel.style.color = '#fd79a8';
           ultText.innerText = `200% [EX MAX] (${warpExpireTimer.toFixed(1)}s)`;
         } else {
-          ultLabel.innerText = `🌈 EX ULT READY!! 【E】でEX ${currentTypeName}！`;
+          ultLabel.innerText = `🌈 EX ULT READY!! 【${getControlKeyLabel(controlSettings.ultKey)}】でEX ${currentTypeName}！`;
           ultLabel.style.color = '#fd79a8';
           ultText.innerText = `200% [EX MAX]`;
         }
@@ -4018,18 +4328,18 @@
         l2.className = '';
         l1.className = 'ult-ready-100';
         if (selectedUltType === 'warp' && warpExpireTimer > 0) {
-          ultLabel.innerText = `★ワープ発動【E】(弾命中で即EX化！残り${warpExpireTimer.toFixed(1)}s)`;
+          ultLabel.innerText = `★ワープ発動【${getControlKeyLabel(controlSettings.ultKey)}】(弾命中で即EX化！残り${warpExpireTimer.toFixed(1)}s)`;
           ultLabel.style.color = '#ff4757';
           ultText.innerText = `${ultPercent.toFixed(1)}% (${warpExpireTimer.toFixed(1)}s)`;
         } else {
-          ultLabel.innerText = `★ULT READY! 【E】発動 [${currentTypeName}]`;
+          ultLabel.innerText = `★ULT READY! 【${getControlKeyLabel(controlSettings.ultKey)}】発動 [${currentTypeName}]`;
           ultLabel.style.color = '#f1c40f';
           ultText.innerText = `${ultPercent.toFixed(1)}% / 200%`;
         }
       } else {
         l1.className = '';
         l2.className = '';
-        ultLabel.innerText = `ULT 【E】キー発動 [${currentTypeName}]`;
+        ultLabel.innerText = `ULT 【${getControlKeyLabel(controlSettings.ultKey)}】キー発動 [${currentTypeName}]`;
         ultLabel.style.color = '#fff';
         ultText.innerText = `${ultPercent.toFixed(1)}% / 200%`;
       }
@@ -5898,19 +6208,34 @@
 
     document.addEventListener('mousemove', (e) => {
       if (!isLocked || isDead) return;
-      const sens = beamFiring ? 0.00077 : 0.0022;
-      yaw -= e.movementX * sens;
-      pitch = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch - e.movementY * sens));
+      const xMultiplier = controlSettings.horizontalSensitivity / 30;
+      const yMultiplier = controlSettings.verticalSensitivity / 30;
+      const xSens = (beamFiring ? 0.00077 : 0.0022) * xMultiplier;
+      const ySens = (beamFiring ? 0.00077 : 0.0022) * yMultiplier;
+      yaw -= e.movementX * xSens;
+      pitch = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch - e.movementY * ySens));
     });
 
     window.addEventListener('keydown', (e) => {
+      if (keyBindCaptureTarget) {
+        e.preventDefault();
+        if (e.code === 'Escape') {
+          finishKeyBindCapture();
+          refreshControlSettingsUI();
+          setControlSettingsStatus('キー設定をキャンセルしました。');
+        } else if (!e.repeat) {
+          assignControlKey(e.code);
+        }
+        return;
+      }
+
       if (e.code === 'Escape') {
         if (isGameStarted) handleEscKey();
         return;
       }
 
       keys[e.code] = true;
-      if (e.code === 'KeyE' && isLocked && !isDead) {
+      if (e.code === controlSettings.ultKey && isLocked && !isDead) {
         if (selectedUltType === 'highjump' && canSlam && !isGrounded && velocityY < 0) {
           executeHighJumpSlam();
           return;
@@ -5942,7 +6267,15 @@
     });
 
     window.addEventListener('keyup', (e) => {
+      const wasJumpKey = (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight');
       keys[e.code] = false;
+      if (controlSettings.variableJump && wasJumpKey && !isGrounded && velocityY > 0) {
+        const gearJumpMult = getGearPctMultiplier('jumpPct');
+        let shortJumpCap = 10 * gearJumpMult;
+        if (curseDebuffTimer > 0) shortJumpCap = 7 * gearJumpMult;
+        if (beamFiring) shortJumpCap = 5 * gearJumpMult;
+        velocityY = Math.min(velocityY, shortJumpCap * 0.45);
+      }
       if (e.code === 'Digit0') {
         if (zeroKeyHoldTimer) { clearTimeout(zeroKeyHoldTimer); zeroKeyHoldTimer = null; }
         hideSetCommentOverlay();
@@ -6964,9 +7297,9 @@
       if (isLocked && !isDead) {
         const isLeftHolding = (mouseButtonsState & 1) && (Date.now() - leftDownTime >= 170);
         const isRightActive = (mouseButtonsState & 2) !== 0;
-        const isFActive = !!keys['KeyF'];
+        const isGuardActive = !!keys[controlSettings.guardKey];
 
-        isGuarding = (isLeftHolding || isRightActive || isFActive) && !isOverheated && myMp > 0 && !beamFiring && (stunTimer <= 0);
+        isGuarding = (isLeftHolding || isRightActive || isGuardActive) && !isOverheated && myMp > 0 && !beamFiring && (stunTimer <= 0);
         myShield.visible = isGuarding;
 
         if (superMagicTimer <= 0) {
@@ -7008,10 +7341,12 @@
         const moveVec = new THREE.Vector3();
 
         if (stunTimer <= 0) {
-          if (keys['KeyW']) moveVec.add(forward);
-          if (keys['KeyS']) moveVec.sub(forward);
-          if (keys['KeyD']) moveVec.add(right);
-          if (keys['KeyA']) moveVec.sub(right);
+          const moveKeys = getMovementKeyCodes();
+          const forwardKey = moveKeys[0], backKey = moveKeys[1], rightKey = moveKeys[2], leftKey = moveKeys[3];
+          if (keys[forwardKey]) moveVec.add(forward);
+          if (keys[backKey]) moveVec.sub(forward);
+          if (keys[rightKey]) moveVec.add(right);
+          if (keys[leftKey]) moveVec.sub(right);
         }
 
         if (moveVec.lengthSq() > 0) {
