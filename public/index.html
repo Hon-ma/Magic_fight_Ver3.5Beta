@@ -6573,12 +6573,17 @@
       const camDir = new THREE.Vector3();
       camera.getWorldDirection(camDir);
 
+      // クイックワープは「視界内に見えている敵」が対象。
+      // 透明化中の敵は見えないためターゲット候補から除外する。
+      // （ただし通常攻撃などの当たり判定は別処理なので、透明化中でも有効。）
       const candidates = (currentStage === 'training')
         ? dummies.map(d => ({ group: d.mesh, hasPos: true, dummyRef: d }))
-        : Object.entries(remotePlayers).filter(([_, rp]) => rp.group.visible && rp.hasPos && !rp.isInvisible && !rp.isDead).map(([pid, rp]) => ({ group: rp.group, hasPos: true, peerId: pid, playerRef: rp }));
+        : Object.entries(remotePlayers)
+            .filter(([_, remote]) => remote.hasPos && !remote.isDead && !remote.isInvisible)
+            .map(([pid, remote]) => ({ group: remote.group, hasPos: true, peerId: pid, playerRef: remote }));
 
       candidates.forEach(rp => {
-        if (!rp.group.visible || !rp.hasPos) return;
+        if (!rp.hasPos || (rp.playerRef && (rp.playerRef.isDead || rp.playerRef.isInvisible))) return;
         const enemyCenter = rp.group.position.clone().add(new THREE.Vector3(0, 1.2, 0));
         const toEnemy = enemyCenter.clone().sub(camera.position);
         const d = toEnemy.length();
@@ -6743,8 +6748,9 @@
           createExplosion(d.mesh.position, isEx ? 0xff007f : 0xf1c40f, isEx);
         });
       } else {
+        // 透明化中でも被弾判定は有効。visibleではなく位置情報・死亡状態だけを見る。
         Object.values(remotePlayers).forEach(rp => {
-          if (!rp.group.visible || !rp.hasPos || rp.isDead) return;
+          if (!rp.hasPos || rp.isDead) return;
           if (isEx || !rp.isGrounded) hitAirCount++;
           else hitGroundCount++;
         });
@@ -6762,7 +6768,7 @@
           });
         } else {
           Object.values(remotePlayers).forEach(rp => {
-            if (!rp.group.visible || !rp.hasPos || rp.isDead) return;
+            if (!rp.hasPos || rp.isDead) return;
             if (isEx) totalDmgDealt += 33;
             else totalDmgDealt += (rp.isGrounded ? 10 : 33);
           });
@@ -6804,8 +6810,9 @@
           }
         });
       } else {
+        // 透明化中でも範囲内なら命中する。
         Object.entries(remotePlayers).forEach(([pid, rp]) => {
-          if (!rp.group.visible || !rp.hasPos || rp.isDead) return;
+          if (!rp.hasPos || rp.isDead) return;
           const ePos = rp.group.position.clone().add(new THREE.Vector3(0, 0.9, 0));
           if (centerPos.distanceTo(ePos) <= curseRadius) {
             broadcastMsg({ type: 'ult_curse_hit', targetId: pid, isEx });
@@ -6853,9 +6860,10 @@
       const raycaster = new THREE.Raycaster(beamOrigin, beamDir, 0.1, 65);
       const hits = raycaster.intersectObjects(obstacleMeshes);
 
+      // 透明化は視認性だけを変える。ビームの当たり判定は維持する。
       const targets = (currentStage === 'training')
         ? dummies.map(d => ({ mesh: d.mesh, dummyRef: d }))
-        : Object.entries(remotePlayers).filter(([_, rp]) => rp.group.visible && rp.hasPos && !rp.isDead).map(([pid, rp]) => ({ mesh: rp.group, peerId: pid, rpRef: rp }));
+        : Object.entries(remotePlayers).filter(([_, rp]) => rp.hasPos && !rp.isDead).map(([pid, rp]) => ({ mesh: rp.group, peerId: pid, rpRef: rp }));
 
       targets.forEach(t => {
         const enemyCenter = t.mesh.position.clone().add(new THREE.Vector3(0, 0.9, 0));
@@ -7649,8 +7657,9 @@
 
         // 3. マルチプレイでの相手プレイヤーへの直撃判定
         if (!collided && s.isMine && currentStage !== 'training') {
+          // 透明化中も通常弾の物理的なヒットボックスは有効。
           for (const [pid, rp] of Object.entries(remotePlayers)) {
-            if (!rp.group.visible || !rp.hasPos || rp.isDead) continue;
+            if (!rp.hasPos || rp.isDead) continue;
             const eCenter = rp.group.position.clone().add(new THREE.Vector3(0, 0.85, 0));
             const hitR = 1.35 * s.scale;
             const { distSq, hitPoint } = distToSegmentSquared(eCenter, prevPos, nextPos);
