@@ -1,4 +1,4 @@
-// 3D Magic FPS Duel - Ver6
+// 3D Magic FPS Duel - Ver9.5
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -22,6 +22,37 @@ const RATE_MATCH_MEMBERS = 2; // レート戦は完全1vs1
 const DISCONNECT_PENALTY = 10;
 
 // ================================================================
+// --- Ver9.5: イベントマッチ設定 ---
+// 制限時間内にEM(イベント・マナ)を最も多く集めた人の勝ち。最大4人・途中参加不可。
+// ================================================================
+const EVENT_MAX_MEMBERS = 4;
+const EVENT_MIN_START_MEMBERS = 2;          // 開始に必要な最低人数（1人では開始できない）
+const EVENT_COUNTDOWN_MS = 3000;            // 開始ボタン押下→実戦開始までのカウントダウン
+const EVENT_DURATIONS_SEC = [180, 240, 300]; // 3分/4分/5分からランダム
+// 抽選重み。仕様書の確率(23%x5 + 8% = 123%)は合計100%にならないため、重みとして扱い正規化して抽選する。
+const EVENT_DEFS = [
+  { id: 'oneshot', name: '一撃必殺',   weight: 23 },
+  { id: 'ult200',  name: '200%',       weight: 23 },
+  { id: 'slow',    name: 'ゆっくり',   weight: 23 },
+  { id: 'unify',   name: '統一',       weight: 23 },
+  { id: 'blind',   name: 'ブラインド', weight: 23 },
+  { id: 'fever',   name: 'フィーバー', weight: 8 }
+];
+const EVENT_FEVER_MULT = 7;
+// EM球: 大/中/小 = 50/20/5EM、出現確率 15/35/50%
+const EM_ORB_TYPES = [
+  { size: 'large',  value: 50, weight: 15 },
+  { size: 'medium', value: 20, weight: 35 },
+  { size: 'small',  value: 5,  weight: 50 }
+];
+const EM_SPAWN_INTERVAL_MS = 2500;  // 自動出現の間隔
+const EM_MAX_FIELD_ORBS = 12;       // 場に同時に存在できる自動出現球の上限（ドロップ球は対象外）
+const EM_CLAIM_MIN_INTERVAL_MS = 40; // 同一プレイヤーの回収申請の最短間隔（簡易チート/連打対策）
+const EM_INITIAL_ORBS = 6;          // 試合開始時にまとめて出す数
+// 順位倍率（最下位は人数に関わらず1.0倍）
+const EVENT_RANK_MULT = [1.2, 1.15, 1.1];
+
+// ================================================================
 // --- コイン経済 設定（Phase1）---
 // 金額感は「叩き台の仮数値」。設計書(gear_power_design.md)の1-1節に準拠。
 // レート戦限定（フリーバトルはコイン対象外）で運用する。
@@ -33,7 +64,12 @@ const COIN_MAX_KILLS_FOR_BONUS = RATE_KILLS_TO_WIN; // 1試合あたりのキル
 const COIN_EX_ULT_BONUS = 100; // EX ULTを1回でも発動した試合につき1回だけ加算
 const COIN_DISCONNECT_PENALTY_OVERRIDE = 0; // 切断による反則負けは戦績に関わらずコイン0
 
-const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
+// public/index.html を優先し、無ければ同階層の index.html を使う（zip直下に置いたままでも起動できる）
+const INDEX_HTML = (() => {
+  const candidates = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname, 'index.html')];
+  for (const f of candidates) { if (fs.existsSync(f)) return fs.readFileSync(f); }
+  throw new Error('index.html が見つかりません（public/index.html か ./index.html を置いてください）');
+})();
 
 // ================================================================
 // --- Ver5: プレイヤープロフィール永続化ストア ---
@@ -608,6 +644,16 @@ function getOrCreateRoom(roomName) {
       hostId: null,
       mode: 'free',
       matchActive: false,
+      // Ver9.5 イベントマッチ用状態: 'lobby' | 'countdown' | 'playing' | 'finished'
+      eventState: 'lobby',
+      eventId: null,
+      eventDurationSec: 0,
+      eventStartAt: 0,
+      eventOrbs: new Map(),
+      eventOrbSeq: 0,
+      eventTimer: null,
+      eventSpawnTimer: null,
+      eventStartTimer: null,
       rateResultActive: false,
       rematchRequests: new Set(),
       members: new Map()
@@ -639,6 +685,7 @@ function roomInfoPayload(room) {
   return {
     stage: room.stage,
     mode: room.mode,
+    eventState: room.mode === 'event' ? room.eventState : undefined,
     players: Array.from(room.members.values()).map(m => ({
       name: m.name,
       rate: m.rate,
@@ -794,6 +841,147 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
   }
 }
 
+// ================================================================
+// --- Ver9.5: イベントマッチ エンジン ---
+// ================================================================
+function pickWeighted(list) {
+  const total = list.reduce((a, b) => a + b.weight, 0);
+  let r = Math.random() * total;
+  for (const item of list) {
+    r -= item.weight;
+    if (r < 0) return item;
+  }
+  return list[list.length - 1];
+}
+
+function clampCoord(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-500, Math.min(500, n));
+}
+
+function eventScores(room) {
+  const scores = {};
+  for (const [id, m] of room.members) scores[id] = m.em || 0;
+  return scores;
+}
+
+function broadcastEventLobby(roomName) {
+  const room = rooms.get(roomName);
+  if (!room) return;
+  broadcastToRoom(roomName, {
+    type: '__event_lobby',
+    hostId: room.hostId,
+    capacity: EVENT_MAX_MEMBERS,
+    minStart: EVENT_MIN_START_MEMBERS,
+    players: Array.from(room.members.entries()).map(([id, m]) => ({ id, name: m.name }))
+  });
+}
+
+function clearEventTimers(room) {
+  if (room.eventTimer) { clearTimeout(room.eventTimer); room.eventTimer = null; }
+  if (room.eventSpawnTimer) { clearInterval(room.eventSpawnTimer); room.eventSpawnTimer = null; }
+  if (room.eventStartTimer) { clearTimeout(room.eventStartTimer); room.eventStartTimer = null; }
+}
+
+// EM球の自動出現。座標はサーバーがステージ形状を知らないため「slot(乱数)」だけ送り、
+// クライアント側がステージの球出現候補地点へ slot % 候補数 で対応付ける。
+function spawnFieldOrb(roomName) {
+  const room = rooms.get(roomName);
+  if (!room || room.eventState !== 'playing') return;
+  let fieldCount = 0;
+  for (const o of room.eventOrbs.values()) if (!o.isDrop) fieldCount++;
+  if (fieldCount >= EM_MAX_FIELD_ORBS) return;
+
+  const t = pickWeighted(EM_ORB_TYPES);
+  const feverMult = (room.eventId === 'fever') ? EVENT_FEVER_MULT : 1;
+  const orb = {
+    id: 'o' + (++room.eventOrbSeq),
+    size: t.size,
+    value: t.value * feverMult,
+    slot: Math.floor(Math.random() * 1000000),
+    isDrop: false
+  };
+  room.eventOrbs.set(orb.id, orb);
+  broadcastToRoom(roomName, { type: '__em_spawn', orb });
+}
+
+function startEventMatch(roomName) {
+  const room = rooms.get(roomName);
+  if (!room) return;
+  clearEventTimers(room);
+
+  const ev = pickWeighted(EVENT_DEFS);
+  const durationSec = EVENT_DURATIONS_SEC[Math.floor(Math.random() * EVENT_DURATIONS_SEC.length)];
+  room.eventId = ev.id;
+  room.eventDurationSec = durationSec;
+  room.eventState = 'countdown';
+  room.matchActive = true;
+  room.eventOrbs.clear();
+  room.eventOrbSeq = 0;
+  for (const m of room.members.values()) { m.em = 0; m.kills = 0; m.deaths = 0; }
+
+  const startAt = Date.now() + EVENT_COUNTDOWN_MS;
+  room.eventStartAt = startAt;
+
+  broadcastToRoom(roomName, {
+    type: '__event_start',
+    eventId: ev.id,
+    eventName: ev.name,
+    durationSec,
+    startAt,                                   // サーバー時刻(ms)。クライアントは serverTimeOffset で補正して使う
+    countdownMs: EVENT_COUNTDOWN_MS,
+    unifySeed: Math.floor(Math.random() * 2147483647), // 「統一」用: 全員が同じシードから同じ装備を選ぶ
+    feverMult: ev.id === 'fever' ? EVENT_FEVER_MULT : 1,
+    players: Array.from(room.members.entries()).map(([id, m]) => ({ id, name: m.name }))
+  });
+
+  room.eventStartTimer = setTimeout(() => {
+    room.eventStartTimer = null;
+    if (!rooms.has(roomName) || room.eventState !== 'countdown') return;
+    room.eventState = 'playing';
+    for (let i = 0; i < EM_INITIAL_ORBS; i++) spawnFieldOrb(roomName);
+    room.eventSpawnTimer = setInterval(() => spawnFieldOrb(roomName), EM_SPAWN_INTERVAL_MS);
+    room.eventTimer = setTimeout(() => endEventMatch(roomName, false), durationSec * 1000);
+  }, EVENT_COUNTDOWN_MS);
+}
+
+// 順位計算: EM降順。同点は同順位。最下位(最小EMと同値)は人数にかかわらず1.0倍。
+function computeEventResults(room) {
+  const entries = Array.from(room.members.entries()).map(([id, m]) => ({ id, name: m.name, em: m.em || 0, kills: m.kills || 0, deaths: m.deaths || 0 }));
+  entries.sort((a, b) => b.em - a.em);
+  const minEm = entries.length ? entries[entries.length - 1].em : 0;
+  let rank = 0;
+  let prevEm = null;
+  entries.forEach((e, i) => {
+    if (prevEm === null || e.em !== prevEm) rank = i + 1;
+    prevEm = e.em;
+    e.rank = rank;
+    const isLast = (e.em === minEm);
+    e.multiplier = isLast ? 1.0 : (EVENT_RANK_MULT[rank - 1] || 1.0);
+    e.finalEm = Math.round(e.em * e.multiplier); // 小数点四捨五入
+    e.isWinner = (rank === 1);
+  });
+  return entries;
+}
+
+function endEventMatch(roomName, early) {
+  const room = rooms.get(roomName);
+  if (!room || (room.eventState !== 'playing' && room.eventState !== 'countdown')) return;
+  clearEventTimers(room);
+  room.eventState = 'finished';
+  room.matchActive = false;
+  room.eventOrbs.clear();
+  const results = computeEventResults(room);
+  broadcastToRoom(roomName, {
+    type: '__event_result',
+    eventId: room.eventId,
+    early: !!early,
+    results
+  });
+  // TODO(Ver9.5以降): finalEm のコイン換算などの報酬はここで付与する（仕様未確定のため未実装）
+}
+
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(INDEX_HTML);
@@ -854,6 +1042,22 @@ wss.on('connection', (socket) => {
     }
 
     broadcastToRoom(roomName, { type: '__left', id: leavingId, count: room.members.size }, leavingId);
+
+    // Ver9.5: イベントマッチの退出処理
+    if (room.mode === 'event') {
+      if (room.members.size === 0) {
+        clearEventTimers(room);
+      } else if (room.eventState === 'lobby') {
+        broadcastEventLobby(roomName);
+      } else if ((room.eventState === 'playing' || room.eventState === 'countdown') && room.members.size < EVENT_MIN_START_MEMBERS) {
+        // 1人だけ残った場合は試合不成立にせず、残った人の勝ちとして早期終了する
+        endEventMatch(roomName, true);
+      } else if (room.eventState === 'playing') {
+        // 退出者をスコアボードから消すため、最新スコアを再送する
+        broadcastToRoom(roomName, { type: '__event_scores', scores: eventScores(room) });
+      }
+    }
+
     if (room.members.size === 0) rooms.delete(roomName);
 
     // Prevent the close event from performing the cleanup twice.
@@ -1356,7 +1560,15 @@ wss.on('connection', (socket) => {
         return;
       }
 
-      const memberCap = (room.mode === 'rate') ? RATE_MATCH_MEMBERS : MAX_MEMBERS_PER_ROOM;
+      // Ver9.5: イベントマッチは途中参加不可（待機中のみ入室できる）
+      if (!data.isHost && room.mode === 'event' && room.eventState !== 'lobby') {
+        socket.send(JSON.stringify({ type: '__event_in_progress' }));
+        socket.close();
+        return;
+      }
+
+      const memberCap = (room.mode === 'rate') ? RATE_MATCH_MEMBERS
+        : (room.mode === 'event' ? EVENT_MAX_MEMBERS : MAX_MEMBERS_PER_ROOM);
       if (room.members.size >= memberCap) {
         socket.send(JSON.stringify({ type: '__room_full' }));
         socket.close();
@@ -1376,11 +1588,12 @@ wss.on('connection', (socket) => {
         // ホストの瞬断からの再接続で room.hostId が null になっていた場合に
         // 進行中のレート戦や確定済みのモードを誤って上書きしないため。
         if (isRoomNew) {
-          room.mode = (data.mode === 'rate') ? 'rate' : 'free';
+          room.mode = (data.mode === 'rate') ? 'rate' : (data.mode === 'event' ? 'event' : 'free');
           // 修正: レート戦は対戦相手が揃うまで matchActive にしない
           // （揃うタイミングは下のメンバー登録後に別途判定する）。
           // フリーバトルは従来通りホスト参加時点でアクティブ扱いにする。
-          room.matchActive = (room.mode !== 'rate');
+          // Ver9.5: イベントマッチは開始ボタンを押すまで matchActive にしない。
+          room.matchActive = (room.mode === 'free');
         }
       }
 
@@ -1435,6 +1648,10 @@ wss.on('connection', (socket) => {
 
       if (data.isHost && room.stage) {
         broadcastToRoom(roomName, { type: '__stage_update', stage: room.stage }, myId);
+      }
+      // Ver9.5: イベントマッチの待機画面（入室者名一覧）を全員へ更新
+      if (room.mode === 'event' && room.eventState === 'lobby') {
+        broadcastEventLobby(roomName);
       }
       return;
     }
@@ -1597,6 +1814,50 @@ wss.on('connection', (socket) => {
       return;
     }
 
+    // --- Ver9.5: イベントマッチ ---
+    if (data.type === '__event_start_request') {
+      if (room.mode !== 'event' || room.eventState !== 'lobby') return;
+      if (room.hostId !== myId) return; // ホストのみ
+      pruneDeadMembers(room);
+      if (room.members.size < EVENT_MIN_START_MEMBERS) {
+        socket.send(JSON.stringify({ type: '__event_start_denied', reason: 'not_enough_players', min: EVENT_MIN_START_MEMBERS }));
+        return;
+      }
+      startEventMatch(joinedRoom);
+      return;
+    }
+
+    if (data.type === '__em_pickup_claim') {
+      if (room.mode !== 'event' || room.eventState !== 'playing' || !currentMember) return;
+      const nowMs = Date.now();
+      if (currentMember.lastEmClaimAt && nowMs - currentMember.lastEmClaimAt < EM_CLAIM_MIN_INTERVAL_MS) return; // 連打対策
+      const orb = room.eventOrbs.get(String(data.orbId));
+      if (!orb) return; // 既に他の誰かが回収済み（早い者勝ち）
+      currentMember.lastEmClaimAt = nowMs;
+      room.eventOrbs.delete(orb.id);
+      currentMember.em = (currentMember.em || 0) + orb.value;
+      broadcastToRoom(joinedRoom, {
+        type: '__em_collected',
+        orbId: orb.id,
+        by: myId,
+        value: orb.value,
+        scores: eventScores(room)
+      });
+      return;
+    }
+
+    if (data.type === '__event_back_to_lobby') {
+      if (room.mode !== 'event' || room.eventState !== 'finished') return;
+      if (room.hostId !== myId) return;
+      for (const m of room.members.values()) { m.em = 0; m.kills = 0; m.deaths = 0; }
+      room.eventState = 'lobby';
+      room.matchActive = false;
+      room.eventId = null;
+      room.eventOrbs.clear();
+      broadcastEventLobby(joinedRoom);
+      return;
+    }
+
     // --- 撃破報告（レート戦のキル/デス集計＆勝敗判定） ---
     if (data.type === 'player_died') {
       if (room.mode === 'rate' && room.matchActive && currentMember) {
@@ -1612,6 +1873,34 @@ wss.on('connection', (socket) => {
 
         if (killerMember && killerMember.kills >= RATE_KILLS_TO_WIN) {
           finishRateMatch(joinedRoom, killerId);
+        }
+        return;
+      }
+
+      // Ver9.5: イベントマッチでは、倒された人の所持EMを全てその場に落とす
+      if (room.mode === 'event' && room.eventState === 'playing' && currentMember) {
+        currentMember.deaths += 1;
+        const killerId = data.killerId;
+        const killerMember = (killerId && killerId !== myId) ? room.members.get(killerId) : null;
+        if (killerMember) killerMember.kills += 1;
+
+        const lost = currentMember.em || 0;
+        currentMember.em = 0;
+        broadcastToRoom(joinedRoom, { ...data, senderId: myId }, myId);
+        if (lost > 0) {
+          const dropOrb = {
+            id: 'd' + (++room.eventOrbSeq),
+            size: 'drop',
+            value: lost,
+            x: clampCoord(data.x),
+            y: clampCoord(data.y),
+            z: clampCoord(data.z),
+            isDrop: true
+          };
+          room.eventOrbs.set(dropOrb.id, dropOrb);
+          broadcastToRoom(joinedRoom, { type: '__em_drop', orb: dropOrb, victimId: myId, killerId: killerId || null, scores: eventScores(room) });
+        } else {
+          broadcastToRoom(joinedRoom, { type: '__event_scores', scores: eventScores(room) });
         }
         return;
       }
