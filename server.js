@@ -28,7 +28,7 @@ const DISCONNECT_PENALTY = 10;
 const EVENT_MAX_MEMBERS = 4;
 const EVENT_MIN_START_MEMBERS = 2;          // 開始に必要な最低人数（1人では開始できない）
 const EVENT_COUNTDOWN_MS = 3000;            // 開始ボタン押下→実戦開始までのカウントダウン
-const EVENT_DURATIONS_SEC = [180, 240, 300]; // 3分/4分/5分からランダム
+const EVENT_DURATIONS_SEC = process.env.MF_TEST_EVENT_SEC ? [Number(process.env.MF_TEST_EVENT_SEC)] : [180, 240, 300]; // 3分/4分/5分からランダム（MF_TEST_EVENT_SECは試験用の上書き）
 // 抽選重み。仕様書の確率(23%x5 + 8% = 123%)は合計100%にならないため、重みとして扱い正規化して抽選する。
 const EVENT_DEFS = [
   { id: 'oneshot', name: '一撃必殺',   weight: 23 },
@@ -341,6 +341,7 @@ function defaultProfile(clientId) {
     // Phase2以降でショップ・ガチャ・ギア効果を順次実装していく。
     // ================================================================
     coins: 0,
+    em: 0,                          // Ver9.5: イベントマッチで獲得した最終EMの累計（所持EM）
     unlockedShots: [...INITIAL_SHOT_IDS],  // 買い切りで所持している通常弾ID一覧（初期は魔法弾のみ）
     unlockedUlts: [...INITIAL_ULT_IDS],    // 買い切りで所持しているULT ID一覧（初期はメガビームのみ）
     unlockedTactics: [],            // 買い切り/ガチャ直撃で所持している戦術タイプ（例: 'beam_A'）
@@ -486,6 +487,8 @@ function getOrCreateProfile(clientId) {
   // ================================================================
   if (typeof p.coins !== 'number' || !Number.isFinite(p.coins)) p.coins = 0;
   p.coins = Math.max(0, Math.floor(p.coins));
+  if (typeof p.em !== 'number' || !Number.isFinite(p.em)) p.em = 0;
+  p.em = Math.max(0, Math.floor(p.em));
 
   // 所持リストは「正規のIDのみ」「重複なし」「初期付与分を必ず含む」状態に正規化する。
   // 不正なIDが紛れ込んでもここで落とされるため、クライアント改竄の保険にもなる。
@@ -590,6 +593,7 @@ function publicProfilePayload(p) {
     setComments: p.setComments,
     // --- コイン経済・ショップ・ガチャ・ギアパワー（Phase0/1）---
     coins: p.coins,
+    em: p.em || 0,
     unlockedShots: p.unlockedShots,
     unlockedUlts: p.unlockedUlts,
     unlockedTactics: p.unlockedTactics,
@@ -979,7 +983,25 @@ function endEventMatch(roomName, early) {
     early: !!early,
     results
   });
-  // TODO(Ver9.5以降): finalEm のコイン換算などの報酬はここで付与する（仕様未確定のため未実装）
+  // 最終EM(順位倍率適用後)をプロフィールの所持EMへ加算する。
+  // 人数不足による早期終了（early）は、退出を利用した水増しを防ぐため付与しない。
+  if (!early) {
+    let changed = false;
+    for (const r of results) {
+      const m = room.members.get(r.id);
+      if (!m || !m.clientId || !(r.finalEm > 0)) continue;
+      const prof = getOrCreateProfile(m.clientId);
+      if (!prof) continue;
+      prof.em = Math.max(0, Math.floor((prof.em || 0) + r.finalEm));
+      prof.updatedAt = Date.now();
+      changed = true;
+      if (m.ws && m.ws.readyState === m.ws.OPEN) {
+        m.ws.send(JSON.stringify({ type: '__event_em_reward', gained: r.finalEm, total: prof.em }));
+      }
+    }
+    if (changed) scheduleProfileSave();
+  }
+  // TODO: EMの使い道（ショップ等）は仕様未確定。現状は所持EMの累積のみ。
 }
 
 const server = http.createServer((req, res) => {
