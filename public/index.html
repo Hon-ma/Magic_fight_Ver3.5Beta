@@ -4,8 +4,8 @@
   <!-- MagicFight control settings patch --> Ver8.8
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="game-version" content="Ver6">
-  <title>3D Magic Fight - Ver6</title>
+  <meta name="game-version" content="Ver9.5">
+  <title>3D Magic Fight - Ver9.5</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body { overflow: hidden; background: #0a0c10; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -127,6 +127,35 @@
     .log-item.upgrade { border-color: #a29bfe; }
     @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
+
+    /* ===== Ver9.5 イベントマッチ ===== */
+    #event-lobby-overlay, #event-result-overlay { position: fixed; inset: 0; display: none; z-index: 9000; align-items: center; justify-content: center; background: rgba(8,10,20,0.88); color: #fff; font-family: inherit; }
+    .em-box { width: min(480px, 92vw); background: rgba(30,34,52,0.97); border: 2px solid #f1c40f; border-radius: 14px; padding: 22px 24px; text-align: center; box-shadow: 0 0 30px rgba(241,196,15,0.25); }
+    .em-box h2 { margin: 0 0 6px; font-size: 24px; color: #f1c40f; }
+    .em-sub { font-size: 12.5px; color: #b2bec3; margin-bottom: 14px; }
+    .em-slot { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; margin: 6px 0; border-radius: 8px; background: rgba(255,255,255,0.07); font-size: 15px; }
+    .em-slot.empty { opacity: 0.35; font-style: italic; }
+    .em-slot .em-host { font-size: 11px; color: #f1c40f; border: 1px solid #f1c40f; border-radius: 6px; padding: 1px 6px; margin-left: 8px; }
+    .em-slot.me { border: 1px solid #00cec9; }
+    .em-btn { margin-top: 14px; padding: 11px 26px; font-size: 16px; font-weight: bold; border: none; border-radius: 9px; cursor: pointer; background: linear-gradient(#f1c40f,#e1a800); color: #222; }
+    .em-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .em-btn.back { background: #636e72; color: #fff; margin-left: 8px; }
+    #event-countdown { position: fixed; inset: 0; display: none; z-index: 8000; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; }
+    #event-countdown .big { font-size: 120px; font-weight: 900; color: #fff; text-shadow: 0 0 24px #f1c40f, 0 0 6px #000; }
+    #event-countdown .ev-name { font-size: 40px; font-weight: 900; color: #f1c40f; text-shadow: 0 0 14px #000; }
+    #event-countdown .ev-desc { font-size: 17px; color: #fff; text-shadow: 0 0 8px #000; margin-top: 6px; }
+    #event-hud { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); display: none; z-index: 7000; pointer-events: none; text-align: center; color: #fff; text-shadow: 0 0 6px #000; }
+    #event-hud .tag { display: inline-block; background: rgba(241,196,15,0.9); color: #222; font-weight: bold; font-size: 13px; padding: 2px 12px; border-radius: 10px; }
+    #event-hud .timer { font-size: 34px; font-weight: 900; line-height: 1.1; }
+    #event-hud .timer.low { color: #ff7675; }
+    #event-hud .mine { font-size: 20px; font-weight: bold; color: #81ecec; }
+    #event-hud .board { margin-top: 4px; font-size: 13px; background: rgba(0,0,0,0.45); border-radius: 8px; padding: 4px 12px; display: inline-block; text-align: left; min-width: 160px; }
+    #event-hud .board div { display: flex; justify-content: space-between; gap: 14px; }
+    #event-hud .board .me { color: #81ecec; font-weight: bold; }
+    #event-toast { position: fixed; top: 42%; left: 50%; transform: translate(-50%,-50%); z-index: 7500; font-size: 30px; font-weight: 900; color: #f1c40f; text-shadow: 0 0 10px #000; pointer-events: none; opacity: 0; transition: opacity .25s; }
+    .em-res-row { display: flex; justify-content: space-between; padding: 8px 12px; margin: 5px 0; border-radius: 8px; background: rgba(255,255,255,0.07); font-size: 14.5px; }
+    .em-res-row.first { background: rgba(241,196,15,0.22); border: 1px solid #f1c40f; }
+    .em-res-row.me { outline: 1px solid #00cec9; }
     #minimap-container {
       position: absolute; bottom: 20px; left: 20px;
       width: 125px; height: 125px; background: rgba(240, 235, 225, 0.95);
@@ -1235,6 +1264,35 @@
     </div>
   </div>
 
+  <div id="event-lobby-overlay">
+    <div class="em-box">
+      <h2>🌟 イベントマッチ 待機中</h2>
+      <div class="em-sub">合言葉: <b id="em-lobby-room"></b> ／ 制限時間内にEMを最も多く集めた人の勝ち（最大4人・途中参加不可）</div>
+      <div id="em-lobby-list"></div>
+      <div id="em-lobby-status" class="em-sub" style="margin-top:10px;"></div>
+      <button id="em-start-btn" class="em-btn" style="display:none;">▶ 試合開始</button>
+      <button id="em-lobby-leave" class="em-btn back">退出</button>
+    </div>
+  </div>
+  <div id="event-countdown"><div class="ev-name" id="em-cd-name"></div><div class="ev-desc" id="em-cd-desc"></div><div class="big" id="em-cd-num"></div></div>
+  <div id="event-hud">
+    <span class="tag" id="em-hud-tag">EVENT</span>
+    <div class="timer" id="em-hud-timer">0:00</div>
+    <div class="mine">EM <span id="em-hud-mine">0</span></div>
+    <div class="board" id="em-hud-board"></div>
+  </div>
+  <div id="event-toast"></div>
+  <div id="event-result-overlay">
+    <div class="em-box">
+      <h2 id="em-res-title">RESULT</h2>
+      <div class="em-sub" id="em-res-sub"></div>
+      <div id="em-res-list"></div>
+      <div id="em-res-note" class="em-sub" style="margin-top:8px;"></div>
+      <button id="em-res-lobby" class="em-btn" style="display:none;">待機画面へ戻る</button>
+      <button id="em-res-leave" class="em-btn back">退出（ロビーへ）</button>
+    </div>
+  </div>
+
   <div id="battle-log"></div>
 
   <div id="ui">
@@ -1326,6 +1384,10 @@
           <div class="battle-mode-card" data-mode="free">
             <div class="title">🎮 フリーバトル</div>
             <div class="desc">キル数・制限なしの、今まで通りの自由対戦。</div>
+          </div>
+          <div class="battle-mode-card" data-mode="event">
+            <div class="title">🌟 イベントマッチ</div>
+            <div class="desc">制限時間内にEMを一番多く集めた人の勝ち。最大4人・途中参加不可。</div>
           </div>
         </div>
       </div>
@@ -4052,7 +4114,7 @@
     let playerName = "魔導士A";
     let myHp = 100;
     let myMp = 100;
-    function getMaxHp() { return 100 + getGearBonusTotal('maxHp'); }
+    function getMaxHp() { if (window.EventMatch && EventMatch.oneShot()) return 1; return 100 + getGearBonusTotal('maxHp'); }
     function getMaxMp() { return 100 + getGearBonusTotal('maxMp'); }
     let ultPercent = 0.0;
     let isOverheated = false;
@@ -4130,6 +4192,11 @@
       if (ultPercent >= 100.0 && selectedUltType === 'warp' && warpExpireTimer <= 0) {
         const warpDur = (selectedUltSubtype === 'A') ? 6.0 : 3.0;
         warpExpireTimer = warpDur;
+      }
+
+      // Ver9.5 イベント「200%」: ULTが100%以上になったら即座に200%まで溜まる
+      if (window.EventMatch && EventMatch.ult200() && ultPercent >= 100.0 && maxCap >= 200.0) {
+        ultPercent = 200.0;
       }
 
       if (prevUlt < 200.0 && ultPercent >= 200.0) {
@@ -5245,22 +5312,28 @@
         if (!data.exists) {
           renderRoomPreview('<span class="rp-empty">この合言葉の部屋はまだ存在しません（ホスト待ち、または存在しない部屋です）</span>');
         } else {
-          const modeLabel = data.mode === 'rate' ? 'レート戦' : 'フリーバトル';
-          const modeClass = data.mode === 'rate' ? 'rate' : 'free';
+          let modeLabel = data.mode === 'rate' ? 'レート戦' : 'フリーバトル';
+          let modeClass = data.mode === 'rate' ? 'rate' : 'free';
+          if (data.mode === 'event') {
+            // Ver9.5: イベントマッチ（待機中のみ参加可・最大4人）
+            const inLobby = (data.eventState === 'lobby');
+            modeLabel = inLobby ? '🌟イベントマッチ（参加受付中）' : '🌟イベントマッチ（開始済み・参加不可）';
+            modeClass = 'rate';
+          }
           const stageNames = { temple: '神殿 (Temple)', cave: '洞窟 (Cave)', arena: '闘技場 (Arena)' };
           const stageLabel = stageNames[data.stage] || (data.stage || '未選択');
 
           let playersHtml = '<div class="rp-empty">参加者はいません</div>';
           if (data.players && data.players.length > 0) {
             playersHtml = '<div class="rp-player-list">' + data.players.map(p =>
-              `<div class="rp-player"><span>${escapeHtml(p.name)}</span><span class="rp-rate">Rate ${p.rate}${data.mode === 'rate' ? ` (${p.kills}K / ${p.deaths}D)` : ''}</span></div>`
+              `<div class="rp-player"><span>${escapeHtml(p.name)}</span><span class="rp-rate">${data.mode === 'event' ? '' : `Rate ${p.rate}`}${data.mode === 'rate' ? ` (${p.kills}K / ${p.deaths}D)` : ''}</span></div>`
             ).join('') + '</div>';
           }
 
           renderRoomPreview(
             `<div class="rp-row"><span>ステージ</span><b>${stageLabel}</b></div>` +
             `<div class="rp-row"><span>モード</span><span class="rp-mode-tag ${modeClass}">${modeLabel}</span></div>` +
-            `<div class="rp-row"><span>参加人数</span><b>${data.players ? data.players.length : 0}人</b></div>` +
+            `<div class="rp-row"><span>参加人数</span><b>${data.players ? data.players.length : 0}人${data.mode === 'event' ? ' / 4人' : ''}</b></div>` +
             playersHtml
           );
         }
@@ -5346,6 +5419,9 @@
         let data;
         try { data = JSON.parse(event.data); } catch (e) { return; }
 
+        // Ver9.5: イベントマッチ関連メッセージは EventMatch モジュールへ委譲（消費したら return）
+        if (window.EventMatch && EventMatch.handle(data)) return;
+
         if (data.type === '__pong') {
           const now = Date.now();
           const rtt = now - data.clientTime;
@@ -5368,7 +5444,7 @@
           myDeaths = 0;
           updateRateHud();
           if (isHost) {
-            const modeLabel = isRateMatch ? 'レート戦' : 'フリーバトル';
+            const modeLabel = isRateMatch ? 'レート戦' : (data.mode === 'event' ? 'イベントマッチ' : 'フリーバトル');
             const capacityLabel = isRateMatch ? '最大2人' : '最大4人';
             document.getElementById('info').innerText = `ホストとして待機中... (${capacityLabel}) [${modeLabel}]`;
             setNetStatus('参加者を待っています…（合言葉を友達に伝えてください）');
@@ -5376,7 +5452,7 @@
             resetSpawn(true);
             addBattleLog(`部屋作成完了: [${currentRoomId}] ステージ: ${currentStage.toUpperCase()} / モード: ${modeLabel}`);
           } else {
-            const modeLabel = isRateMatch ? 'レート戦' : 'フリーバトル';
+            const modeLabel = isRateMatch ? 'レート戦' : (data.mode === 'event' ? 'イベントマッチ' : 'フリーバトル');
             document.getElementById('info').innerText = `戦闘中 [${modeLabel}]`;
             setNetStatus('ホストに接続しました ✓');
             const targetStage = data.stage || 'temple';
@@ -5810,6 +5886,7 @@
     }
 
     function applyDamage(amount, attackerId, isCrit = false, isReflect = false, isNormalBullet = false) {
+      if (window.EventMatch && EventMatch.inputBlocked()) return; // Ver9.5: 待機/カウントダウン/結果中は被弾しない
       if (myHp <= 0 || isDead || respawnInvincibleTimer > 0) return;
       if (isRateMatchOver) {
         // 診断ログ: 「ダメージを一切受けなくなる」症状の切り分け用。
@@ -5953,6 +6030,7 @@
     }
 
     function leaveGame() {
+      if (window.EventMatch) EventMatch.reset();
       isGameStarted = false;
       releasePointerLock();
       clearInputs();
@@ -6203,7 +6281,7 @@
     document.addEventListener('pointerlockchange', () => {
       isLocked = document.pointerLockElement === document.body;
       if (!isLocked) clearInputs();
-      document.getElementById('resume-overlay').style.display = (!isLocked && isGameStarted && !isDead) ? 'flex' : 'none';
+      document.getElementById('resume-overlay').style.display = (!isLocked && isGameStarted && !isDead && !(window.EventMatch && EventMatch.blocksResume())) ? 'flex' : 'none';
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -6270,7 +6348,7 @@
       const wasJumpKey = (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight');
       keys[e.code] = false;
       if (controlSettings.variableJump && wasJumpKey && !isGrounded && velocityY > 0) {
-        const gearJumpMult = getGearPctMultiplier('jumpPct');
+        const gearJumpMult = getGearPctMultiplier('jumpPct') * (window.EventMatch ? EventMatch.jumpMult() : 1);
         let shortJumpCap = 10 * gearJumpMult;
         if (curseDebuffTimer > 0) shortJumpCap = 7 * gearJumpMult;
         if (beamFiring) shortJumpCap = 5 * gearJumpMult;
@@ -6283,6 +6361,7 @@
     });
 
     window.addEventListener('mousedown', (e) => {
+      if (window.EventMatch && EventMatch.inputBlocked()) return; // Ver9.5
       if (!isLocked || isDead) return;
       mouseButtonsState = e.buttons;
       if (e.button === 0) leftDownTime = Date.now();
@@ -6944,6 +7023,9 @@
         });
       }
 
+      // Ver9.5: イベントマッチのEM球をミニマップへ表示（ブラインド時はコンテナごと非表示）
+      if (window.EventMatch) EventMatch.drawMinimap(mapCtx, mapScale, halfSize);
+
       if (invisibilityTimer <= 0) {
         const px = (playerPos.x + halfSize) * mapScale;
         const pz = (playerPos.z + halfSize) * mapScale;
@@ -7360,7 +7442,7 @@
         if (moveVec.lengthSq() > 0) {
           moveVec.normalize();
           // Phase5: gear03（移動速度）・gear13（ガード低速緩和）・gear15/16（発動時の速度バフ）を反映
-          const gearMoveMult = getGearPctMultiplier('moveSpeedPct', specialGearOffenseSpeedPct());
+          const gearMoveMult = getGearPctMultiplier('moveSpeedPct', specialGearOffenseSpeedPct()) * (window.EventMatch ? EventMatch.moveMult() : 1);
           let speed = 11 * gearMoveMult;
           if (isGuarding) {
             // 素のガード速度低下は 11→5.5（5.5低下）。gear13はこの低下幅そのものを軽減する。
@@ -7395,7 +7477,7 @@
         const isJumpHeld = !!(keys['Space'] || keys['ShiftLeft'] || keys['ShiftRight']);
         if (isJumpHeld && isGrounded && stunTimer <= 0) {
           // Phase5: gear05（跳躍力）を反映
-          const gearJumpMult = getGearPctMultiplier('jumpPct');
+          const gearJumpMult = getGearPctMultiplier('jumpPct') * (window.EventMatch ? EventMatch.jumpMult() : 1);
           let jPower = 10 * gearJumpMult;
           if (curseDebuffTimer > 0) jPower = 7 * gearJumpMult;
           if (beamFiring) jPower = 5 * gearJumpMult;
@@ -7776,6 +7858,7 @@
         }
       }
 
+      if (window.EventMatch) EventMatch.update(delta);
       renderer.render(scene, camera);
     }
 
@@ -7792,6 +7875,444 @@
     // Ver5: ページ読み込み時点で自分のプロフィール（セットコメント・戦績・ギア等）を先読みしておく
     requestMyProfile();
     animate();
+  </script>
+  <script id="event-match-module">
+    // ================================================================
+    // Ver9.5: イベントマッチ クライアントモジュール
+    // メイン<script>のグローバル変数・関数(scene, playerPos, colliders, sendToServer 等)を参照する。
+    // メイン側からは window.EventMatch.* を呼ぶ（handle/update/reset/moveMult/jumpMult/oneShot/ult200/inputBlocked/blocksResume）。
+    // ================================================================
+    window.EventMatch = (function () {
+      const NAMES = { oneshot: '一撃必殺', ult200: '200%', slow: 'ゆっくり', unify: '統一', blind: 'ブラインド', fever: 'フィーバー' };
+      const DESCS = {
+        oneshot: '全員の最大HPが1になる！ 1発でも当たれば即ダウン！',
+        ult200: 'ULTが100%以上になると即座に200%まで溜まる！',
+        slow: '移動速度・ジャンプ力が0.6倍になる…！',
+        unify: '通常弾・ULT・戦術・ギアが全員同じ構成に統一される！',
+        blind: 'ミニマップ非表示＋壁越しにネームタグが見えない！',
+        fever: '🔥 フィーバー！ 出現するEMが7倍！！'
+      };
+      const $ = (id) => document.getElementById(id);
+
+      let state = 'off';            // off | lobby | countdown | playing | finished
+      let eventId = null, hostId = null, players = [], scores = {};
+      let endLocal = 0, cdEndLocal = 0, durationSec = 0;
+      let unified = null, backup = null;
+      const orbs = new Map();       // orbId -> { data, group, baseY, phase, pendingUntil }
+      let spotsKey = '', spots = [];
+      let toastTimer = null, lastResumeCheck = 0;
+
+      function amHost() { return !!(isHost || (hostId && myPeerId === hostId)); }
+      function nameOf(id) { const p = players.find(x => x.id === id); return p ? p.name : '???'; }
+
+      function toast(text) {
+        const el = $('event-toast');
+        el.innerText = text; el.style.opacity = '1';
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 1100);
+      }
+
+      // ---------- ロビー ----------
+      function showLobby() {
+        releasePointerLock();
+        clearInputs();
+        $('event-result-overlay').style.display = 'none';
+        $('event-countdown').style.display = 'none';
+        $('event-hud').style.display = 'none';
+        $('em-lobby-room').innerText = (typeof currentRoomId !== 'undefined' && currentRoomId) ? currentRoomId : '';
+        $('event-lobby-overlay').style.display = 'flex';
+      }
+
+      function renderLobby() {
+        const list = $('em-lobby-list');
+        list.innerHTML = '';
+        for (let i = 0; i < 4; i++) {
+          const p = players[i];
+          const div = document.createElement('div');
+          div.className = 'em-slot' + (p ? '' : ' empty') + (p && p.id === myPeerId ? ' me' : '');
+          if (p) {
+            const nm = document.createElement('span');
+            nm.textContent = p.name;
+            if (p.id === hostId) { const h = document.createElement('span'); h.className = 'em-host'; h.textContent = 'HOST'; nm.appendChild(h); }
+            div.appendChild(nm);
+            const r = document.createElement('span'); r.textContent = p.id === myPeerId ? 'あなた' : '参加中'; div.appendChild(r);
+          } else {
+            div.textContent = '（空き）';
+          }
+          list.appendChild(div);
+        }
+        const startBtn = $('em-start-btn');
+        const host = amHost();
+        startBtn.style.display = host ? 'inline-block' : 'none';
+        startBtn.disabled = players.length < 2;
+        $('em-lobby-status').innerText = host
+          ? (players.length < 2 ? '2人以上で開始できます。合言葉を友達に伝えてください。' : `${players.length}人が揃っています。準備ができたら試合開始！`)
+          : 'ホストが試合を開始するのを待っています…';
+      }
+
+      function onLobby(data) {
+        hostId = data.hostId;
+        players = data.players || [];
+        if (state === 'finished' || state === 'playing' || state === 'countdown') cleanupMatch(true); // 待機画面へ戻る
+        state = 'lobby';
+        showLobby();
+        renderLobby();
+      }
+
+      // ---------- 試合開始 ----------
+      function mulberry32(a) {
+        return function () {
+          a |= 0; a = a + 0x6D2B79F5 | 0;
+          let t = Math.imul(a ^ a >>> 15, 1 | a);
+          t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+      }
+
+      function applyUnifiedSelection() {
+        if (!unified) return;
+        selectedBulletType = unified.bullet;
+        selectedUltType = unified.ult;
+        selectedUltSubtype = unified.sub;
+        if (myProfile) myProfile.equippedGear = Object.assign({}, myProfile.equippedGear || {}, unified.gear);
+      }
+
+      function setupUnify(seed) {
+        const rnd = mulberry32(seed);
+        const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+        backup = {
+          bullet: selectedBulletType, ult: selectedUltType, sub: selectedUltSubtype,
+          gear: (myProfile && myProfile.equippedGear) ? JSON.parse(JSON.stringify(myProfile.equippedGear)) : null
+        };
+        const mains = GEAR_IDS.filter(id => GEAR_MASTER[id].mainDesc);
+        const subPool = GEAR_IDS.filter(id => GEAR_MASTER[id].subDesc);
+        const main = pick(mains);
+        const slots = GEAR_MASTER[main].mainSubSlots || 0;
+        const pool = subPool.filter(id => id !== main);
+        const subs = [];
+        while (subs.length < slots && pool.length) subs.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
+        unified = {
+          bullet: pick(Object.keys(bulletMasterData)),
+          ult: pick(Object.keys(ultMasterData)),
+          sub: pick(['A', 'B', 'NONE']),
+          gear: { main, subs }
+        };
+        applyUnifiedSelection();
+        const bn = bulletMasterData[unified.bullet] && bulletMasterData[unified.bullet].name;
+        const un = ultMasterData[unified.ult] && ultMasterData[unified.ult].name;
+        addBattleLog(`<span style="color:#f1c40f">★ 統一：通常弾[${bn}] ULT[${un}] 戦術[${unified.sub}] ギア[${GEAR_MASTER[main].name}]</span>`);
+      }
+
+      function onStart(data) {
+        cleanupMatch(false);
+        eventId = data.eventId;
+        durationSec = data.durationSec;
+        players = data.players || players;
+        scores = {}; players.forEach(p => { scores[p.id] = 0; });
+        state = 'countdown';
+        cdEndLocal = performance.now() + (data.countdownMs || 3000);
+        endLocal = cdEndLocal + durationSec * 1000;
+
+        if (eventId === 'unify') setupUnify(data.unifySeed || 1);
+
+        // 試合用に状態を初期化（HPは getMaxHp() 経由で「一撃必殺」なら1になる）
+        try { ultPercent = 0.0; warpExpireTimer = 0; upgradeLevel = 1; thunderSpeedTimer = 0; thunderSpeedMultiplier = 1.0; } catch (e) {}
+        myKills = 0; myDeaths = 0;
+        $('death-overlay').style.display = 'none';
+        resetSpawn(true, false);
+        updateHudBars();
+        if (typeof updateSubtypePanelUI === 'function') { try { updateSubtypePanelUI(); } catch (e) {} }
+
+        $('event-lobby-overlay').style.display = 'none';
+        $('event-result-overlay').style.display = 'none';
+        $('em-cd-name').innerText = `イベント：${NAMES[eventId] || eventId}`;
+        $('em-cd-desc').innerText = (DESCS[eventId] || '') + `（制限時間 ${Math.round(durationSec / 60)}分）`;
+        $('event-countdown').style.display = 'flex';
+        $('em-hud-tag').innerText = `EVENT：${NAMES[eventId] || eventId}`;
+        $('event-hud').style.display = 'block';
+        renderHud();
+        try { document.body.requestPointerLock(); } catch (e) {}
+      }
+
+      // ---------- EM球 ----------
+      function getSpots() {
+        const key = currentStage + '|' + currentMapSize + '|' + colliders.length;
+        if (key === spotsKey) return spots;
+        spotsKey = key; spots = [];
+        const half = currentMapSize / 2 - 5, step = 5;
+        const box = new THREE.Box3();
+        for (let x = -half; x <= half + 0.01; x += step) {
+          for (let z = -half; z <= half + 0.01; z += step) {
+            box.min.set(x - 1.0, 0.3, z - 1.0); box.max.set(x + 1.0, 3.0, z + 1.0);
+            let ok = true;
+            for (const c of colliders) { if (c.intersectsBox(box)) { ok = false; break; } }
+            if (ok) spots.push({ x, z });
+          }
+        }
+        if (spots.length === 0) spots.push({ x: 0, z: 0 });
+        return spots;
+      }
+
+      function makeLabel(text) {
+        const c = document.createElement('canvas'); c.width = 128; c.height = 64;
+        const g = c.getContext('2d');
+        g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.lineWidth = 6; g.strokeStyle = '#000'; g.strokeText(String(text), 64, 32);
+        g.fillStyle = '#fff'; g.fillText(String(text), 64, 32);
+        const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
+        spr.scale.set(1.8, 0.9, 1);
+        return spr;
+      }
+
+      // 空中で倒された場合に球が宙に浮かないよう、真下の足場(コライダー上面)か地面(0)へ接地させる
+      function groundYAt(x, y, z) {
+        let g = 0;
+        for (const c of colliders) {
+          if (x >= c.min.x && x <= c.max.x && z >= c.min.z && z <= c.max.z && c.max.y <= y + 0.6 && c.max.y > g) g = c.max.y;
+        }
+        return g;
+      }
+
+      function addOrb(o) {
+        if (!o || orbs.has(o.id)) return;
+        let pos, color, r;
+        if (o.isDrop) {
+          pos = { x: o.x, y: groundYAt(o.x, o.y, o.z) + 0.9, z: o.z };
+          color = 0xff7675; r = Math.min(1.3, 0.5 + o.value / 150);
+        } else {
+          const sp = getSpots(); const sl = sp[o.slot % sp.length];
+          pos = { x: sl.x, y: 1.1, z: sl.z };
+          if (o.size === 'large') { color = 0xffd93d; r = 0.8; }
+          else if (o.size === 'medium') { color = 0xa29bfe; r = 0.5; }
+          else { color = 0x74b9ff; r = 0.3; }
+        }
+        const group = new THREE.Group();
+        group.add(new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), new THREE.MeshBasicMaterial({ color })));
+        group.add(new THREE.Mesh(new THREE.SphereGeometry(r * 1.6, 16, 12), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depthWrite: false })));
+        const lab = makeLabel(o.value); lab.position.y = r * 1.6 + 0.7; group.add(lab);
+        group.position.set(pos.x, pos.y, pos.z);
+        scene.add(group);
+        orbs.set(o.id, { data: o, group, baseY: pos.y, r, phase: Math.random() * 6.28, pendingUntil: 0 });
+      }
+
+      function removeOrb(id) {
+        const ob = orbs.get(id); if (!ob) return;
+        scene.remove(ob.group);
+        ob.group.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } });
+        orbs.delete(id);
+      }
+
+      function clearOrbs() { for (const id of Array.from(orbs.keys())) removeOrb(id); }
+
+      // ---------- HUD ----------
+      function applyScores(sc) { if (sc) { scores = sc; renderHud(); } }
+
+      function renderHud() {
+        $('em-hud-mine').innerText = scores[myPeerId] || 0;
+        const rows = players.filter(p => (p.id in scores)).map(p => ({ id: p.id, name: p.name, em: scores[p.id] || 0 })).sort((a, b) => b.em - a.em);
+        const board = $('em-hud-board'); board.innerHTML = '';
+        rows.forEach((r, i) => {
+          const d = document.createElement('div'); if (r.id === myPeerId) d.className = 'me';
+          const a = document.createElement('span'); a.textContent = `${i + 1}. ${r.name}`;
+          const b = document.createElement('span'); b.textContent = `${r.em} EM`;
+          d.appendChild(a); d.appendChild(b); board.appendChild(d);
+        });
+      }
+
+      // ---------- 結果 ----------
+      function onResult(data) {
+        if (state === 'off') return;
+        state = 'finished';
+        restoreNameTags();
+        const mmEl = $('minimap-container'); if (mmEl) mmEl.style.display = '';
+        releasePointerLock(); clearInputs();
+        $('event-countdown').style.display = 'none';
+        $('resume-overlay').style.display = 'none';
+        clearOrbs();
+        const res = data.results || [];
+        const me = res.find(r => r.id === myPeerId);
+        $('em-res-title').innerText = me ? (me.isWinner ? '🏆 VICTORY!' : `${me.rank}位`) : 'RESULT';
+        $('em-res-sub').innerText = `イベント：${NAMES[data.eventId] || data.eventId}` + (data.early ? '（人数不足のため早期終了）' : '');
+        const list = $('em-res-list'); list.innerHTML = '';
+        res.forEach(r => {
+          const d = document.createElement('div');
+          d.className = 'em-res-row' + (r.isWinner ? ' first' : '') + (r.id === myPeerId ? ' me' : '');
+          const a = document.createElement('span'); a.textContent = `${r.rank}位 ${r.name}`;
+          const b = document.createElement('span'); b.textContent = `${r.em} EM × ${r.multiplier} ＝ ${r.finalEm} EM`;
+          d.appendChild(a); d.appendChild(b); list.appendChild(d);
+        });
+        $('em-res-note').innerText = '最終EM ＝ 集めたEM × 順位倍率（小数点四捨五入）';
+        $('em-res-lobby').style.display = amHost() ? 'inline-block' : 'none';
+        $('event-result-overlay').style.display = 'flex';
+      }
+
+      // ---------- 後片付け ----------
+      function restoreUnify() {
+        if (backup) {
+          selectedBulletType = backup.bullet; selectedUltType = backup.ult; selectedUltSubtype = backup.sub;
+          if (myProfile && backup.gear) myProfile.equippedGear = backup.gear;
+        }
+        backup = null; unified = null;
+      }
+
+      // ブラインドで変更したネームタグの壁越し表示を元（depthTest:false=壁越しに見える）へ戻す
+      function restoreNameTags() {
+        for (const id in remotePlayers) {
+          const rp = remotePlayers[id];
+          if (rp && rp.group) rp.group.traverse(o => { if (o.isSprite && o.userData && o.userData.canvas) o.material.depthTest = false; });
+        }
+      }
+
+      function cleanupMatch(respawn) {
+        clearOrbs();
+        restoreNameTags();
+        restoreUnify();
+        eventId = null; scores = {};
+        const mm = $('minimap-container'); if (mm) mm.style.display = '';
+        $('event-hud').style.display = 'none';
+        $('event-countdown').style.display = 'none';
+        if (respawn) { try { ultPercent = 0; resetSpawn(true, false); updateHudBars(); } catch (e) {} }
+      }
+
+      function reset() {
+        cleanupMatch(false);
+        state = 'off'; hostId = null; players = [];
+        ['event-lobby-overlay', 'event-result-overlay', 'event-countdown', 'event-hud'].forEach(id => { const el = $(id); if (el) el.style.display = 'none'; });
+      }
+
+      // ---------- メッセージ ----------
+      function handle(data) {
+        switch (data.type) {
+          case '__joined':
+            if (data.mode === 'event') { state = 'lobby'; hostId = null; players = []; showLobby(); renderLobby(); }
+            return false; // メイン側の通常処理も続行する
+          case '__event_in_progress':
+            alert('このイベントマッチはすでに開始されています（途中参加はできません）。');
+            leaveGame(); return true;
+          case '__host_migrated':
+            // ホスト交代：結果画面/待機画面のホスト専用ボタンを更新（メイン側の処理も続行）
+            hostId = data.newHostId;
+            if (state === 'lobby') renderLobby();
+            if (state === 'finished') $('em-res-lobby').style.display = 'inline-block';
+            return false;
+          case '__host_changed':
+            hostId = data.newHostId;
+            return false;
+          case '__event_lobby': onLobby(data); return true;
+          case '__event_start_denied': releasePointerLock(); toast(`開始には${data.min || 2}人以上必要です`); return true;
+          case '__event_start': onStart(data); return true;
+          case '__em_spawn': addOrb(data.orb); return true;
+          case '__em_drop': addOrb(data.orb); applyScores(data.scores); return true;
+          case '__em_collected':
+            removeOrb(data.orbId); applyScores(data.scores);
+            if (data.by === myPeerId) toast(`+${data.value} EM`);
+            return true;
+          case '__event_scores': applyScores(data.scores); return true;
+          case '__event_result': onResult(data); return true;
+        }
+        return false;
+      }
+
+      // ---------- 毎フレーム ----------
+      function update(delta) {
+        if (state === 'off') return;
+        const nowL = performance.now();
+
+        if (state === 'lobby' || state === 'finished') clearInputs();
+
+        if (state === 'countdown') {
+          clearInputs();
+          const rem = cdEndLocal - nowL;
+          if (rem <= 0) {
+            state = 'playing';
+            $('event-countdown').style.display = 'none';
+            toast('START!');
+          } else {
+            $('em-cd-num').innerText = Math.ceil(rem / 1000);
+          }
+        }
+
+        if (state === 'playing' || state === 'countdown') {
+          // タイマー表示
+          const remSec = Math.max(0, Math.ceil((endLocal - nowL) / 1000));
+          const t = $('em-hud-timer');
+          t.innerText = `${Math.floor(remSec / 60)}:${String(remSec % 60).padStart(2, '0')}`;
+          t.classList.toggle('low', state === 'playing' && remSec <= 30);
+
+          // ポインタロック外れ時は「クリックで再開」を出す
+          if (nowL - lastResumeCheck > 400) {
+            lastResumeCheck = nowL;
+            const locked = document.pointerLockElement === document.body;
+            $('resume-overlay').style.display = (!locked && !isDead) ? 'flex' : 'none';
+          }
+
+          // ブラインド: ミニマップ非表示 & 壁越しネームタグ非表示
+          const blind = (eventId === 'blind');
+          const mm = $('minimap-container'); if (mm) mm.style.display = blind ? 'none' : '';
+          for (const id in remotePlayers) {
+            const rp = remotePlayers[id];
+            if (rp && rp.group) rp.group.traverse(o => { if (o.isSprite && o.userData && o.userData.canvas) o.material.depthTest = !blind; });
+          }
+
+          // 統一: プロフィール再取得などで装備が戻された場合に再適用
+          if (unified && myProfile && (!myProfile.equippedGear || myProfile.equippedGear.main !== unified.gear.main)) applyUnifiedSelection();
+          if (unified && (selectedBulletType !== unified.bullet || selectedUltType !== unified.ult)) applyUnifiedSelection();
+        }
+
+        // EM球: 回転・上下運動、回収判定（回収の確定はサーバーの早い者勝ち）
+        for (const [id, ob] of orbs) {
+          ob.phase += delta * 2.2;
+          ob.group.position.y = ob.baseY + Math.sin(ob.phase) * 0.18;
+          ob.group.rotation.y += delta * 1.5;
+          if (state === 'playing' && !isDead && nowL > ob.pendingUntil) {
+            const dx = playerPos.x - ob.group.position.x, dz = playerPos.z - ob.group.position.z;
+            const dy = (playerPos.y + 0.9) - ob.group.position.y;
+            const R = 1.5 + ob.r;
+            if (dx * dx + dz * dz < R * R && Math.abs(dy) < 2.4) {
+              ob.pendingUntil = nowL + 700;
+              sendToServer({ type: '__em_pickup_claim', orbId: id });
+            }
+          }
+        }
+      }
+
+      // ---------- ミニマップ ----------
+      function drawMinimap(ctx, mapScale, halfSize) {
+        if (state !== 'playing' || orbs.size === 0 || eventId === 'blind') return;
+        for (const ob of orbs.values()) {
+          const d = ob.data;
+          const col = d.isDrop ? '#ff7675' : (d.size === 'large' ? '#ffd93d' : (d.size === 'medium' ? '#a29bfe' : '#74b9ff'));
+          const rad = d.isDrop ? 3.5 : (d.size === 'large' ? 3.2 : (d.size === 'medium' ? 2.4 : 1.8));
+          ctx.fillStyle = col;
+          ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc((ob.group.position.x + halfSize) * mapScale, (ob.group.position.z + halfSize) * mapScale, rad, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+        }
+      }
+
+      // ---------- ボタン ----------
+      $('em-start-btn').addEventListener('click', () => {
+        if (state !== 'lobby' || !amHost()) return;
+        sendToServer({ type: '__event_start_request' });
+        try { document.body.requestPointerLock(); } catch (e) {}
+      });
+      $('em-lobby-leave').addEventListener('click', () => { leaveGame(); });
+      $('em-res-leave').addEventListener('click', () => { leaveGame(); });
+      $('em-res-lobby').addEventListener('click', () => { sendToServer({ type: '__event_back_to_lobby' }); });
+
+      return {
+        handle, update, reset, drawMinimap,
+        moveMult: () => (state === 'playing' && eventId === 'slow') ? 0.6 : 1,
+        jumpMult: () => (state === 'playing' && eventId === 'slow') ? 0.6 : 1,
+        oneShot: () => (eventId === 'oneshot' && (state === 'countdown' || state === 'playing')),
+        ult200: () => (eventId === 'ult200' && state === 'playing'),
+        inputBlocked: () => (state === 'lobby' || state === 'countdown' || state === 'finished'),
+        blocksResume: () => (state === 'lobby' || state === 'finished')
+      };
+    })();
+
   </script>
 </body>
 </html>
