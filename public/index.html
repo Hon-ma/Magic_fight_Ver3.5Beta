@@ -144,12 +144,14 @@
     #event-countdown .big { font-size: 120px; font-weight: 900; color: #fff; text-shadow: 0 0 24px #f1c40f, 0 0 6px #000; }
     #event-countdown .ev-name { font-size: 40px; font-weight: 900; color: #f1c40f; text-shadow: 0 0 14px #000; }
     #event-countdown .ev-desc { font-size: 17px; color: #fff; text-shadow: 0 0 8px #000; margin-top: 6px; }
-    #event-hud { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); display: none; z-index: 7000; pointer-events: none; text-align: center; color: #fff; text-shadow: 0 0 6px #000; }
+    #event-hud { position: fixed; top: 0; left: 0; right: 0; height: 0; display: none; z-index: 7000; pointer-events: none; text-align: center; color: #fff; text-shadow: 0 0 6px #000; }
+    #event-hud .center { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); }
+    #event-hud .right { position: absolute; top: 14px; right: 16px; text-align: right; }
     #event-hud .tag { display: inline-block; background: rgba(241,196,15,0.9); color: #222; font-weight: bold; font-size: 13px; padding: 2px 12px; border-radius: 10px; }
     #event-hud .timer { font-size: 34px; font-weight: 900; line-height: 1.1; }
     #event-hud .timer.low { color: #ff7675; }
     #event-hud .mine { font-size: 20px; font-weight: bold; color: #81ecec; }
-    #event-hud .board { margin-top: 4px; font-size: 13px; background: rgba(0,0,0,0.45); border-radius: 8px; padding: 4px 12px; display: inline-block; text-align: left; min-width: 160px; }
+    #event-hud .board { margin-top: 4px; text-shadow: none; font-size: 13px; background: rgba(0,0,0,0.45); border-radius: 8px; padding: 4px 12px; display: inline-block; text-align: left; min-width: 160px; }
     #event-hud .board div { display: flex; justify-content: space-between; gap: 14px; }
     #event-hud .board .me { color: #81ecec; font-weight: bold; }
     #event-toast { position: fixed; top: 42%; left: 50%; transform: translate(-50%,-50%); z-index: 7500; font-size: 30px; font-weight: 900; color: #f1c40f; text-shadow: 0 0 10px #000; pointer-events: none; opacity: 0; transition: opacity .25s; }
@@ -844,15 +846,15 @@
     .room-preview-box .rp-player .rp-rate { color: #f1c40f; font-weight: bold; }
     .room-preview-box .rp-empty { font-size: 12px; color: #888; font-style: italic; }
 
-    .battle-mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; margin-bottom: 12px; }
+    .battle-mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; margin-bottom: 12px; }
     .battle-mode-card {
       background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.15); border-radius: 8px;
-      padding: 10px; cursor: pointer; transition: 0.15s; text-align: left;
+      padding: 8px 8px; cursor: pointer; transition: 0.15s; text-align: left; min-width: 0;
     }
     .battle-mode-card:hover { border-color: rgba(0,206,201,0.6); }
     .battle-mode-card.selected { border-color: #f1c40f; background: rgba(241,196,15,0.12); }
-    .battle-mode-card .title { font-size: 13.5px; font-weight: bold; margin-bottom: 3px; }
-    .battle-mode-card .desc { font-size: 11px; color: #b2bec3; }
+    .battle-mode-card .title { font-size: 12.5px; white-space: nowrap; font-weight: bold; margin-bottom: 3px; }
+    .battle-mode-card .desc { font-size: 10px; line-height: 1.35; color: #b2bec3; }
 
     .section-title { font-size: 13px; font-weight: bold; color: #ffeaa7; margin-bottom: 6px; text-align: left; width: 100%; display: flex; justify-content: space-between; align-items: center; }
     
@@ -994,6 +996,7 @@
           <div class="profile-stat-card"><div class="val" id="stat-rate-wins">0</div><div class="label">レート戦勝利数</div></div>
           <div class="profile-stat-card"><div class="val" id="stat-rate-winrate">0%</div><div class="label">レート戦勝率</div></div>
           <div class="profile-stat-card"><div class="val" id="stat-coins">0</div><div class="label">所持コイン</div></div>
+          <div class="profile-stat-card"><div class="val" id="stat-em">0</div><div class="label">所持EM</div></div>
         </div>
       </div>
 
@@ -1276,10 +1279,14 @@
   </div>
   <div id="event-countdown"><div class="ev-name" id="em-cd-name"></div><div class="ev-desc" id="em-cd-desc"></div><div class="big" id="em-cd-num"></div></div>
   <div id="event-hud">
-    <span class="tag" id="em-hud-tag">EVENT</span>
-    <div class="timer" id="em-hud-timer">0:00</div>
-    <div class="mine">EM <span id="em-hud-mine">0</span></div>
-    <div class="board" id="em-hud-board"></div>
+    <div class="center">
+      <span class="tag" id="em-hud-tag">EVENT</span>
+      <div class="timer" id="em-hud-timer">0:00</div>
+    </div>
+    <div class="right">
+      <div class="mine">EM <span id="em-hud-mine">0</span></div>
+      <div class="board" id="em-hud-board"></div>
+    </div>
   </div>
   <div id="event-toast"></div>
   <div id="event-result-overlay">
@@ -1287,7 +1294,7 @@
       <h2 id="em-res-title">RESULT</h2>
       <div class="em-sub" id="em-res-sub"></div>
       <div id="em-res-list"></div>
-      <div id="em-res-note" class="em-sub" style="margin-top:8px;"></div>
+      <div id="em-res-note" class="em-sub" style="margin-top:8px; white-space: pre-line;"></div>
       <button id="em-res-lobby" class="em-btn" style="display:none;">待機画面へ戻る</button>
       <button id="em-res-leave" class="em-btn back">退出（ロビーへ）</button>
     </div>
@@ -1905,6 +1912,7 @@
       setText('stat-rate-winrate', `${winRate}%`);
       // --- コイン経済（Phase1）：所持コイン残高表示 ---
       setText('stat-coins', String(myProfile.coins || 0));
+      setText('stat-em', String(myProfile.em || 0)); // Ver9.5: イベントマッチで獲得した所持EM
 
       renderSetCommentGrid();
     }
@@ -2190,6 +2198,7 @@
     // 「プロフィールを受け取った時」と「参戦ボタンを押した時」の両方で呼ぶ。
     function enforceOwnedSelections() {
       if (!myProfile) return;
+      if (window.EventMatch && EventMatch.unifyActive()) return; // Ver9.5 統一イベント中は装備を巻き戻さない
 
       if (!hasShot(selectedBulletType)) {
         selectedBulletType = ownedShots()[0] || 'magic';
@@ -6426,6 +6435,7 @@
       if (isExSuperHoming) speed = 36;
       // Phase5: gear04（弾速度）はEX超誘導弾には適用しない
       if (!isExSuperHoming) speed *= getGearPctMultiplier('bulletSpeedPct');
+      if (window.EventMatch) speed *= EventMatch.bulletSpeedMult(); // Ver9.5 イベント「ゆっくり」：通常弾の弾速0.8倍
       const vx = dir.x * speed, vy = dir.y * speed, vz = dir.z * speed;
 
       if (nextShotExHoming) {
@@ -6994,6 +7004,7 @@
 
     const mapCtx = document.getElementById('minimap').getContext('2d');
     function renderMinimap() {
+      if (window.EventMatch && EventMatch.drawBlindMinimap(mapCtx)) return; // Ver9.5 ブラインド：砂嵐
       const mapScale = 125 / currentMapSize;
       const halfSize = currentMapSize / 2;
 
@@ -7887,7 +7898,7 @@
       const DESCS = {
         oneshot: '全員の最大HPが1になる！ 1発でも当たれば即ダウン！',
         ult200: 'ULTが100%以上になると即座に200%まで溜まる！',
-        slow: '移動速度・ジャンプ力が0.6倍になる…！',
+        slow: '移動速度が0.6倍、通常弾の弾速が0.8倍になる…！',
         unify: '通常弾・ULT・戦術・ギアが全員同じ構成に統一される！',
         blind: 'ミニマップ非表示＋壁越しにネームタグが見えない！',
         fever: '🔥 フィーバー！ 出現するEMが7倍！！'
@@ -7900,7 +7911,10 @@
       let unified = null, backup = null;
       const orbs = new Map();       // orbId -> { data, group, baseY, phase, pendingUntil }
       let spotsKey = '', spots = [];
-      let toastTimer = null, lastResumeCheck = 0;
+      let toastTimer = null, lastResumeCheck = 0, lastReward = null;
+      function rewardNote() {
+        return '最終EM ＝ 集めたEM × 順位倍率（小数点四捨五入）' + (lastReward ? `\n所持EM +${lastReward.gained}（合計 ${lastReward.total} EM）` : '');
+      }
 
       function amHost() { return !!(isHost || (hostId && myPeerId === hostId)); }
       function nameOf(id) { const p = players.find(x => x.id === id); return p ? p.name : '???'; }
@@ -7969,12 +7983,21 @@
         };
       }
 
+      function unifiedMatches() {
+        if (!unified) return true;
+        if (selectedBulletType !== unified.bullet || selectedUltType !== unified.ult || selectedUltSubtype !== unified.sub) return false;
+        const g = myProfile && myProfile.equippedGear;
+        if (!g || g.main !== unified.gear.main) return false;
+        return JSON.stringify(g.subs || []) === JSON.stringify(unified.gear.subs || []);
+      }
+
       function applyUnifiedSelection() {
         if (!unified) return;
         selectedBulletType = unified.bullet;
         selectedUltType = unified.ult;
         selectedUltSubtype = unified.sub;
-        if (myProfile) myProfile.equippedGear = Object.assign({}, myProfile.equippedGear || {}, unified.gear);
+        if (myProfile) myProfile.equippedGear = { main: unified.gear.main, subs: unified.gear.subs.slice() };
+        if (typeof updateSubtypePanelUI === 'function') { try { updateSubtypePanelUI(); } catch (e) {} }
       }
 
       function setupUnify(seed) {
@@ -8000,7 +8023,7 @@
         applyUnifiedSelection();
         const bn = bulletMasterData[unified.bullet] && bulletMasterData[unified.bullet].name;
         const un = ultMasterData[unified.ult] && ultMasterData[unified.ult].name;
-        addBattleLog(`<span style="color:#f1c40f">★ 統一：通常弾[${bn}] ULT[${un}] 戦術[${unified.sub}] ギア[${GEAR_MASTER[main].name}]</span>`);
+        addBattleLog(`<span style="color:#f1c40f">★ 統一：通常弾[${bn}] ULT[${un}] 戦術[${unified.sub}] ギア[${GEAR_MASTER[main].name}／サブ: ${subs.length ? subs.map(s => GEAR_MASTER[s].name).join('・') : 'なし'}]</span>`);
       }
 
       function onStart(data) {
@@ -8141,7 +8164,8 @@
           const b = document.createElement('span'); b.textContent = `${r.em} EM × ${r.multiplier} ＝ ${r.finalEm} EM`;
           d.appendChild(a); d.appendChild(b); list.appendChild(d);
         });
-        $('em-res-note').innerText = '最終EM ＝ 集めたEM × 順位倍率（小数点四捨五入）';
+        lastReward = null;
+        $('em-res-note').innerText = rewardNote() + (data.early ? '\n（早期終了のためEMは付与されません）' : '');
         $('em-res-lobby').style.display = amHost() ? 'inline-block' : 'none';
         $('event-result-overlay').style.display = 'flex';
       }
@@ -8155,12 +8179,52 @@
         backup = null; unified = null;
       }
 
-      // ブラインドで変更したネームタグの壁越し表示を元（depthTest:false=壁越しに見える）へ戻す
+      // ブラインドで隠したネームタグを元に戻す（通常は壁越しにも見える）
       function restoreNameTags() {
         for (const id in remotePlayers) {
           const rp = remotePlayers[id];
-          if (rp && rp.group) rp.group.traverse(o => { if (o.isSprite && o.userData && o.userData.canvas) o.material.depthTest = false; });
+          if (rp && rp.headTag) rp.headTag.visible = true;
         }
+      }
+
+      // ブラインド: カメラ→相手の頭の線分が壁(コライダー)に遮られていたらネームタグを隠す
+      const _ray = new THREE.Ray(), _dir = new THREE.Vector3(), _head = new THREE.Vector3(), _hit = new THREE.Vector3();
+      function sightBlocked(from, to) {
+        _dir.copy(to).sub(from);
+        const dist = _dir.length();
+        if (dist < 0.05) return false;
+        _dir.divideScalar(dist);
+        _ray.set(from, _dir);
+        for (const c of colliders) {
+          if (_ray.intersectBox(c, _hit) && from.distanceTo(_hit) < dist - 0.05) return true;
+        }
+        return false;
+      }
+      function updateBlindNameTags(blind) {
+        for (const id in remotePlayers) {
+          const rp = remotePlayers[id];
+          if (!rp || !rp.headTag || !rp.group) continue;
+          if (!blind) { rp.headTag.visible = true; continue; }
+          _head.set(rp.group.position.x, rp.group.position.y + 1.7, rp.group.position.z);
+          rp.headTag.visible = !sightBlocked(camera.position, _head);
+        }
+      }
+
+      // ブラインド: ミニマップは消さずに「砂嵐」を表示（レイアウトの余白を作らないため）
+      let noiseImg = null;
+      function drawBlindMinimap(ctx) {
+        if (eventId !== 'blind' || (state !== 'playing' && state !== 'countdown')) return false;
+        if (!noiseImg) noiseImg = ctx.createImageData(125, 125);
+        const d = noiseImg.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const v = Math.random() < 0.5 ? 0 : Math.floor(Math.random() * 110);
+          d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+        }
+        ctx.putImageData(noiseImg, 0, 0);
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('NO SIGNAL', 62, 62);
+        return true;
       }
 
       function cleanupMatch(respawn) {
@@ -8208,6 +8272,12 @@
             if (data.by === myPeerId) toast(`+${data.value} EM`);
             return true;
           case '__event_scores': applyScores(data.scores); return true;
+          case '__event_em_reward':
+            if (myProfile) myProfile.em = data.total;
+            lastReward = data;
+            if (state === 'finished') $('em-res-note').innerText = rewardNote();
+            try { if ($('profile-overlay').style.display === 'flex') renderProfileUI(); } catch (e) {}
+            return true;
           case '__event_result': onResult(data); return true;
         }
         return false;
@@ -8246,17 +8316,11 @@
             $('resume-overlay').style.display = (!locked && !isDead) ? 'flex' : 'none';
           }
 
-          // ブラインド: ミニマップ非表示 & 壁越しネームタグ非表示
-          const blind = (eventId === 'blind');
-          const mm = $('minimap-container'); if (mm) mm.style.display = blind ? 'none' : '';
-          for (const id in remotePlayers) {
-            const rp = remotePlayers[id];
-            if (rp && rp.group) rp.group.traverse(o => { if (o.isSprite && o.userData && o.userData.canvas) o.material.depthTest = !blind; });
-          }
+          // ブラインド: 壁越しのネームタグを隠す（ミニマップは砂嵐描画に差し替え）
+          updateBlindNameTags(eventId === 'blind' && state === 'playing');
 
-          // 統一: プロフィール再取得などで装備が戻された場合に再適用
-          if (unified && myProfile && (!myProfile.equippedGear || myProfile.equippedGear.main !== unified.gear.main)) applyUnifiedSelection();
-          if (unified && (selectedBulletType !== unified.bullet || selectedUltType !== unified.ult)) applyUnifiedSelection();
+          // 統一: プロフィール再取得・所持チェックで装備/戦術が戻された場合に再適用（弾・ULT・戦術・メイン・サブ全て照合）
+          if (unified && !unifiedMatches()) applyUnifiedSelection();
         }
 
         // EM球: 回転・上下運動、回収判定（回収の確定はサーバーの早い者勝ち）
@@ -8303,9 +8367,11 @@
       $('em-res-lobby').addEventListener('click', () => { sendToServer({ type: '__event_back_to_lobby' }); });
 
       return {
-        handle, update, reset, drawMinimap,
+        handle, update, reset, drawMinimap, drawBlindMinimap,
+        unifyActive: () => !!unified,
         moveMult: () => (state === 'playing' && eventId === 'slow') ? 0.6 : 1,
-        jumpMult: () => (state === 'playing' && eventId === 'slow') ? 0.6 : 1,
+        jumpMult: () => 1, // Ver9.5修正: 「ゆっくり」のジャンプ力低下は廃止（互換のため関数は残す）
+        bulletSpeedMult: () => (state === 'playing' && eventId === 'slow') ? 0.8 : 1,
         oneShot: () => (eventId === 'oneshot' && (state === 'countdown' || state === 'playing')),
         ult200: () => (eventId === 'ult200' && state === 'playing'),
         inputBlocked: () => (state === 'lobby' || state === 'countdown' || state === 'finished'),
