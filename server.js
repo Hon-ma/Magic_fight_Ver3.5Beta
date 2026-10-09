@@ -119,8 +119,59 @@ const INITIAL_ULT_IDS = ['beam'];
 // 排出内容は「破片95% / 通常弾0.8% / ULT0.5% / 戦術0.7% / 完成ギア3%」の重み付き抽選。
 // 抽選は必ずサーバー側の Math.random() で行い、結果だけをクライアントへ返す。
 // ================================================================
+// GEAR_IDS = ガチャ排出・破片の対象になる通常ギア(gear01〜20)。イベントギアは含めない。
 const GEAR_IDS = Array.from({ length: 20 }, (_, i) => `gear${String(i + 1).padStart(2, '0')}`);
 quest.configure({ gearIds: GEAR_IDS });
+
+// ================================================================
+// --- Ver9.6: イベントギア（EM交換のイベントショップ限定）---
+// gear21〜35。ガチャ非排出・破片なし・外しても破片は戻らない・全てメイン専用。
+// シーズンは毎月1日(JST)に切り替わる。EVENT_SEASON_EPOCH が「シーズン1」の年月。
+// ================================================================
+const EVENT_GEAR_IDS = Array.from({ length: 15 }, (_, i) => `gear${String(i + 21)}`);
+const ALL_GEAR_IDS = [...GEAR_IDS, ...EVENT_GEAR_IDS];
+const EVENT_SEASON_GEARS = {
+  1: ['gear21', 'gear22', 'gear23'],
+  2: ['gear24', 'gear25', 'gear26'],
+  3: ['gear27', 'gear28', 'gear29'],
+  4: ['gear30', 'gear31', 'gear32'],
+  5: ['gear33', 'gear34', 'gear35']
+};
+const EVENT_SEASON_EPOCH = { year: 2026, month: 10 }; // 2026年10月 = シーズン1
+function isEventGearId(id) { return EVENT_GEAR_IDS.includes(id); }
+
+// 現在(JST)のシーズン番号と、そのシーズンのイベントギア3種を返す。
+// シーズン6以降は、シーズン1〜5の15種から3種をシーズン番号シードで決定的に選ぶ（全サーバー/再起動で同じ結果）。
+function getEventSeasonInfo(now = Date.now()) {
+  const jst = new Date(now + 9 * 3600 * 1000);
+  const idx = (jst.getUTCFullYear() - EVENT_SEASON_EPOCH.year) * 12 + (jst.getUTCMonth() + 1 - EVENT_SEASON_EPOCH.month);
+  const season = Math.max(1, idx + 1);
+  let gearIds;
+  if (season <= 5) {
+    gearIds = EVENT_SEASON_GEARS[season].slice();
+  } else {
+    let seed = (season * 2654435761) >>> 0;
+    const rnd = () => { seed = (Math.imul(seed ^ (seed >>> 15), 2246822507) + 0x6D2B79F5) >>> 0; return seed / 4294967296; };
+    const pool = EVENT_GEAR_IDS.slice();
+    gearIds = [];
+    while (gearIds.length < 3) gearIds.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
+  }
+  return { season, gearIds };
+}
+
+// イベントショップのラインナップ（EM価格・シーズン内購入上限。limit=null は無制限）
+const EVENT_SHOP_ITEMS = {
+  coin100:  { price: 300,   limit: 20,   grant: { coins: 100 } },
+  coin500:  { price: 1500,  limit: 10,   grant: { coins: 500 } },
+  coin1000: { price: 3000,  limit: 5,    grant: { coins: 1000 } },
+  coin3000: { price: 7500,  limit: 1,    grant: { coins: 3000 } },
+  universal:{ price: 10000, limit: 4,    grant: { universalFragments: 1 } },
+  ticket5:  { price: 4000,  limit: 10,   grant: { gachaTickets: 5 } },
+  // イベントギアは gearSlot(0〜2) でシーズンのギア配列の何番目かを指す。上限なし。
+  gear0:    { price: 5000,  limit: null, gearSlot: 0 },
+  gear1:    { price: 5000,  limit: null, gearSlot: 1 },
+  gear2:    { price: 5000,  limit: null, gearSlot: 2 }
+};
 
 // ================================================================
 // --- ギアスロット装備（Phase4）---
@@ -148,7 +199,23 @@ const GEAR_META = {
   gear17: { mainSubSlots: 2, subOnly: true },
   gear18: { mainSubSlots: 2, subOnly: true },
   gear19: { mainSubSlots: 2, subOnly: true },
-  gear20: { mainSubSlots: 2, subOnly: true } // スポーンチャージ（旧コンボチャージから置き換え。効果はクライアント側で処理）
+  gear20: { mainSubSlots: 2, subOnly: true }, // スポーンチャージ（旧コンボチャージから置き換え。効果はクライアント側で処理）
+  // --- Ver9.6 イベントギア（全てメイン専用） ---
+  gear21: { mainSubSlots: 2, subOnly: true }, // 再装填
+  gear22: { mainSubSlots: 3, subOnly: true }, // 第六感
+  gear23: { mainSubSlots: 2, subOnly: true }, // ロックオン
+  gear24: { mainSubSlots: 2, subOnly: true }, // 緊急離脱
+  gear25: { mainSubSlots: 2, subOnly: true }, // 毒ガス
+  gear26: { mainSubSlots: 2, subOnly: true }, // 極秘使用
+  gear27: { mainSubSlots: 2, subOnly: true }, // 運試し１
+  gear28: { mainSubSlots: 1, subOnly: true }, // 運試し２
+  gear29: { mainSubSlots: 2, subOnly: true }, // 運試し３
+  gear30: { mainSubSlots: 1, subOnly: true }, // 唯我独尊
+  gear31: { mainSubSlots: 2, subOnly: true }, // 天下無双
+  gear32: { mainSubSlots: 2, subOnly: true }, // 疾風迅雷
+  gear33: { mainSubSlots: 0, subOnly: true }, // コピー
+  gear34: { mainSubSlots: 0, subOnly: true }, // ゼロフラット
+  gear35: { mainSubSlots: 0, subOnly: true }  // シャッフル
 };
 
 // 装備コスト・キャッシュバック（バランス調整済み：1-1節のコイン収入を基準に算出）
@@ -212,6 +279,8 @@ function addGearFragments(profile, gearId, amount) {
 // 装備中のギア1個を外す（＝消滅させて破片キャッシュバックする）共通処理。
 // 明示的な「外す」操作でも、メイン切替に伴う自動退避でも同じ処理を使う。
 function destroyEquippedGear(profile, gearId) {
+  // Ver9.6: イベントギアは外しても破片が出ない（そのまま消滅）。
+  if (isEventGearId(gearId)) return 0;
   return addGearFragments(profile, gearId, GEAR_UNEQUIP_FRAGMENT_CASHBACK);
 }
 
@@ -342,6 +411,8 @@ function defaultProfile(clientId) {
     // ================================================================
     coins: 0,
     em: 0,                          // Ver9.5: イベントマッチで獲得した最終EMの累計（所持EM）
+    gachaTickets: 0,                // Ver9.6: ガチャチケット（単発ガチャのみ・コインより優先消費）
+    eventShop: { season: 0, bought: {} }, // Ver9.6: イベントショップの購入回数（シーズンが変わると自動リセット）
     unlockedShots: [...INITIAL_SHOT_IDS],  // 買い切りで所持している通常弾ID一覧（初期は魔法弾のみ）
     unlockedUlts: [...INITIAL_ULT_IDS],    // 買い切りで所持しているULT ID一覧（初期はメガビームのみ）
     unlockedTactics: [],            // 買い切り/ガチャ直撃で所持している戦術タイプ（例: 'beam_A'）
@@ -489,6 +560,22 @@ function getOrCreateProfile(clientId) {
   p.coins = Math.max(0, Math.floor(p.coins));
   if (typeof p.em !== 'number' || !Number.isFinite(p.em)) p.em = 0;
   p.em = Math.max(0, Math.floor(p.em));
+  if (typeof p.gachaTickets !== 'number' || !Number.isFinite(p.gachaTickets)) p.gachaTickets = 0;
+  p.gachaTickets = Math.max(0, Math.floor(p.gachaTickets));
+  // イベントショップの購入回数。シーズンが変わっていたらここでリセットする。
+  {
+    const curSeason = getEventSeasonInfo().season;
+    if (!p.eventShop || typeof p.eventShop !== 'object' || p.eventShop.season !== curSeason) {
+      p.eventShop = { season: curSeason, bought: {} };
+    } else {
+      const cleaned = {};
+      for (const id of Object.keys(EVENT_SHOP_ITEMS)) {
+        const v = Number(p.eventShop.bought && p.eventShop.bought[id]);
+        if (Number.isFinite(v) && v > 0) cleaned[id] = Math.floor(v);
+      }
+      p.eventShop.bought = cleaned;
+    }
+  }
 
   // 所持リストは「正規のIDのみ」「重複なし」「初期付与分を必ず含む」状態に正規化する。
   // 不正なIDが紛れ込んでもここで落とされるため、クライアント改竄の保険にもなる。
@@ -508,7 +595,7 @@ function getOrCreateProfile(clientId) {
   const normalizeGearCountMap = (obj) => {
     const out = {};
     if (obj && typeof obj === 'object') {
-      for (const gearId of GEAR_IDS) {
+      for (const gearId of ALL_GEAR_IDS) {
         const v = obj[gearId];
         if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
           out[gearId] = Math.floor(v);
@@ -526,14 +613,14 @@ function getOrCreateProfile(clientId) {
   p.universalFragments = Math.floor(p.universalFragments);
 
   if (!p.equippedGear || typeof p.equippedGear !== 'object') p.equippedGear = { main: null, subs: [] };
-  if (p.equippedGear.main !== null && !GEAR_IDS.includes(p.equippedGear.main)) p.equippedGear.main = null;
+  if (p.equippedGear.main !== null && !ALL_GEAR_IDS.includes(p.equippedGear.main)) p.equippedGear.main = null;
   if (!Array.isArray(p.equippedGear.subs)) p.equippedGear.subs = [];
   let gearNormalizationChanged = false;
   // 不正/旧状態でサブに残っているメイン専用ギアや、メイン不在時のサブは
   // 通常の「外す」と同じく3破片へ戻してから除去する。
   const normalizedSubs = [];
   for (const id of p.equippedGear.subs) {
-    if (!GEAR_IDS.includes(id)) continue;
+    if (!ALL_GEAR_IDS.includes(id)) continue;
     if (GEAR_META[id].subOnly) {
       destroyEquippedGear(p, id);
       gearNormalizationChanged = true;
@@ -594,6 +681,9 @@ function publicProfilePayload(p) {
     // --- コイン経済・ショップ・ガチャ・ギアパワー（Phase0/1）---
     coins: p.coins,
     em: p.em || 0,
+    gachaTickets: p.gachaTickets || 0,
+    eventShop: p.eventShop,
+    eventSeason: getEventSeasonInfo(),
     unlockedShots: p.unlockedShots,
     unlockedUlts: p.unlockedUlts,
     unlockedTactics: p.unlockedTactics,
@@ -1283,6 +1373,59 @@ wss.on('connection', (socket) => {
     }
 
     // ================================================================
+    // --- Ver9.6: イベントショップ（EM交換）---
+    // data: { type:'__event_shop_purchase', clientId, itemId }
+    // 価格・回数制限・シーズンのイベントギアは全てサーバーで検証する。
+    // ================================================================
+    if (data.type === '__event_shop_purchase') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      const fail = (reason) => socket.send(JSON.stringify({ type: '__event_shop_result', ok: false, reason }));
+      if (!profile) return fail('no_profile');
+
+      const itemId = String(data.itemId || '');
+      const item = Object.prototype.hasOwnProperty.call(EVENT_SHOP_ITEMS, itemId) ? EVENT_SHOP_ITEMS[itemId] : null;
+      if (!item) return fail('invalid_id');
+
+      const seasonInfo = getEventSeasonInfo();
+      if (!profile.eventShop || profile.eventShop.season !== seasonInfo.season) {
+        profile.eventShop = { season: seasonInfo.season, bought: {} };
+      }
+      const bought = profile.eventShop.bought[itemId] || 0;
+      if (item.limit !== null && bought >= item.limit) return fail('limit_reached');
+      if ((profile.em || 0) < item.price) return fail('not_enough_em');
+
+      let grantedGearId = null;
+      if (item.gearSlot !== undefined) {
+        grantedGearId = seasonInfo.gearIds[item.gearSlot];
+        if (!grantedGearId) return fail('invalid_id');
+      }
+
+      profile.em -= item.price;
+      profile.eventShop.bought[itemId] = bought + 1;
+      if (item.grant) {
+        if (item.grant.coins) profile.coins += item.grant.coins;
+        if (item.grant.universalFragments) profile.universalFragments += item.grant.universalFragments;
+        if (item.grant.gachaTickets) profile.gachaTickets = (profile.gachaTickets || 0) + item.grant.gachaTickets;
+      }
+      if (grantedGearId) {
+        profile.completedGear[grantedGearId] = (profile.completedGear[grantedGearId] || 0) + 1;
+      }
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+
+      socket.send(JSON.stringify({
+        type: '__event_shop_result',
+        ok: true,
+        itemId,
+        grantedGearId,
+        spent: item.price,
+        profile: publicProfilePayload(profile)
+      }));
+      return;
+    }
+
+    // ================================================================
     // --- ガチャ（Phase3）---
     // data: { type:'__gacha_pull', clientId, times: 1|10 }
     // 抽選は必ずサーバー側で行う。timesは1回引きと10連引きのみ許可（不正な回数は拒否）。
@@ -1308,13 +1451,16 @@ wss.on('connection', (socket) => {
         return;
       }
 
-      const totalCost = isFreeDaily ? 0 : GACHA_COST * times;
+      // Ver9.6: ガチャチケットは単発(1回)・非無料ガチャでのみ使用でき、コインより優先して消費する。
+      const useTicket = !isFreeDaily && times === 1 && (profile.gachaTickets || 0) > 0;
+      const totalCost = (isFreeDaily || useTicket) ? 0 : GACHA_COST * times;
       if (profile.coins < totalCost) {
         socket.send(JSON.stringify({ type: '__gacha_result', ok: false, reason: 'not_enough_coins' }));
         return;
       }
 
       profile.coins -= totalCost;
+      if (useTicket) profile.gachaTickets -= 1;
       const pulls = [];
       let gearCompletedGained = 0;
       for (let i = 0; i < times; i++) {
@@ -1348,6 +1494,7 @@ wss.on('connection', (socket) => {
         pulls,
         spent: totalCost,
         freeDaily: isFreeDaily,
+        usedTicket: useTicket,
         profile: publicProfilePayload(profile)
       }));
       return;
@@ -1401,7 +1548,7 @@ wss.on('connection', (socket) => {
       if (!profile) return fail('no_profile');
 
       const gearId = String(data.gearId || '');
-      if (!GEAR_IDS.includes(gearId)) return fail('invalid_id');
+      if (!ALL_GEAR_IDS.includes(gearId)) return fail('invalid_id');
       if (profile.equippedGear.main === gearId) return fail('already_equipped');
       if ((profile.completedGear[gearId] || 0) < 1) return fail('not_enough_inventory');
       if (profile.coins < GEAR_MAIN_EQUIP_COST) return fail('not_enough_coins');
@@ -1450,7 +1597,7 @@ wss.on('connection', (socket) => {
       if (!profile) return fail('no_profile');
 
       const gearId = String(data.gearId || '');
-      if (!GEAR_IDS.includes(gearId)) return fail('invalid_id');
+      if (!ALL_GEAR_IDS.includes(gearId)) return fail('invalid_id');
       if (GEAR_META[gearId].subOnly) return fail('main_only_gear');
       if (!profile.equippedGear.main) return fail('no_main_equipped');
 
