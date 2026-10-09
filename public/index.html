@@ -301,6 +301,14 @@
     }
     .shop-tab.active { color: #ffd93d; border-bottom-color: #ffd93d; }
     .shop-tab:hover { color: #ffe89a; }
+    #event-shop-em-row { display:flex; align-items:center; gap:14px; padding:8px 12px; margin-bottom:10px; background:rgba(162,155,254,0.12); border:1px solid rgba(162,155,254,0.4); border-radius:10px; font-size:13px; }
+    #event-shop-em-value { font-size:20px; font-weight:bold; color:#a29bfe; }
+    #event-shop-ticket { margin-left:auto; color:#ffeaa7; font-size:12px; }
+    .shop-item.event-gear { border-color:#a29bfe; background:rgba(162,155,254,0.10); }
+    .shop-item .si-limit { font-size:10.5px; color:#fab1a0; }
+    .gii-badge.event { background:rgba(162,155,254,0.25); color:#d6d1ff; }
+    #sixth-sense-panel { position:fixed; top:90px; left:50%; transform:translateX(-50%); z-index:60; background:rgba(20,16,40,0.88); border:1px solid #a29bfe; border-radius:10px; padding:10px 16px; color:#fff; font-size:12px; line-height:1.6; display:none; pointer-events:none; max-width:420px; }
+    #sixth-sense-panel b { color:#a29bfe; }
     .shop-pane { display: none; }
     .shop-pane.active { display: block; }
     .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; }
@@ -1087,6 +1095,7 @@
         <div class="shop-tab active" data-shop-pane="shots">🔫 通常弾</div>
         <div class="shop-tab" data-shop-pane="ults">⚡ 必殺技</div>
         <div class="shop-tab" data-shop-pane="tactics">🎯 戦術サブ能力</div>
+        <div class="shop-tab" data-shop-pane="event">🌟 イベント</div>
       </div>
 
       <div class="shop-pane active" id="shop-pane-shots">
@@ -1107,6 +1116,13 @@
       <div class="shop-pane" id="shop-pane-tactics">
         <div class="shop-note">戦術サブ能力は、対応する必殺技を所持していないと購入できません。未購入の場合、その必殺技は「戦術なし（素の性能）」で使用されます。</div>
         <div class="shop-grid" id="shop-grid-tactics"></div>
+      </div>
+
+      <div class="shop-pane" id="shop-pane-event">
+        <div id="event-shop-em-row"><span>所持EM</span><span id="event-shop-em-value">0</span><span id="event-shop-ticket">🎟 ガチャチケ: <b id="event-shop-ticket-value">0</b></span></div>
+        <div class="shop-note" id="event-shop-season-note">イベントマッチで獲得したEMと交換できます。購入回数の上限はシーズン（毎月1日に切替）ごとにリセットされます。</div>
+        <div class="shop-grid" id="shop-grid-event"></div>
+        <div class="shop-note" style="margin-top:12px;">イベントギアはイベントショップでのみ入手でき、ガチャからは出ません。外しても破片は戻りません（メイン専用・サブ不可）。<br>ガチャチケットは単発ガチャでのみ使え、コインより先に消費されます。</div>
       </div>
 
       <div id="shop-message"></div>
@@ -1137,6 +1153,7 @@
         <div id="gacha-free-note">JST（日本時間）で毎日0:00に更新</div>
       </div>
 
+      <div id="gacha-ticket-row" style="text-align:center; font-size:13px; color:#ffeaa7; margin:4px 0 8px;">🎟 ガチャチケット: <b id="gacha-ticket-value">0</b>枚（単発のみ・コインより優先）</div>
       <div class="gacha-pull-row">
         <button type="button" class="gacha-pull-btn" id="gacha-pull-1-btn">1回引く（300）</button>
         <button type="button" class="gacha-pull-btn" id="gacha-pull-10-btn">10回引く（3,000）</button>
@@ -2034,6 +2051,8 @@
       not_enough_coins: 'コインが足りません。',
       free_gacha_used: '今日の無料ガチャはもう使用済みです。',
       invalid_free_gacha: '無料ガチャの指定が不正です。',
+      not_enough_em: 'EMが足りません。',
+      limit_reached: 'このシーズンの購入上限に達しています。',
       already_owned: 'すでに所持しています。',
       ult_required: '先に対応する必殺技を購入してください。',
       all_owned: '必殺技はすべて所持済みです。',
@@ -2053,6 +2072,7 @@
     }
 
     function renderShopUI() {
+      try { renderEventShop(); } catch (e) { /* 初期化順(TDZ)対策：定数定義前に呼ばれても落とさない */ }
       const coinEl = document.getElementById('shop-coin-value');
       if (coinEl) coinEl.innerText = myCoins().toLocaleString();
       const coins = myCoins();
@@ -2386,6 +2406,87 @@
       refreshTrainingGearPanel();
     });
 
+    // ================================================================
+    // --- Ver9.6: イベントショップ（EM交換）---
+    // 価格・上限はサーバー(EVENT_SHOP_ITEMS)が正。ここは表示用。
+    // ================================================================
+    const EVENT_SHOP_ITEMS_UI = [
+      { id: 'coin100',  name: '100コイン',  desc: 'コイン100枚と交換', price: 300,   limit: 20 },
+      { id: 'coin500',  name: '500コイン',  desc: 'コイン500枚と交換', price: 1500,  limit: 10 },
+      { id: 'coin1000', name: '1,000コイン', desc: 'コイン1,000枚と交換', price: 3000, limit: 5 },
+      { id: 'coin3000', name: '3,000コイン', desc: 'コイン3,000枚と交換', price: 7500, limit: 1 },
+      { id: 'universal', name: '万能破片', desc: '万能破片1個と交換（好きなギアの破片に変換可）', price: 10000, limit: 4 },
+      { id: 'ticket5',  name: 'ガチャチケット×5', desc: '単発ガチャ専用。コインより優先して消費', price: 4000, limit: 10 },
+      { id: 'gear0', gearSlot: 0, price: 5000, limit: null },
+      { id: 'gear1', gearSlot: 1, price: 5000, limit: null },
+      { id: 'gear2', gearSlot: 2, price: 5000, limit: null }
+    ];
+
+    function currentEventSeason() {
+      return (myProfile && myProfile.eventSeason) || null;
+    }
+
+    function renderEventShop() {
+      const grid = document.getElementById('shop-grid-event');
+      if (!grid) return;
+      const em = (myProfile && myProfile.em) || 0;
+      const tickets = (myProfile && myProfile.gachaTickets) || 0;
+      const emEl = document.getElementById('event-shop-em-value');
+      if (emEl) emEl.innerText = em.toLocaleString();
+      const tkEl = document.getElementById('event-shop-ticket-value');
+      if (tkEl) tkEl.innerText = tickets;
+
+      const season = currentEventSeason();
+      const note = document.getElementById('event-shop-season-note');
+      if (note) {
+        note.innerText = season
+          ? `シーズン${season.season}（毎月1日に切替）：イベントマッチで獲得したEMと交換できます。購入回数の上限はシーズンが変わるとリセットされます。${season.season >= 6 ? '（シーズン6以降はシーズン1〜5のイベントギアからランダムに3つが復刻販売）' : ''}`
+          : 'イベントマッチで獲得したEMと交換できます。';
+      }
+
+      grid.innerHTML = '';
+      const bought = (myProfile && myProfile.eventShop && myProfile.eventShop.season === (season && season.season) ? myProfile.eventShop.bought : null) || {};
+      EVENT_SHOP_ITEMS_UI.forEach(item => {
+        let name = item.name, desc = item.desc, isGear = false;
+        if (item.gearSlot !== undefined) {
+          const gid = season && season.gearIds[item.gearSlot];
+          const meta = gid && GEAR_MASTER[gid];
+          if (!meta) return;
+          isGear = true;
+          name = `🌟 ${meta.name}`;
+          desc = `イベントギア（メイン専用／メイン時サブ${meta.mainSubSlots}枠）：${meta.mainDesc}`;
+        }
+        const count = bought[item.id] || 0;
+        const soldOut = item.limit !== null && count >= item.limit;
+        const affordable = em >= item.price;
+        const el = document.createElement('div');
+        el.className = 'shop-item' + (isGear ? ' event-gear' : '') + (soldOut ? ' owned' : '');
+        const limitText = item.limit === null ? '無制限' : `残り ${Math.max(0, item.limit - count)} / ${item.limit} 回`;
+        el.innerHTML = `
+          <div class="si-name">${name}</div>
+          <div class="si-desc">${desc}</div>
+          <div class="si-limit">${limitText}</div>
+          <div class="si-foot"><span class="si-price">${item.price.toLocaleString()} EM</span></div>
+        `;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'shop-buy-btn';
+        btn.innerText = soldOut ? '売り切れ' : (affordable ? '交換' : 'EM不足');
+        btn.disabled = soldOut || !affordable;
+        btn.addEventListener('click', () => requestEventPurchase(item.id));
+        el.querySelector('.si-foot').appendChild(btn);
+        grid.appendChild(el);
+      });
+    }
+
+    function requestEventPurchase(itemId) {
+      showShopMessage('交換処理中…', true);
+      sendProfileMessage(
+        { type: '__event_shop_purchase', clientId: MY_CLIENT_ID, itemId },
+        () => showShopMessage('サーバーに接続できませんでした。時間をおいて再度お試しください。', false)
+      );
+    }
+
     function openShopOverlay() {
       document.getElementById('shop-overlay').style.display = 'flex';
       showShopMessage('', true);
@@ -2453,7 +2554,12 @@
         freeBtn.disabled = gachaAnimationRunning || gachaRequestPending || !freeAvailable;
         freeBtn.textContent = freeAvailable ? '🎁 今日の無料ガチャ（1回）' : '🎁 今日の無料ガチャ（使用済み）';
       }
-      document.getElementById('gacha-pull-1-btn').disabled = gachaAnimationRunning || gachaRequestPending || coins < GACHA_COST;
+      const tickets = (myProfile && myProfile.gachaTickets) || 0;
+      const ticketEl = document.getElementById('gacha-ticket-value');
+      if (ticketEl) ticketEl.innerText = tickets;
+      const pull1Btn = document.getElementById('gacha-pull-1-btn');
+      pull1Btn.innerText = tickets > 0 ? '1回引く（🎟チケット1枚）' : `1回引く（${GACHA_COST}）`;
+      pull1Btn.disabled = gachaAnimationRunning || gachaRequestPending || (tickets <= 0 && coins < GACHA_COST);
       document.getElementById('gacha-pull-10-btn').disabled = gachaAnimationRunning || gachaRequestPending || coins < GACHA_COST * 10;
 
       const universal = (myProfile && myProfile.universalFragments) || 0;
@@ -2797,7 +2903,7 @@
 
       if (equipped.main) {
         const oldMeta = GEAR_MASTER[equipped.main];
-        warning += `\n\n現在のメイン「${oldMeta ? oldMeta.name : equipped.main}」は外れ、破片3個が戻ります。`;
+        warning += `\n\n現在のメイン「${oldMeta ? oldMeta.name : equipped.main}」は外れ、${oldMeta && oldMeta.event ? '消滅します（イベントギアは破片が戻りません）' : '破片3個が戻ります'}。`;
 
         const oldSubCount = (equipped.subs || []).length;
         const newSlots = meta.mainSubSlots;
@@ -2835,7 +2941,7 @@
       const meta = GEAR_MASTER[equipped.main];
       const subCount = (equipped.subs || []).length;
       const mainName = meta ? meta.name : equipped.main;
-      let warning = `メイン「${mainName}」を外します。\n\n・完成ギアそのものは戻らず消滅\n・代わりに破片3個が戻ります`;
+      let warning = `メイン「${mainName}」を外します。\n\n・完成ギアそのものは戻らず消滅\n・${meta && meta.event ? 'イベントギアのため破片も戻りません' : '代わりに破片3個が戻ります'}`;
       if (subCount > 0) {
         warning += `\n・現在のサブ${subCount}個もすべて同時に外れ、それぞれ破片3個が戻ります`;
       }
@@ -2947,7 +3053,7 @@
       if (grid) {
         grid.innerHTML = '';
         const completed = (myProfile && myProfile.completedGear) || {};
-        GEAR_IDS.forEach(gearId => {
+        ALL_GEAR_IDS.forEach(gearId => {
           const count = completed[gearId] || 0;
           if (count <= 0) return; // 在庫が無いギアは装備画面には出さない（ガチャ画面の在庫グリッドで確認できる）
           const meta = GEAR_MASTER[gearId];
@@ -2960,6 +3066,7 @@
           el.innerHTML = `
             <div class="gii-name">${meta.name} <span class="gii-count">×${count}</span></div>
             <div class="gii-badge-row">
+              ${meta.event ? '<span class="gii-badge event">🌟イベントギア</span>' : ''}
               <span class="gii-badge main-slots">メイン時：サブ${meta.mainSubSlots}枠</span>
               ${meta.subOnly ? '<span class="gii-badge main-only">⛔ メイン専用・サブ不可</span>' : '<span class="gii-badge sub-ok">✓ サブ装備可</span>'}
             </div>
@@ -3106,9 +3213,28 @@
       gear17: { name: '即死回避', mainDesc: 'HPが0になる攻撃を受けてもHP1で耐える（1回のみ、リスポーンで回数復活）', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear18: { name: 'のろい', mainDesc: 'デス時、自分を倒したことによる相手のキルヒールを30減らす', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear19: { name: '忍者の心得', mainDesc: 'ダメージを受けると2秒間透明になる', subDesc: null, mainSubSlots: 2, subOnly: true },
-      gear20: { name: 'スポーンチャージ', mainDesc: 'リスポーン時、ULTチャージ+15%', subDesc: null, mainSubSlots: 2, subOnly: true }
+      gear20: { name: 'スポーンチャージ', mainDesc: 'リスポーン時、ULTチャージ+15%', subDesc: null, mainSubSlots: 2, subOnly: true },
+      // --- Ver9.6 イベントギア（EM交換限定・ガチャ非排出・破片なし・全てメイン専用） ---
+      gear21: { event: true, season: 1, name: '再装填', mainDesc: 'MPが切れた際、MPを最大の50%即チャージする（1回のみ、リスポーンで回数復活）', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear22: { event: true, season: 1, name: '第六感', mainDesc: '試合開始時、相手の通常弾・ULT・戦術・ギアが分かる', subDesc: null, mainSubSlots: 3, subOnly: true },
+      gear23: { event: true, season: 1, name: 'ロックオン', mainDesc: '60秒に1回、通常弾がホーミングする', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear24: { event: true, season: 2, name: '緊急離脱', mainDesc: 'デバフがかかっている間、移動速度1.2倍', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear25: { event: true, season: 2, name: '毒ガス', mainDesc: '半径1m以内にいる敵に毎秒1ダメージ', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear26: { event: true, season: 2, name: '極秘使用', mainDesc: 'ULT使用時の通知が相手に表示されない', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear27: { event: true, season: 3, name: '運試し１', mainDesc: '0.5%の確率で5秒間、移動速度と弾速が2倍（抽選は毎秒）', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear28: { event: true, season: 3, name: '運試し２', mainDesc: '攻撃に当たった際、3%の確率で無効化', subDesc: null, mainSubSlots: 1, subOnly: true },
+      gear29: { event: true, season: 3, name: '運試し３', mainDesc: '全ての回復量が1.5倍。ただし回復時15%の確率で回復せず、その分のダメージを受ける', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear30: { event: true, season: 4, name: '唯我独尊', mainDesc: 'シールドのMP消費速度10倍。ただしシールド中は無敵', subDesc: null, mainSubSlots: 1, subOnly: true },
+      gear31: { event: true, season: 4, name: '天下無双', mainDesc: 'HPが5未満の時、通常弾威力2倍', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear32: { event: true, season: 4, name: '疾風迅雷', mainDesc: '最大HPが本来の1/3になる代わりに、常時移動速度1.5倍', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear33: { event: true, season: 5, name: 'コピー', mainDesc: '戦闘開始時、相手のギア編成になる', subDesc: null, mainSubSlots: 0, subOnly: true },
+      gear34: { event: true, season: 5, name: 'ゼロフラット', mainDesc: '全プレイヤーのギア効果を無くす', subDesc: null, mainSubSlots: 0, subOnly: true },
+      gear35: { event: true, season: 5, name: 'シャッフル', mainDesc: '全プレイヤーのギアがそれぞれランダムになる（サブ枠はランダムなメインに依存）', subDesc: null, mainSubSlots: 0, subOnly: true }
     };
-    const GEAR_IDS = Object.keys(GEAR_MASTER);
+    // 通常ギア（ガチャ・統一・シャッフルの対象）とイベントギアを分ける。
+    const GEAR_IDS = Object.keys(GEAR_MASTER).filter(id => !GEAR_MASTER[id].event);
+    const EVENT_GEAR_IDS = Object.keys(GEAR_MASTER).filter(id => GEAR_MASTER[id].event);
+    const ALL_GEAR_IDS = [...GEAR_IDS, ...EVENT_GEAR_IDS];
 
     // ================================================================
     // --- ギア効果の数値定義（Phase5）---
@@ -3141,7 +3267,7 @@
     // getGearBonusTotal がキー別に GEAR_EFFECTS を1件ずつ引くため、
     // 2キー目（空中移動速度）だけ下のヘルパーで個別に計算する。
     function getGear05AirMoveBonusTotal() {
-      const equipped = (currentStage === 'training' ? trainingFreeGear : (myProfile && myProfile.equippedGear)) || { main: null, subs: [] };
+      const equipped = getEquippedGear();
       let total = 0;
       const eff = GEAR_EFFECTS.gear05air;
       if (equipped.main === 'gear05') total += eff.main;
@@ -3157,7 +3283,7 @@
     // trainingFreeGear（ローカルのみで完結し、サーバーには一切送らない仮の装備状態）を参照する。
     function getGearBonusTotal(effectKey) {
       if (effectKey === 'airMoveSpeedPct') return getGear05AirMoveBonusTotal();
-      const equipped = (currentStage === 'training' ? trainingFreeGear : (myProfile && myProfile.equippedGear)) || { main: null, subs: [] };
+      const equipped = getEquippedGear();
       let total = 0;
       if (equipped.main) {
         const eff = GEAR_EFFECTS[equipped.main];
@@ -3185,7 +3311,7 @@
     // 現在メインスロットに装備しているギアIDが gearId と一致するか。
     // 訓練場では trainingFreeGear を見る（Phase2の関数と同じ分岐ルール）。
     function isMainGear(gearId) {
-      const equipped = (currentStage === 'training' ? trainingFreeGear : (myProfile && myProfile.equippedGear));
+      const equipped = getEquippedGear();
       return !!(equipped && equipped.main === gearId);
     }
 
@@ -3222,6 +3348,233 @@
     // （サブ不可のメイン専用ギア。スポーン時の追加チャージとして単独で適用される）
     function gearRespawnUltBonus() {
       return isMainGear('gear20') ? 15 : 0;
+    }
+
+    // ================================================================
+    // --- Ver9.6: イベントギア基盤 ---
+    // 試合中の「有効なギア編成」を一箇所(getEquippedGear)に集約する。
+    //   訓練場 → trainingFreeGear ／ ゼロフラット発動中 → 全員ギア無効 ／
+    //   シャッフル・コピーの上書き(gearOverride) ／ 通常 → プロフィールの装備
+    // 他プレイヤーの編成は 'loadout' メッセージで共有する（第六感・コピー・ゼロフラット・シャッフルで必要）。
+    // ================================================================
+    let gearOverride = null;        // コピー/シャッフルで試合中だけ差し替わる編成
+    let gearZeroFlat = false;       // ゼロフラット発動中か（毎フレーム gearMatchTick で更新）
+    let gearMatchResolved = false;  // この試合のコピー/シャッフル/第六感を解決済みか
+    let gearFirstLoadoutAt = 0;
+    let gearLoadoutSendTimer = 0;
+    let reloadAvailable = false;    // gear21 再装填：1回分のチャージ
+    let lockOnCooldown = 0;         // gear23 ロックオン：残りクールタイム(秒)
+    let luckBoostTimer = 0;         // gear27 運試し１：発動中の残り秒
+    let luckRollAcc = 0, gasAcc = 0, autoHealGearAcc = 0;
+
+    function baseEquippedGear() {
+      return (myProfile && myProfile.equippedGear) || { main: null, subs: [] };
+    }
+    function getEquippedGear() {
+      if (currentStage === 'training') return trainingFreeGear || { main: null, subs: [] };
+      if (gearZeroFlat) return { main: null, subs: [] };
+      if (gearOverride) return gearOverride;
+      return baseEquippedGear();
+    }
+
+    function gearMatchReset() {
+      gearOverride = null;
+      gearZeroFlat = false;
+      gearMatchResolved = false;
+      gearFirstLoadoutAt = 0;
+      lockOnCooldown = 0;
+      luckBoostTimer = 0; luckRollAcc = 0; gasAcc = 0; autoHealGearAcc = 0;
+      const panel = document.getElementById('sixth-sense-panel');
+      if (panel) panel.style.display = 'none';
+    }
+
+    function sanitizeLoadout(d) {
+      const cleanGear = (g) => {
+        const out = { main: null, subs: [] };
+        if (g && typeof g === 'object') {
+          if (typeof g.main === 'string' && GEAR_MASTER[g.main]) out.main = g.main;
+          if (Array.isArray(g.subs)) out.subs = g.subs.filter(x => typeof x === 'string' && GEAR_MASTER[x]).slice(0, 3);
+        }
+        return out;
+      };
+      return {
+        shot: bulletMasterData[d.shot] ? d.shot : null,
+        ult: ultMasterData[d.ult] ? d.ult : null,
+        sub: (d.sub === 'A' || d.sub === 'B') ? d.sub : 'NONE',
+        base: cleanGear(d.base),
+        gear: cleanGear(d.gear)
+      };
+    }
+
+    function broadcastMyLoadout() {
+      const base = baseEquippedGear();
+      const eff = gearOverride || base;
+      broadcastMsg({
+        type: 'loadout',
+        name: playerName,
+        shot: selectedBulletType,
+        ult: selectedUltType,
+        sub: selectedUltSubtype,
+        base: { main: base.main, subs: (base.subs || []).slice() },
+        gear: { main: eff.main, subs: (eff.subs || []).slice() }
+      });
+    }
+
+    function randomGearLoadout() {
+      const mains = GEAR_IDS.filter(id => GEAR_MASTER[id].mainDesc);
+      const subPool = GEAR_IDS.filter(id => GEAR_MASTER[id].subDesc);
+      const main = mains[Math.floor(Math.random() * mains.length)];
+      const slots = GEAR_MASTER[main].mainSubSlots || 0;
+      const pool = subPool.filter(id => id !== main);
+      const subs = [];
+      while (subs.length < slots && pool.length) subs.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+      return { main, subs };
+    }
+
+    function gearLabel(g) {
+      if (!g || !g.main) return 'なし';
+      const subs = (g.subs || []).map(id => GEAR_MASTER[id] ? GEAR_MASTER[id].name : id);
+      return `${GEAR_MASTER[g.main].name}${subs.length ? '／サブ: ' + subs.join('・') : ''}`;
+    }
+
+    function showSixthSense(remotes) {
+      let panel = document.getElementById('sixth-sense-panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'sixth-sense-panel';
+        document.body.appendChild(panel);
+      }
+      const lines = remotes.map(rp => {
+        const l = rp.loadout;
+        const um = l.ult ? ultMasterData[l.ult] : null;
+        let tactic = 'なし';
+        if (um && (l.sub === 'A' || l.sub === 'B')) tactic = `${l.sub}: ${(l.sub === 'A' ? um.typeA : um.typeB).title}`;
+        return `<div><b>${(rp.name || '魔導士')}</b>　通常弾: ${l.shot ? bulletMasterData[l.shot].name : '?'}／ULT: ${um ? um.name : '?'}（戦術 ${tactic}）<br>　ギア: ${gearLabel(l.gear)}</div>`;
+      });
+      panel.innerHTML = `<div style="color:#a29bfe;font-weight:bold;margin-bottom:4px;">👁 第六感：相手の編成</div>${lines.join('')}`;
+      panel.style.display = 'block';
+      clearTimeout(showSixthSense._t);
+      showSixthSense._t = setTimeout(() => { panel.style.display = 'none'; }, 14000);
+      remotes.forEach(rp => addBattleLog(`<span style="color:#a29bfe">👁 第六感 [${rp.name || '魔導士'}] 通常弾:${rp.loadout.shot ? bulletMasterData[rp.loadout.shot].name : '?'} ULT:${rp.loadout.ult ? ultMasterData[rp.loadout.ult].name : '?'} ギア:${gearLabel(rp.loadout.gear)}</span>`));
+    }
+
+    // 試合開始時の一回限りの解決：シャッフル＞コピー。ゼロフラットは毎フレーム判定。
+    function gearMatchResolve(remotes) {
+      gearMatchResolved = true;
+      gearOverride = null;
+      const base = baseEquippedGear();
+      const anyShuffle = base.main === 'gear35' || remotes.some(rp => rp.loadout.base.main === 'gear35');
+      if (anyShuffle) {
+        gearOverride = randomGearLoadout();
+        addBattleLog(`<span style="color:#fd79a8">🔀 シャッフル発動！ギアがランダムに変更：${gearLabel(gearOverride)}</span>`);
+      } else if (base.main === 'gear33') {
+        const opp = remotes[Math.floor(Math.random() * remotes.length)];
+        const b = opp.loadout.base;
+        gearOverride = (b.main && b.main !== 'gear33') ? { main: b.main, subs: b.subs.slice() } : { main: null, subs: [] };
+        addBattleLog(`<span style="color:#74b9ff">📋 コピー発動！[${opp.name || '魔導士'}] のギア編成になった：${gearLabel(gearOverride)}</span>`);
+      }
+      if (gearOverride) {
+        // 編成が変わったので、最大HP/MP・リスポーン系の状態を作り直す。
+        myHp = getMaxHp();
+        myMp = getMaxMp();
+        applyGearRespawnState();
+        const bonus = gearRespawnUltBonus();
+        if (bonus > 0) ultPercent = Math.min(200, ultPercent + bonus);
+        updateHudBars();
+      }
+      if (isMainGear('gear22')) showSixthSense(remotes);
+    }
+
+    // リスポーン（と試合開始）のたびに回数・タイマーが復活するギア状態
+    function applyGearRespawnState() {
+      dashBuffTimer = isMainGear('gear16') ? 20.0 : 0;
+      deathAvoidCharge = isMainGear('gear17');
+      reloadAvailable = isMainGear('gear21');
+    }
+
+    function gearMatchTick(delta) {
+      if (!isGameStarted || currentStage === 'training') { gearZeroFlat = false; return; }
+      const remotes = Object.values(remotePlayers).filter(rp => rp && rp.loadout);
+      let zero = baseEquippedGear().main === 'gear34';
+      for (const rp of remotes) if (rp.loadout.base.main === 'gear34') zero = true;
+      if (zero !== gearZeroFlat) {
+        gearZeroFlat = zero;
+        addBattleLog(zero
+          ? `<span style="color:#b2bec3">⚖ ゼロフラット発動！全プレイヤーのギア効果が無効になった</span>`
+          : `<span style="color:#b2bec3">⚖ ゼロフラット解除：ギア効果が元に戻った</span>`);
+        if (myHp > getMaxHp()) myHp = getMaxHp();
+        if (myMp > getMaxMp()) myMp = getMaxMp();
+      }
+      if (!gearMatchResolved && remotes.length > 0) {
+        const total = Object.values(remotePlayers).filter(rp => rp && rp.hasPos).length;
+        if (!gearFirstLoadoutAt) gearFirstLoadoutAt = performance.now();
+        if (remotes.length >= total || performance.now() - gearFirstLoadoutAt > 2500) gearMatchResolve(remotes);
+      }
+      // 自分の編成を定期的に共有（2秒ごと）
+      gearLoadoutSendTimer -= delta;
+      if (gearLoadoutSendTimer <= 0) { gearLoadoutSendTimer = 2.0; broadcastMyLoadout(); }
+    }
+
+    // イベントギアの毎フレーム処理（運試し１・毒ガス・ロックオンのクールタイム）
+    function eventGearTick(delta) {
+      if (!isGameStarted || isDead || myHp <= 0 || currentStage === 'training') return;
+      if (window.EventMatch && EventMatch.inputBlocked()) return;
+      if (lockOnCooldown > 0) lockOnCooldown = Math.max(0, lockOnCooldown - delta);
+      if (luckBoostTimer > 0) luckBoostTimer = Math.max(0, luckBoostTimer - delta);
+
+      // gear27 運試し１：毎秒0.5%で5秒間 移動速度・弾速2倍
+      if (isMainGear('gear27')) {
+        luckRollAcc += delta;
+        while (luckRollAcc >= 1) {
+          luckRollAcc -= 1;
+          if (luckBoostTimer <= 0 && Math.random() < 0.005) {
+            luckBoostTimer = 5.0;
+            addBattleLog(`<span style="color:#f1c40f">🍀 運試し１ 大当たり！5秒間 移動速度と弾速が2倍！</span>`);
+          }
+        }
+      }
+
+      // gear25 毒ガス：半径1m以内の敵へ毎秒1ダメージ（攻撃側が判定して相手に通知）
+      if (isMainGear('gear25')) {
+        gasAcc += delta;
+        while (gasAcc >= 1) {
+          gasAcc -= 1;
+          for (const id of Object.keys(remotePlayers)) {
+            const rp = remotePlayers[id];
+            if (!rp || !rp.hasPos || rp.isDead) continue;
+            const dx = rp.group.position.x - playerPos.x;
+            const dy = rp.group.position.y - playerPos.y;
+            const dz = rp.group.position.z - playerPos.z;
+            if (dx * dx + dy * dy + dz * dz <= 1.0) broadcastMsg({ type: 'gas_damage', targetId: id, dmg: 1 });
+          }
+        }
+      } else {
+        gasAcc = 0;
+      }
+    }
+
+    // gear29 運試し３ を含む全ての回復はここを通す。実際に増えたHPを返す。
+    function gearHealApply(amount) {
+      if (isMainGear('gear29')) {
+        amount *= 1.5;
+        if (Math.random() < 0.15) {
+          addBattleLog(`<span style="color:#ff7675">🎲 運試し３ 外れ…回復せず ${Math.round(amount)} ダメージを受けた！</span>`);
+          applyDamage(amount, null, false, false, false);
+          return 0;
+        }
+      }
+      const healed = Math.max(0, Math.min(getMaxHp(), myHp + amount) - myHp);
+      myHp += healed;
+      return healed;
+    }
+
+    // イベントギアによる移動速度の倍率（疾風迅雷×1.5／緊急離脱：デバフ中×1.2／運試し１発動中×2）
+    function eventGearMoveMult() {
+      let m = 1;
+      if (isMainGear('gear32')) m *= 1.5;
+      if (isMainGear('gear24') && (curseDebuffTimer > 0 || isVulnerable || stunTimer > 0)) m *= 1.2;
+      if (isMainGear('gear27') && luckBoostTimer > 0) m *= 2;
+      return m;
     }
 
 
@@ -4123,7 +4476,13 @@
     let playerName = "魔導士A";
     let myHp = 100;
     let myMp = 100;
-    function getMaxHp() { if (window.EventMatch && EventMatch.oneShot()) return 1; return 100 + getGearBonusTotal('maxHp'); }
+    function getMaxHp() {
+      if (window.EventMatch && EventMatch.oneShot()) return 1;
+      const base = 100 + getGearBonusTotal('maxHp');
+      // gear32 疾風迅雷：最大HPが本来の1/3（四捨五入、最低1）
+      if (isMainGear('gear32')) return Math.max(1, Math.round(base / 3));
+      return base;
+    }
     function getMaxMp() { return 100 + getGearBonusTotal('maxMp'); }
     let ultPercent = 0.0;
     let isOverheated = false;
@@ -4298,6 +4657,9 @@
       // pendingNewMatchStart は新しい試合の開始点でのみ true にする。
       const isNewMatchStart = !isDeathRespawn && pendingNewMatchStart;
       if (isNewMatchStart) {
+        gearMatchReset(); // Ver9.6: コピー/シャッフル/第六感の再解決
+        myHp = getMaxHp();
+        myMp = getMaxMp();
         ultPercent = 0.0;
         warpExpireTimer = 0;
         thunderSpeedTimer = 0;
@@ -4321,6 +4683,7 @@
       // Phase5: メイン専用ギアのリスポーン時リセット/再チャージ
       dashBuffTimer = isMainGear('gear16') ? 20.0 : 0;             // スタートダッシュ：20秒間の速度・ダメージバフ
       deathAvoidCharge = isMainGear('gear17');                     // 即死回避：リスポーンのたびに1回分再チャージ
+      reloadAvailable = isMainGear('gear21');                      // 再装填：リスポーンのたびに1回分再チャージ
       // gear19「忍者の心得」は被ダメージ時に2秒透明化するため、リスポーン時の自動透明化は行わない。
 
       beamCharging = false;
@@ -4995,6 +5358,23 @@
         return;
       }
 
+      // --- Ver9.6: イベントショップ購入結果 ---
+      if (data.type === '__event_shop_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderShopUI();
+          renderProfileUI();
+          renderGachaUI();
+          renderGearUI();
+          const gname = data.grantedGearId ? (GEAR_MASTER[data.grantedGearId]?.name || data.grantedGearId) : null;
+          const it = EVENT_SHOP_ITEMS_UI.find(x => x.id === data.itemId);
+          showShopMessage(`✓ 交換完了：「${gname ? 'イベントギア ' + gname : (it ? it.name : data.itemId)}」を入手しました！（-${(data.spent || 0).toLocaleString()} EM）`, true);
+        } else {
+          showShopMessage(SHOP_ERROR_TEXT[data.reason] || '交換に失敗しました。', false);
+        }
+        return;
+      }
+
       // ================================================================
       // --- Phase3: ガチャ結果 ---
       // ================================================================
@@ -5007,7 +5387,7 @@
           renderShopUI();
           renderProfileUI();
           refreshSelectionLockUI();
-          showGachaMessage(data.freeDaily ? '🎁 今日の無料ガチャを使いました！' : `${window.lastGachaPulls.length}連実行（-${(data.spent || 0).toLocaleString()} コイン）`, true);
+          showGachaMessage(data.freeDaily ? '🎁 今日の無料ガチャを使いました！' : data.usedTicket ? '🎟 ガチャチケットを1枚使って1回実行！' : `${window.lastGachaPulls.length}連実行（-${(data.spent || 0).toLocaleString()} コイン）`, true);
           startGachaAnimation(window.lastGachaPulls);
         } else {
           gachaRequestPending = false;
@@ -5067,7 +5447,7 @@
           renderGearUI();
           renderGachaUI();
           const name = GEAR_MASTER[data.removedMain]?.name || data.removedMain;
-          let msg = `メイン「${name}」を外しました（破片+3）`;
+          let msg = `メイン「${name}」を外しました${GEAR_MASTER[data.removedMain]?.event ? '（イベントギアのため破片なし）' : '（破片+3）'}`;
           if (data.removedSubs && data.removedSubs.length > 0) msg += `／サブ${data.removedSubs.length}個も道連れで外れました`;
           showGearMessage(msg, true);
         } else {
@@ -5587,7 +5967,7 @@
         }
 
         // Ver5: プロフィール関連メッセージはメインwsでも受け取り得る
-        if (data.type === '__profile_result' || data.type === '__shop_result' || data.type === '__gacha_result' || data.type === '__gacha_use_universal_result' || data.type === '__gear_equip_main_result' || data.type === '__gear_equip_sub_result' || data.type === '__gear_unequip_main_result' || data.type === '__gear_unequip_sub_result' || data.type === '__quest_claim_result' || data.type === '__login_bonus_result') {
+        if (data.type === '__profile_result' || data.type === '__shop_result' || data.type === '__event_shop_result' || data.type === '__gacha_result' || data.type === '__gacha_use_universal_result' || data.type === '__gear_equip_main_result' || data.type === '__gear_equip_sub_result' || data.type === '__gear_unequip_main_result' || data.type === '__gear_unequip_sub_result' || data.type === '__quest_claim_result' || data.type === '__login_bonus_result') {
           handleProfileServerMessage(data);
           return;
         }
@@ -5620,6 +6000,14 @@
         if (!remotePlayers[senderId]) createRemotePlayer(senderId, data.name);
         remotePlayers[senderId].name = data.name;
         remotePlayers[senderId].headTag.userData.name = data.name;
+      } else if (data.type === 'loadout') {
+        if (!remotePlayers[senderId]) createRemotePlayer(senderId, data.name || '魔導士');
+        remotePlayers[senderId].loadout = sanitizeLoadout(data);
+      } else if (data.type === 'gas_damage') {
+        if (data.targetId === myPeerId && myHp > 0 && !isDead && respawnInvincibleTimer <= 0) {
+          applyDamage(Math.min(5, Number(data.dmg) || 1), senderId, false, false, false);
+          triggerHitEffect();
+        }
       } else if (data.type === 'battle_log') {
         addBattleLog(data.text, data.logType);
       } else if (data.type === 'move') {
@@ -5778,8 +6166,7 @@
           const baseHealBonus = (selectedUltType === 'heal' && selectedUltSubtype === 'B') ? 50 : 30;
           // Phase5: gear18（のろい）。自分を倒した相手のキルヒールを30減らす（最低0）。
           const healBonus = Math.max(0, baseHealBonus - (data.hasCurseGear ? 30 : 0));
-          const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + healBonus) - myHp);
-          myHp += healedHp;
+          const healedHp = gearHealApply(healBonus);
           if (healedHp > 0) queueQuestEvent('hpRecovered', healedHp);
           updateHudBars();
           if (healBonus > 0) {
@@ -5902,6 +6289,18 @@
         // ここで止まっている場合は isRateMatchOver が意図せず true のまま
         // 残っていることが原因なので、devtoolsコンソールで確認できる。
         console.log(`[blocked-by-matchover] amount=${amount} isRateMatch=${isRateMatch}`);
+        return;
+      }
+
+      // gear30 唯我独尊：シールド(ガード)中は無敵
+      if (isMainGear('gear30') && isGuarding) {
+        createExplosion(playerPos, 0xf1c40f);
+        return;
+      }
+      // gear28 運試し２：攻撃に当たった際、3%の確率で無効化
+      if (isMainGear('gear28') && Math.random() < 0.03) {
+        spawnDamagePopup(playerPos, 0, false, false);
+        addBattleLog(`<span style="color:#f1c40f">🍀 運試し２ 発動！攻撃を無効化した！</span>`);
         return;
       }
 
@@ -6040,6 +6439,7 @@
 
     function leaveGame() {
       if (window.EventMatch) EventMatch.reset();
+      gearMatchReset();
       isGameStarted = false;
       releasePointerLock();
       clearInputs();
@@ -6423,7 +6823,13 @@
       let spellScale = bMeta ? bMeta.scale : 1.0;
       if (upgradeLevel >= 2) spellScale *= 1.5;
 
-      const isHoming = (upgradeLevel >= 4);
+      let isHoming = (upgradeLevel >= 4);
+      // gear23 ロックオン：60秒に1回、通常弾がホーミングする
+      if (isMainGear('gear23') && lockOnCooldown <= 0) {
+        isHoming = true;
+        lockOnCooldown = 60;
+        addBattleLog(`<span style="color:#ff7675">🎯 ロックオン！この弾がホーミングします（次は60秒後）</span>`);
+      }
       const isExSuperHoming = nextShotExHoming;
 
       let targetInfo = null;
@@ -6435,6 +6841,7 @@
       if (isExSuperHoming) speed = 36;
       // Phase5: gear04（弾速度）はEX超誘導弾には適用しない
       if (!isExSuperHoming) speed *= getGearPctMultiplier('bulletSpeedPct');
+      if (isMainGear('gear27') && luckBoostTimer > 0) speed *= 2; // 運試し１：弾速2倍
       if (window.EventMatch) speed *= EventMatch.bulletSpeedMult(); // Ver9.5 イベント「ゆっくり」：通常弾の弾速0.8倍
       const vx = dir.x * speed, vy = dir.y * speed, vz = dir.z * speed;
 
@@ -6463,6 +6870,14 @@
     }
 
     function triggerOverheat() {
+      // gear21 再装填：MPが切れた際、最大MPの50%を即チャージして継続（1回のみ、リスポーンで復活）
+      if (isMainGear('gear21') && reloadAvailable) {
+        reloadAvailable = false;
+        myMp = getMaxMp() * 0.5;
+        addBattleLog(`<span style="color:#55efc4">🔋 再装填！MPを50%即チャージ（リスポーンまで再発動不可）</span>`);
+        updateHudBars();
+        return;
+      }
       isOverheated = true;
       isGuarding = false;
       myShield.visible = false;
@@ -6541,11 +6956,14 @@
       if (isEx) {
         queueQuestEvent('exUltUsed', 1);
         triggerRainbowFlash();
-        broadcastLog(`<span style="color:#fd79a8">★★★ ${playerName} が 【EX ${ultName}】 を発動！！ ★★★</span>`, 'ex');
+        // gear26 極秘使用：ULT使用の通知を相手に送らない（自分の画面にだけ表示）
+        const exLogHtml = `<span style="color:#fd79a8">★★★ ${playerName} が 【EX ${ultName}】 を発動！！ ★★★</span>`;
+        if (isMainGear('gear26')) addBattleLog(exLogHtml, 'ex'); else broadcastLog(exLogHtml, 'ex');
         // レート戦のEX ULTコインボーナス判定用にサーバーへ報告
         if (isRateMatch) sendToServer({ type: '__report_ex_ult_used' });
       } else {
-        broadcastLog(`<span style="color:#00cec9">${playerName}</span> が <span style="color:#f1c40f">${ultName}</span> を発動！`, 'ult');
+        const ultLogHtml = `<span style="color:#00cec9">${playerName}</span> が <span style="color:#f1c40f">${ultName}</span> を発動！`;
+        if (isMainGear('gear26')) addBattleLog(ultLogHtml, 'ult'); else broadcastLog(ultLogHtml, 'ult');
       }
 
       if (selectedUltType === 'beam') {
@@ -6603,8 +7021,7 @@
             document.getElementById('mp-label').style.color = '#fff';
           }
           if (selectedUltSubtype === 'A') {
-            const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + 15) - myHp);
-            myHp += healedHp;
+            const healedHp = gearHealApply(15);
             if (healedHp > 0) queueQuestEvent('hpRecovered', healedHp);
             updateHudBars();
             addBattleLog(`<span style="color:#55efc4">★ グレードアップ効果: HP+15 回復！</span>`);
@@ -7095,6 +7512,8 @@
       // Phase5: gear07（固定値ダメージ強化）＋ gear15/16（発動時の%ダメージバフ）を反映
       base += getGearBonusTotal('bulletDamageFlat');
       base *= (1 + specialGearOffenseDamagePct() / 100);
+      // gear31 天下無双：HPが5未満の時、通常弾威力2倍
+      if (isMainGear('gear31') && myHp > 0 && myHp < 5) base *= 2;
 
       return Math.round(base);
     }
@@ -7152,10 +7571,19 @@
         }
       }
 
+      gearMatchTick(delta);   // Ver9.6: ゼロフラット判定・コピー/シャッフル/第六感の解決・編成共有
+      eventGearTick(delta);   // Ver9.6: 運試し１・毒ガス・ロックオンCT
+
       if (autoHealTimer > 0) {
         autoHealTimer -= delta;
-        const healedHp = Math.max(0, Math.min(getMaxHp(), myHp + 7 * delta) - myHp);
-        myHp += healedHp;
+        let healedHp = 0;
+        if (isMainGear('gear29')) {
+          // 運試し３：連続回復は1秒ごとの回復イベントとして抽選する（毎フレーム抽選を避ける）
+          autoHealGearAcc += delta;
+          while (autoHealGearAcc >= 1) { autoHealGearAcc -= 1; healedHp += gearHealApply(7); }
+        } else {
+          healedHp = gearHealApply(7 * delta);
+        }
         if (healedHp > 0) queueQuestEvent('hpRecovered', healedHp);
         if (autoHealTimer <= 0) {
           autoHealTimer = 0;
@@ -7391,6 +7819,10 @@
       // Phase5: ギアバフの発動中インジケーター（5-2節：未着手事項だったもの）
       if (isMainGear('gear16') && dashBuffTimer > 0) buffList.push(`<span style="color:#fab1a0">スタートダッシュ (${dashBuffTimer.toFixed(1)}s)</span>`);
       if (isMainGear('gear15') && myHp > 0 && myHp < getMaxHp() * 0.30) buffList.push(`<span style="color:#ff6b6b">起死回生 発動中</span>`);
+      if (isMainGear('gear21')) buffList.push(`<span style="color:#55efc4">再装填 ${reloadAvailable ? 'チャージ済み' : '使用済み'}</span>`);
+      if (isMainGear('gear23')) buffList.push(`<span style="color:#ff7675">ロックオン ${lockOnCooldown > 0 ? 'あと' + Math.ceil(lockOnCooldown) + 's' : '準備完了'}</span>`);
+      if (isMainGear('gear27') && luckBoostTimer > 0) buffList.push(`<span style="color:#f1c40f">運試し１ 発動中 (${luckBoostTimer.toFixed(1)}s)</span>`);
+      if (isMainGear('gear30') && isGuarding) buffList.push(`<span style="color:#f1c40f">唯我独尊 無敵</span>`);
       if (isMainGear('gear17') && deathAvoidCharge) buffList.push(`<span style="color:#ffd93d">即死回避 チャージ済み</span>`);
       document.getElementById('active-buff').innerHTML = buffList.join(' | ');
 
@@ -7406,7 +7838,8 @@
         if (superMagicTimer <= 0) {
           if (isGuarding) {
             // Phase5: gear09（ガード効率UP）でガード中のMP消費速度を軽減
-            const guardDrainRate = 15 * (1 - getGearBonusTotal('shieldMpCostReductionPct') / 100);
+            let guardDrainRate = 15 * (1 - getGearBonusTotal('shieldMpCostReductionPct') / 100);
+            if (isMainGear('gear30')) guardDrainRate *= 10; // 唯我独尊：シールドのMP消費速度10倍
             myMp = Math.max(0, myMp - Math.max(0, guardDrainRate) * delta);
             if (myMp <= 0) triggerOverheat();
           } else {
@@ -7453,7 +7886,7 @@
         if (moveVec.lengthSq() > 0) {
           moveVec.normalize();
           // Phase5: gear03（移動速度）・gear13（ガード低速緩和）・gear15/16（発動時の速度バフ）を反映
-          const gearMoveMult = getGearPctMultiplier('moveSpeedPct', specialGearOffenseSpeedPct()) * (window.EventMatch ? EventMatch.moveMult() : 1);
+          const gearMoveMult = getGearPctMultiplier('moveSpeedPct', specialGearOffenseSpeedPct()) * (window.EventMatch ? EventMatch.moveMult() : 1) * eventGearMoveMult();
           let speed = 11 * gearMoveMult;
           if (isGuarding) {
             // 素のガード速度低下は 11→5.5（5.5低下）。gear13はこの低下幅そのものを軽減する。
@@ -8042,6 +8475,7 @@
         try { ultPercent = 0.0; warpExpireTimer = 0; upgradeLevel = 1; thunderSpeedTimer = 0; thunderSpeedMultiplier = 1.0; } catch (e) {}
         myKills = 0; myDeaths = 0;
         $('death-overlay').style.display = 'none';
+        try { pendingNewMatchStart = true; } catch (e) {} // Ver9.6: イベント開始も新しい試合扱い（ギア解決のリセット）
         resetSpawn(true, false);
         updateHudBars();
         if (typeof updateSubtypePanelUI === 'function') { try { updateSubtypePanelUI(); } catch (e) {} }
