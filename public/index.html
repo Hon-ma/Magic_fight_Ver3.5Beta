@@ -5399,6 +5399,20 @@
         return;
       }
 
+      // --- お詫び補填の受取結果 ---
+      if (data.type === '__apology_claim_result') {
+        if (data.ok && data.profile) {
+          myProfile = data.profile;
+          renderQuestUI();
+          renderGachaUI();
+          renderShopUI();
+          setQuestMessage(`✓ 「${data.title}」を受け取りました / 🎟 ガチャチケット×${Number(data.reward?.gachaTickets || 0)}`, true);
+        } else {
+          setQuestMessage(data.reason === 'already_claimed' ? 'すでに受け取り済みです。' : '受け取れませんでした。', false);
+        }
+        return;
+      }
+
       // --- Ver9.6: イベントショップ購入結果 ---
       if (data.type === '__event_shop_result') {
         if (data.ok && data.profile) {
@@ -5592,7 +5606,8 @@
         const badge = document.querySelector(`[data-quest-badge="${category}"]`);
         if (!badge) return;
         const quests = myProfile?.quests?.[category]?.quests || [];
-        const hasClaimable = quests.some(q => q.completed && !q.claimed);
+        const hasClaimable = quests.some(q => q.completed && !q.claimed)
+          || (category === 'daily' && (myProfile?.apologies || []).some(a => !a.claimed));
         badge.classList.toggle('hidden', !hasClaimable);
       });
     }
@@ -5603,6 +5618,35 @@
       if (!list) return;
       list.innerHTML = '';
       const quests = snapshot?.quests || [];
+      // お詫び補填カード（デイリー欄の先頭。未受取のものだけ強調表示）
+      if (category === 'daily') {
+        (myProfile?.apologies || []).forEach(a => {
+          const item = document.createElement('div');
+          item.className = 'quest-item' + (a.claimed ? ' claimed' : ' completed');
+          item.style.borderColor = a.claimed ? '' : '#ffd93d';
+          const top = document.createElement('div');
+          top.className = 'quest-row-top';
+          const title = document.createElement('div');
+          title.className = 'quest-title';
+          title.innerText = a.title;
+          const reward = document.createElement('div');
+          reward.className = 'quest-reward';
+          reward.innerText = `🎟 ガチャチケット×${Number(a.reward?.gachaTickets || 0)}`;
+          top.appendChild(title);
+          top.appendChild(reward);
+          const btn = document.createElement('button');
+          btn.className = 'quest-claim-btn';
+          btn.type = 'button';
+          btn.innerText = a.claimed ? '受取済み' : '受け取る';
+          btn.disabled = !!a.claimed;
+          btn.addEventListener('click', () => {
+            sendProfileMessage({ type: '__apology_claim', clientId: MY_CLIENT_ID, id: a.id });
+          });
+          item.appendChild(top);
+          item.appendChild(btn);
+          list.appendChild(item);
+        });
+      }
       quests.forEach(q => {
         const item = document.createElement('div');
         item.className = 'quest-item';
@@ -6008,7 +6052,7 @@
         }
 
         // Ver5: プロフィール関連メッセージはメインwsでも受け取り得る
-        if (data.type === '__profile_result' || data.type === '__shop_result' || data.type === '__event_shop_result' || data.type === '__gacha_result' || data.type === '__gacha_use_universal_result' || data.type === '__gear_equip_main_result' || data.type === '__gear_equip_sub_result' || data.type === '__gear_unequip_main_result' || data.type === '__gear_unequip_sub_result' || data.type === '__quest_claim_result' || data.type === '__login_bonus_result') {
+        if (data.type === '__profile_result' || data.type === '__shop_result' || data.type === '__event_shop_result' || data.type === '__apology_claim_result' || data.type === '__gacha_result' || data.type === '__gacha_use_universal_result' || data.type === '__gear_equip_main_result' || data.type === '__gear_equip_sub_result' || data.type === '__gear_unequip_main_result' || data.type === '__gear_unequip_sub_result' || data.type === '__quest_claim_result' || data.type === '__login_bonus_result') {
           handleProfileServerMessage(data);
           return;
         }
