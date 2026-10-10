@@ -167,6 +167,11 @@ function getEventSeasonInfo(now = Date.now()) {
   return { season, gearIds };
 }
 
+// お詫び補填（デイリークエスト欄に「受け取る」カードとして表示。各プロフィールにつき1回のみ）
+const APOLOGY_REWARDS = {
+  apology_em_reset_202610: { title: '【お詫び】EMリセット不具合の補填', reward: { gachaTickets: 10 } }
+};
+
 // イベントショップのラインナップ（EM価格・シーズン内購入上限。limit=null は無制限）
 const EVENT_SHOP_ITEMS = {
   coin100:  { price: 300,   limit: 20,   grant: { coins: 100 } },
@@ -419,6 +424,7 @@ function defaultProfile(clientId) {
     // ================================================================
     coins: 0,
     em: 0,                          // Ver9.5: イベントマッチで獲得した最終EMの累計（所持EM）
+    apologyClaimed: {},             // Ver9.6: 受取済みのお詫び補填 { id: true }
     emSeason: 0,                    // Ver9.6: 所持EMが属するシーズン（変わったらEMを0にリセット）
     gachaTickets: 0,                // Ver9.6: ガチャチケット（単発ガチャのみ・コインより優先消費）
     eventShop: { season: 0, bought: {} }, // Ver9.6: イベントショップの購入回数（シーズンが変わると自動リセット）
@@ -569,15 +575,28 @@ function getOrCreateProfile(clientId) {
   p.coins = Math.max(0, Math.floor(p.coins));
   if (typeof p.em !== 'number' || !Number.isFinite(p.em)) p.em = 0;
   p.em = Math.max(0, Math.floor(p.em));
+  {
+    const cleaned = {};
+    if (p.apologyClaimed && typeof p.apologyClaimed === 'object') {
+      for (const id of Object.keys(APOLOGY_REWARDS)) if (p.apologyClaimed[id] === true) cleaned[id] = true;
+    }
+    p.apologyClaimed = cleaned;
+  }
   if (typeof p.gachaTickets !== 'number' || !Number.isFinite(p.gachaTickets)) p.gachaTickets = 0;
   p.gachaTickets = Math.max(0, Math.floor(p.gachaTickets));
   // イベントショップの購入回数。シーズンが変わっていたらここでリセットする。
   {
     const curSeason = getEventSeasonInfo().season;
     // EMはシーズンが変わると0にリセットする（シーズンをまたいで持ち越せない）。
-    if (p.emSeason !== curSeason) {
+    // 注意：emSeason が未設定(旧データ)のプロフィールは「現在のシーズン」として採用するだけで、EMは消さない
+    // （過去にこの判定が誤って旧データのEMを0にしてしまった不具合の再発防止）。
+    if (!(typeof p.emSeason === 'number' && p.emSeason > 0)) {
       p.emSeason = curSeason;
-      if (p.em > 0) { p.em = 0; scheduleProfileSave(); }
+      scheduleProfileSave();
+    } else if (p.emSeason !== curSeason) {
+      p.emSeason = curSeason;
+      if (p.em > 0) { p.em = 0; }
+      scheduleProfileSave();
     }
     if (!p.eventShop || typeof p.eventShop !== 'object' || p.eventShop.season !== curSeason) {
       p.eventShop = { season: curSeason, bought: {} };
@@ -698,6 +717,7 @@ function publicProfilePayload(p) {
     gachaTickets: p.gachaTickets || 0,
     eventShop: p.eventShop,
     eventSeason: getEventSeasonInfo(),
+    apologies: Object.entries(APOLOGY_REWARDS).map(([id, a]) => ({ id, title: a.title, reward: a.reward, claimed: !!(p.apologyClaimed && p.apologyClaimed[id]) })),
     unlockedShots: p.unlockedShots,
     unlockedUlts: p.unlockedUlts,
     unlockedTactics: p.unlockedTactics,
@@ -1395,6 +1415,26 @@ wss.on('connection', (socket) => {
         wasRandom: kind === 'ult_random',
         profile: publicProfilePayload(profile)
       }));
+      return;
+    }
+
+    // --- お詫び補填の受取（デイリークエスト欄）---
+    // data: { type:'__apology_claim', clientId, id }
+    if (data.type === '__apology_claim') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      const profile = getOrCreateProfile(clientId);
+      const fail = (reason) => socket.send(JSON.stringify({ type: '__apology_claim_result', ok: false, reason }));
+      if (!profile) return fail('no_profile');
+      const id = String(data.id || '');
+      const apology = Object.prototype.hasOwnProperty.call(APOLOGY_REWARDS, id) ? APOLOGY_REWARDS[id] : null;
+      if (!apology) return fail('invalid_id');
+      if (profile.apologyClaimed[id]) return fail('already_claimed');
+      profile.apologyClaimed[id] = true;
+      if (apology.reward.gachaTickets) profile.gachaTickets = (profile.gachaTickets || 0) + apology.reward.gachaTickets;
+      if (apology.reward.coins) profile.coins += apology.reward.coins;
+      profile.updatedAt = Date.now();
+      scheduleProfileSave();
+      socket.send(JSON.stringify({ type: '__apology_claim_result', ok: true, id, title: apology.title, reward: apology.reward, profile: publicProfilePayload(profile) }));
       return;
     }
 
