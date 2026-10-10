@@ -38,12 +38,20 @@ const EVENT_DEFS = [
   { id: 'blind',   name: 'ブラインド', weight: 23 },
   { id: 'fever',   name: 'フィーバー', weight: 8 }
 ];
-const EVENT_FEVER_MULT = 7;
+// 複合イベント：参加人数が4人の時、この確率で「2つのイベントが同時に発生」する
+const EVENT_COMPOUND_MEMBERS = 4;
+const EVENT_COMPOUND_CHANCE = 0.10;
 // EM球: 大/中/小 = 50/20/5EM、出現確率 15/35/50%
 const EM_ORB_TYPES = [
   { size: 'large',  value: 50, weight: 15 },
   { size: 'medium', value: 20, weight: 35 },
   { size: 'small',  value: 5,  weight: 50 }
+];
+// フィーバー中：50EMと5EMの出現確率が逆転（大50%/中35%/小15%）
+const EM_ORB_TYPES_FEVER = [
+  { size: 'large',  value: 50, weight: 50 },
+  { size: 'medium', value: 20, weight: 35 },
+  { size: 'small',  value: 5,  weight: 15 }
 ];
 const EM_SPAWN_INTERVAL_MS = 2500;  // 自動出現の間隔
 const EM_MAX_FIELD_ORBS = 12;       // 場に同時に存在できる自動出現球の上限（ドロップ球は対象外）
@@ -210,8 +218,8 @@ const GEAR_META = {
   gear27: { mainSubSlots: 2, subOnly: true }, // 運試し１
   gear28: { mainSubSlots: 1, subOnly: true }, // 運試し２
   gear29: { mainSubSlots: 2, subOnly: true }, // 運試し３
-  gear30: { mainSubSlots: 1, subOnly: true }, // 唯我独尊
-  gear31: { mainSubSlots: 2, subOnly: true }, // 天下無双
+  gear30: { mainSubSlots: 2, subOnly: true }, // 唯我独尊（HP5未満で通常弾威力2倍）
+  gear31: { mainSubSlots: 2, subOnly: true }, // 天下無双（連続ダメージで攻撃力+5%ずつ）
   gear32: { mainSubSlots: 2, subOnly: true }, // 疾風迅雷
   gear33: { mainSubSlots: 0, subOnly: true }, // コピー
   gear34: { mainSubSlots: 0, subOnly: true }, // ゼロフラット
@@ -411,6 +419,7 @@ function defaultProfile(clientId) {
     // ================================================================
     coins: 0,
     em: 0,                          // Ver9.5: イベントマッチで獲得した最終EMの累計（所持EM）
+    emSeason: 0,                    // Ver9.6: 所持EMが属するシーズン（変わったらEMを0にリセット）
     gachaTickets: 0,                // Ver9.6: ガチャチケット（単発ガチャのみ・コインより優先消費）
     eventShop: { season: 0, bought: {} }, // Ver9.6: イベントショップの購入回数（シーズンが変わると自動リセット）
     unlockedShots: [...INITIAL_SHOT_IDS],  // 買い切りで所持している通常弾ID一覧（初期は魔法弾のみ）
@@ -565,6 +574,11 @@ function getOrCreateProfile(clientId) {
   // イベントショップの購入回数。シーズンが変わっていたらここでリセットする。
   {
     const curSeason = getEventSeasonInfo().season;
+    // EMはシーズンが変わると0にリセットする（シーズンをまたいで持ち越せない）。
+    if (p.emSeason !== curSeason) {
+      p.emSeason = curSeason;
+      if (p.em > 0) { p.em = 0; scheduleProfileSave(); }
+    }
     if (!p.eventShop || typeof p.eventShop !== 'object' || p.eventShop.season !== curSeason) {
       p.eventShop = { season: curSeason, bought: {} };
     } else {
@@ -741,6 +755,7 @@ function getOrCreateRoom(roomName) {
       // Ver9.5 イベントマッチ用状態: 'lobby' | 'countdown' | 'playing' | 'finished'
       eventState: 'lobby',
       eventId: null,
+      eventIds: [],
       eventDurationSec: 0,
       eventStartAt: 0,
       eventOrbs: new Map(),
@@ -987,12 +1002,12 @@ function spawnFieldOrb(roomName) {
   for (const o of room.eventOrbs.values()) if (!o.isDrop) fieldCount++;
   if (fieldCount >= EM_MAX_FIELD_ORBS) return;
 
-  const t = pickWeighted(EM_ORB_TYPES);
-  const feverMult = (room.eventId === 'fever') ? EVENT_FEVER_MULT : 1;
+  const isFever = Array.isArray(room.eventIds) && room.eventIds.includes('fever');
+  const t = pickWeighted(isFever ? EM_ORB_TYPES_FEVER : EM_ORB_TYPES);
   const orb = {
     id: 'o' + (++room.eventOrbSeq),
     size: t.size,
-    value: t.value * feverMult,
+    value: t.value,
     slot: Math.floor(Math.random() * 1000000),
     isDrop: false
   };
@@ -1005,9 +1020,17 @@ function startEventMatch(roomName) {
   if (!room) return;
   clearEventTimers(room);
 
+  // イベント抽選。4人の時は10%で「複合イベント」（重複しない2種を同時開催）。
   const ev = pickWeighted(EVENT_DEFS);
+  const evList = [ev];
+  const isCompound = room.members.size >= EVENT_COMPOUND_MEMBERS && Math.random() < EVENT_COMPOUND_CHANCE;
+  if (isCompound) {
+    const rest = EVENT_DEFS.filter(d => d.id !== ev.id);
+    evList.push(pickWeighted(rest));
+  }
   const durationSec = EVENT_DURATIONS_SEC[Math.floor(Math.random() * EVENT_DURATIONS_SEC.length)];
-  room.eventId = ev.id;
+  room.eventId = ev.id;                       // 主イベント（互換用）
+  room.eventIds = evList.map(e => e.id);      // 実際に有効なイベント一覧（複合なら2つ）
   room.eventDurationSec = durationSec;
   room.eventState = 'countdown';
   room.matchActive = true;
@@ -1021,12 +1044,13 @@ function startEventMatch(roomName) {
   broadcastToRoom(roomName, {
     type: '__event_start',
     eventId: ev.id,
-    eventName: ev.name,
+    eventName: evList.map(e => e.name).join(' × '),
+    eventIds: room.eventIds,
+    isCompound,
     durationSec,
     startAt,                                   // サーバー時刻(ms)。クライアントは serverTimeOffset で補正して使う
     countdownMs: EVENT_COUNTDOWN_MS,
     unifySeed: Math.floor(Math.random() * 2147483647), // 「統一」用: 全員が同じシードから同じ装備を選ぶ
-    feverMult: ev.id === 'fever' ? EVENT_FEVER_MULT : 1,
     players: Array.from(room.members.entries()).map(([id, m]) => ({ id, name: m.name }))
   });
 
@@ -1070,6 +1094,8 @@ function endEventMatch(roomName, early) {
   broadcastToRoom(roomName, {
     type: '__event_result',
     eventId: room.eventId,
+    eventIds: room.eventIds || (room.eventId ? [room.eventId] : []),
+    isCompound: Array.isArray(room.eventIds) && room.eventIds.length > 1,
     early: !!early,
     results
   });
@@ -2022,6 +2048,7 @@ wss.on('connection', (socket) => {
       room.eventState = 'lobby';
       room.matchActive = false;
       room.eventId = null;
+      room.eventIds = [];
       room.eventOrbs.clear();
       broadcastEventLobby(joinedRoom);
       return;
