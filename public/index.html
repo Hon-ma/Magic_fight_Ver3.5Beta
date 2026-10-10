@@ -307,6 +307,13 @@
     .shop-item.event-gear { border-color:#a29bfe; background:rgba(162,155,254,0.10); }
     .shop-item .si-limit { font-size:10.5px; color:#fab1a0; }
     .gii-badge.event { background:rgba(162,155,254,0.25); color:#d6d1ff; }
+    #just-guard-fx { position:fixed; left:50%; top:46%; transform:translate(-50%,-50%); z-index:70; pointer-events:none; opacity:0; text-align:center; }
+    #just-guard-fx .jg-ring { position:absolute; left:50%; top:50%; width:120px; height:120px; margin:-60px 0 0 -60px; border-radius:50%; border:4px solid #fff; box-shadow:0 0 24px #74e0ff, inset 0 0 24px #74e0ff; }
+    #just-guard-fx .jg-text { position:relative; font-size:30px; font-weight:900; letter-spacing:3px; color:#fff; text-shadow:0 0 12px #00cec9, 0 0 24px #0984e3; font-style:italic; }
+    #just-guard-fx.play { animation:jgFade 0.7s ease-out; }
+    #just-guard-fx.play .jg-ring { animation:jgRing 0.7s ease-out; }
+    @keyframes jgFade { 0% { opacity:1; } 70% { opacity:1; } 100% { opacity:0; } }
+    @keyframes jgRing { 0% { transform:scale(0.4); opacity:1; } 100% { transform:scale(2.4); opacity:0; } }
     #sixth-sense-panel { position:fixed; top:90px; left:50%; transform:translateX(-50%); z-index:60; background:rgba(20,16,40,0.88); border:1px solid #a29bfe; border-radius:10px; padding:10px 16px; color:#fff; font-size:12px; line-height:1.6; display:none; pointer-events:none; max-width:420px; }
     #sixth-sense-panel b { color:#a29bfe; }
     .shop-pane { display: none; }
@@ -1120,7 +1127,7 @@
 
       <div class="shop-pane" id="shop-pane-event">
         <div id="event-shop-em-row"><span>所持EM</span><span id="event-shop-em-value">0</span><span id="event-shop-ticket">🎟 ガチャチケ: <b id="event-shop-ticket-value">0</b></span></div>
-        <div class="shop-note" id="event-shop-season-note">イベントマッチで獲得したEMと交換できます。購入回数の上限はシーズン（毎月1日に切替）ごとにリセットされます。</div>
+        <div class="shop-note" id="event-shop-season-note">イベントマッチで獲得したEMと交換できます。購入回数の上限と<b style="color:#ff7675">所持EMはシーズン（毎月1日に切替）ごとに0へリセット</b>されます。使い切ってからシーズンを迎えましょう。</div>
         <div class="shop-grid" id="shop-grid-event"></div>
         <div class="shop-note" style="margin-top:12px;">イベントギアはイベントショップでのみ入手でき、ガチャからは出ません。外しても破片は戻りません（メイン専用・サブ不可）。<br>ガチャチケットは単発ガチャでのみ使え、コインより先に消費されます。</div>
       </div>
@@ -2440,7 +2447,7 @@
       const note = document.getElementById('event-shop-season-note');
       if (note) {
         note.innerText = season
-          ? `シーズン${season.season}（毎月1日に切替）：イベントマッチで獲得したEMと交換できます。購入回数の上限はシーズンが変わるとリセットされます。${season.season >= 6 ? '（シーズン6以降はシーズン1〜5のイベントギアからランダムに3つが復刻販売）' : ''}`
+          ? `シーズン${season.season}（毎月1日に切替）：イベントマッチで獲得したEMと交換できます。購入回数の上限と所持EMはシーズンが変わると0にリセットされます。${season.season >= 6 ? '（シーズン6以降はシーズン1〜5のイベントギアからランダムに3つが復刻販売）' : ''}`
           : 'イベントマッチで獲得したEMと交換できます。';
       }
 
@@ -3217,15 +3224,15 @@
       // --- Ver9.6 イベントギア（EM交換限定・ガチャ非排出・破片なし・全てメイン専用） ---
       gear21: { event: true, season: 1, name: '再装填', mainDesc: 'MPが切れた際、MPを最大の50%即チャージする（1回のみ、リスポーンで回数復活）', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear22: { event: true, season: 1, name: '第六感', mainDesc: '試合開始時、相手の通常弾・ULT・戦術・ギアが分かる', subDesc: null, mainSubSlots: 3, subOnly: true },
-      gear23: { event: true, season: 1, name: 'ロックオン', mainDesc: '60秒に1回、通常弾がホーミングする', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear23: { event: true, season: 1, name: 'ロックオン', mainDesc: '60秒に1回、通常弾が強力にホーミングする（射程60m・ほぼ全方位を捕捉して急旋回）', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear24: { event: true, season: 2, name: '緊急離脱', mainDesc: 'デバフがかかっている間、移動速度1.2倍', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear25: { event: true, season: 2, name: '毒ガス', mainDesc: '半径1m以内にいる敵に毎秒1ダメージ', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear26: { event: true, season: 2, name: '極秘使用', mainDesc: 'ULT使用時の通知が相手に表示されない', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear27: { event: true, season: 3, name: '運試し１', mainDesc: '0.5%の確率で5秒間、移動速度と弾速が2倍（抽選は毎秒）', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear28: { event: true, season: 3, name: '運試し２', mainDesc: '攻撃に当たった際、3%の確率で無効化', subDesc: null, mainSubSlots: 1, subOnly: true },
       gear29: { event: true, season: 3, name: '運試し３', mainDesc: '全ての回復量が1.5倍。ただし回復時15%の確率で回復せず、その分のダメージを受ける', subDesc: null, mainSubSlots: 2, subOnly: true },
-      gear30: { event: true, season: 4, name: '唯我独尊', mainDesc: 'シールドのMP消費速度10倍。ただしシールド中は無敵', subDesc: null, mainSubSlots: 1, subOnly: true },
-      gear31: { event: true, season: 4, name: '天下無双', mainDesc: 'HPが5未満の時、通常弾威力2倍', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear30: { event: true, season: 4, name: '唯我独尊', mainDesc: 'HPが5未満の時、通常弾威力が2倍になる', subDesc: null, mainSubSlots: 2, subOnly: true },
+      gear31: { event: true, season: 4, name: '天下無双', mainDesc: 'ダメージを与えた後5秒以内に再度ダメージを与えると攻撃力が5%増加（重複する）。5秒以内にダメージを与えられないと通常の倍率に戻る', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear32: { event: true, season: 4, name: '疾風迅雷', mainDesc: '最大HPが本来の1/3になる代わりに、常時移動速度1.5倍', subDesc: null, mainSubSlots: 2, subOnly: true },
       gear33: { event: true, season: 5, name: 'コピー', mainDesc: '戦闘開始時、相手のギア編成になる', subDesc: null, mainSubSlots: 0, subOnly: true },
       gear34: { event: true, season: 5, name: 'ゼロフラット', mainDesc: '全プレイヤーのギア効果を無くす', subDesc: null, mainSubSlots: 0, subOnly: true },
@@ -3319,6 +3326,24 @@
     // 起死回生とスタートダッシュは「移動速度」と「通常弾ダメージ」で上昇幅が異なる
     // （起死回生は速度+20%/ダメージ+20%、スタートダッシュは両方+10%）ため、
     // 速度用・ダメージ用を別関数として算出する。
+    // --- ジャストガード（通常盾の展開から0.15秒以内の通常弾を無効化。成功後1秒は再発動不可） ---
+    const JUST_GUARD_WINDOW_MS = 150;
+    const JUST_GUARD_COOLDOWN_MS = 1000;
+    let guardStartAt = 0;            // 通常盾を展開した時刻(performance.now)
+    let guardWasOn = false;          // 前フレームのisGuarding（展開の立ち上がり検出用）
+    let justGuardReadyAt = 0;        // この時刻以降ならジャスガ可能
+    function showJustGuardEffect() {
+      let fx = document.getElementById('just-guard-fx');
+      if (!fx) {
+        fx = document.createElement('div');
+        fx.id = 'just-guard-fx';
+        fx.innerHTML = '<div class="jg-ring"></div><div class="jg-text">JUST GUARD!</div>';
+        document.body.appendChild(fx);
+      }
+      fx.classList.remove('play');
+      void fx.offsetWidth; // アニメーション再始動
+      fx.classList.add('play');
+    }
     let dashBuffTimer = 0;        // gear16 スタートダッシュ残り時間
     let deathAvoidCharge = false; // gear17 即死回避：1回分のチャージがあるか
     // Phase5: 訓練場専用の「自由装備」状態（コイン・所持に一切関係なく、その場で切り替えられる）。
@@ -3364,6 +3389,17 @@
     let gearLoadoutSendTimer = 0;
     let reloadAvailable = false;    // gear21 再装填：1回分のチャージ
     let lockOnCooldown = 0;         // gear23 ロックオン：残りクールタイム(秒)
+    let comboStacks = 0, comboLastHitAt = -1e9; // gear31 天下無双：連続ダメージの重複数と最後にダメージを与えた時刻
+    const COMBO_WINDOW_MS = 5000, COMBO_STEP_PCT = 5;
+    // 現在有効な重複数（最後のダメージから5秒を超えていたら0＝通常倍率に戻る）
+    function gearComboStacks() { return (performance.now() - comboLastHitAt <= COMBO_WINDOW_MS) ? comboStacks : 0; }
+    // 自分の攻撃でダメージを与えた時に呼ぶ。5秒以内の連続ヒットなら重複数+1、途切れていたら0からやり直し。
+    function registerGearComboHit() {
+      if (!isMainGear('gear31')) return;
+      const now = performance.now();
+      comboStacks = (now - comboLastHitAt <= COMBO_WINDOW_MS) ? comboStacks + 1 : 0;
+      comboLastHitAt = now;
+    }
     let luckBoostTimer = 0;         // gear27 運試し１：発動中の残り秒
     let luckRollAcc = 0, gasAcc = 0, autoHealGearAcc = 0;
 
@@ -3383,6 +3419,7 @@
       gearMatchResolved = false;
       gearFirstLoadoutAt = 0;
       lockOnCooldown = 0;
+      comboStacks = 0; comboLastHitAt = -1e9;
       luckBoostTimer = 0; luckRollAcc = 0; gasAcc = 0; autoHealGearAcc = 0;
       const panel = document.getElementById('sixth-sense-panel');
       if (panel) panel.style.display = 'none';
@@ -3490,6 +3527,7 @@
       dashBuffTimer = isMainGear('gear16') ? 20.0 : 0;
       deathAvoidCharge = isMainGear('gear17');
       reloadAvailable = isMainGear('gear21');
+      comboStacks = 0; comboLastHitAt = -1e9;
     }
 
     function gearMatchTick(delta) {
@@ -5084,7 +5122,7 @@
       return null;
     }
 
-    function spawnSpell(x, y, z, vx, vy, vz, shooterId, colorHex = 0x0984e3, scale = 1.0, isHoming = false, isExSuperHoming = false, targetInfo = null, bulletType = 'magic', bouncesLeft = 0) {
+    function spawnSpell(x, y, z, vx, vy, vz, shooterId, colorHex = 0x0984e3, scale = 1.0, isHoming = false, isExSuperHoming = false, targetInfo = null, bulletType = 'magic', bouncesLeft = 0, lockOn = false) {
       let count = 0;
       let oldestIdx = -1;
       for (let i = 0; i < spells.length; i++) {
@@ -5103,6 +5141,7 @@
       const isMine = (shooterId === myPeerId || shooterId === 'player');
       let color = isMine ? (bulletMasterData[bulletType]?.colorHex || 0x0984e3) : colorHex;
       if (isExSuperHoming) color = 0xff007f;
+      if (lockOn) color = 0xff4757; // ロックオン弾は赤く光る
 
       const spellGroup = new THREE.Group();
       const core = new THREE.Mesh(new THREE.SphereGeometry(0.28 * scale, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
@@ -5113,7 +5152,7 @@
       spellGroup.position.set(x, y, z);
       scene.add(spellGroup);
 
-      const life = isExSuperHoming ? 4.5 : (bulletType === 'sniper' ? 2.5 : 3.2);
+      const life = isExSuperHoming ? 4.5 : (lockOn ? 4.0 : (bulletType === 'sniper' ? 2.5 : 3.2));
       spells.push({
         group: spellGroup,
         startPos: new THREE.Vector3(x, y, z),
@@ -5128,7 +5167,9 @@
         targetInfo,
         flightTime: 0,
         bulletType,
-        bouncesLeft
+        bouncesLeft,
+        lockOn,
+        lockTarget: null
       });
     }
 
@@ -6046,7 +6087,7 @@
         } else if (data.targetType === 'dummy') {
           receivedTarget = { type: 'dummy', index: data.targetDummyIdx };
         }
-        spawnSpell(data.x, data.y, data.z, data.vx, data.vy, data.vz, actualShooterId, col, data.scale || 1.0, !!data.isHoming, !!data.isExSuperHoming, receivedTarget, data.bulletType || 'magic', data.bouncesLeft || 0);
+        spawnSpell(data.x, data.y, data.z, data.vx, data.vy, data.vz, actualShooterId, col, data.scale || 1.0, !!data.isHoming, !!data.isExSuperHoming, receivedTarget, data.bulletType || 'magic', data.bouncesLeft || 0, !!data.isLockOn);
       } else if (data.type === 'hit_rejected') {
         if (data.reason === 'high_latency') {
           addBattleLog(`<span style="color:#e17055">⚠️ 高遅延のため着弾が無効化されました (Ping:${data.delay}ms / ノーレジ)</span>`);
@@ -6062,6 +6103,7 @@
         // シューター側の処理
         if (data.shooterId === myPeerId || data.shooterId === 'player') {
           queueQuestEvent('damageDealt', Number(data.rawDmg) || 0);
+          registerGearComboHit(); // gear31 天下無双：連続ダメージの重複
           let baseAmt = (selectedUltType === 'super' && selectedUltSubtype === 'A') ? 25.0 : ultMasterData[selectedUltType].baseHitCharge;
                     if (Number.isFinite(Number(data.sniperChargeBonus))) {
             baseAmt += Number(data.sniperChargeBonus);
@@ -6083,6 +6125,7 @@
         if (data.targetId === myPeerId && myHp > 0 && !isDead) {
           let rawDamage = data.rawDmg;
           let damage = rawDamage;
+          let justGuarded = false;
 
           if (respawnInvincibleTimer > 0) {
             damage = 0;
@@ -6111,16 +6154,27 @@
               // camDir: プレイヤーの視線方向 / bDir: 自分の位置→着弾点方向。
               // 正面なら内積が1に近く、横〜背後では小さくなるため、閾値以上を成功とする。
               if (camDir.dot(bDir) >= 0.3) {
-                damage = 5;
-                if (superMagicTimer <= 0) {
-                  myMp = Math.max(0, myMp - 30);
-                  if (myMp <= 0) triggerOverheat();
+                const nowMs = performance.now();
+                if (nowMs - guardStartAt <= JUST_GUARD_WINDOW_MS && nowMs >= justGuardReadyAt) {
+                  // ジャストガード：ダメージ無効・MP消費なし。成功後1秒は再発動不可。
+                  damage = 0;
+                  justGuarded = true;
+                  justGuardReadyAt = nowMs + JUST_GUARD_COOLDOWN_MS;
+                  createExplosion(myShield.getWorldPosition(new THREE.Vector3()), 0xffffff);
+                  showJustGuardEffect();
+                  addBattleLog(`<span style="color:#74e0ff">✨ ジャストガード成功！</span>`);
+                } else {
+                  damage = 5;
+                  if (superMagicTimer <= 0) {
+                    myMp = Math.max(0, myMp - 30);
+                    if (myMp <= 0) triggerOverheat();
+                  }
+                  createExplosion(myShield.getWorldPosition(new THREE.Vector3()), 0x00cec9);
                 }
-                createExplosion(myShield.getWorldPosition(new THREE.Vector3()), 0x00cec9);
               }
             }
 
-            if (isVulnerable) { damage *= 1.5; isVulnerable = false; }
+            if (isVulnerable && !justGuarded) { damage *= 1.5; isVulnerable = false; }
 
             if (damage > 0) {
               applyDamage(damage, data.shooterId, false, false, true); // Phase5: 通常弾ヒット → gear08対象
@@ -6292,11 +6346,6 @@
         return;
       }
 
-      // gear30 唯我独尊：シールド(ガード)中は無敵
-      if (isMainGear('gear30') && isGuarding) {
-        createExplosion(playerPos, 0xf1c40f);
-        return;
-      }
       // gear28 運試し２：攻撃に当たった際、3%の確率で無効化
       if (isMainGear('gear28') && Math.random() < 0.03) {
         spawnDamagePopup(playerPos, 0, false, false);
@@ -6824,11 +6873,13 @@
       if (upgradeLevel >= 2) spellScale *= 1.5;
 
       let isHoming = (upgradeLevel >= 4);
-      // gear23 ロックオン：60秒に1回、通常弾がホーミングする
+      // gear23 ロックオン：60秒に1回、通常弾が強力にホーミングする（旋回性能・射程・視野が通常ホーミングより大幅に高い）
+      let isLockOnShot = false;
       if (isMainGear('gear23') && lockOnCooldown <= 0) {
         isHoming = true;
+        isLockOnShot = true;
         lockOnCooldown = 60;
-        addBattleLog(`<span style="color:#ff7675">🎯 ロックオン！この弾がホーミングします（次は60秒後）</span>`);
+        addBattleLog(`<span style="color:#ff7675">🎯 ロックオン！強力ホーミング弾を発射（次は60秒後）</span>`);
       }
       const isExSuperHoming = nextShotExHoming;
 
@@ -6852,7 +6903,7 @@
       }
 
       const maxBounces = (selectedBulletType === 'ricochet') ? 1 : 0;
-      spawnSpell(sx, sy, sz, vx, vy, vz, myPeerId, bMeta.colorHex, spellScale, isHoming, isExSuperHoming, targetInfo, selectedBulletType, maxBounces);
+      spawnSpell(sx, sy, sz, vx, vy, vz, myPeerId, bMeta.colorHex, spellScale, isHoming, isExSuperHoming, targetInfo, selectedBulletType, maxBounces, isLockOnShot);
       broadcastMsg({
         type: 'shoot',
         shooterId: myPeerId,
@@ -6860,6 +6911,7 @@
         vx, vy, vz,
         scale: spellScale,
         isHoming,
+        isLockOn: isLockOnShot,
         isExSuperHoming,
         targetType: targetInfo ? targetInfo.type : null,
         targetPeerId: targetInfo && targetInfo.type === 'player' ? targetInfo.peerId : null,
@@ -7512,8 +7564,10 @@
       // Phase5: gear07（固定値ダメージ強化）＋ gear15/16（発動時の%ダメージバフ）を反映
       base += getGearBonusTotal('bulletDamageFlat');
       base *= (1 + specialGearOffenseDamagePct() / 100);
-      // gear31 天下無双：HPが5未満の時、通常弾威力2倍
-      if (isMainGear('gear31') && myHp > 0 && myHp < 5) base *= 2;
+      // gear30 唯我独尊：HPが5未満の時、通常弾威力2倍
+      if (isMainGear('gear30') && myHp > 0 && myHp < 5) base *= 2;
+      // gear31 天下無双：5秒以内に連続でダメージを与えるほど攻撃力+5%ずつ（重複）
+      if (isMainGear('gear31')) base *= (1 + 0.05 * gearComboStacks());
 
       return Math.round(base);
     }
@@ -7822,7 +7876,8 @@
       if (isMainGear('gear21')) buffList.push(`<span style="color:#55efc4">再装填 ${reloadAvailable ? 'チャージ済み' : '使用済み'}</span>`);
       if (isMainGear('gear23')) buffList.push(`<span style="color:#ff7675">ロックオン ${lockOnCooldown > 0 ? 'あと' + Math.ceil(lockOnCooldown) + 's' : '準備完了'}</span>`);
       if (isMainGear('gear27') && luckBoostTimer > 0) buffList.push(`<span style="color:#f1c40f">運試し１ 発動中 (${luckBoostTimer.toFixed(1)}s)</span>`);
-      if (isMainGear('gear30') && isGuarding) buffList.push(`<span style="color:#f1c40f">唯我独尊 無敵</span>`);
+      if (isMainGear('gear31') && gearComboStacks() > 0) buffList.push(`<span style="color:#f1c40f">天下無双 +${gearComboStacks() * 5}% (${Math.max(0, 5 - (performance.now() - comboLastHitAt) / 1000).toFixed(1)}s)</span>`);
+      if (isMainGear('gear30') && myHp > 0 && myHp < 5) buffList.push(`<span style="color:#f1c40f">唯我独尊 威力2倍</span>`);
       if (isMainGear('gear17') && deathAvoidCharge) buffList.push(`<span style="color:#ffd93d">即死回避 チャージ済み</span>`);
       document.getElementById('active-buff').innerHTML = buffList.join(' | ');
 
@@ -7834,12 +7889,13 @@
 
         isGuarding = (isLeftHolding || isRightActive || isGuardActive) && !isOverheated && myMp > 0 && !beamFiring && (stunTimer <= 0);
         myShield.visible = isGuarding;
+        if (isGuarding && !guardWasOn) guardStartAt = performance.now();
+        guardWasOn = isGuarding;
 
         if (superMagicTimer <= 0) {
           if (isGuarding) {
             // Phase5: gear09（ガード効率UP）でガード中のMP消費速度を軽減
-            let guardDrainRate = 15 * (1 - getGearBonusTotal('shieldMpCostReductionPct') / 100);
-            if (isMainGear('gear30')) guardDrainRate *= 10; // 唯我独尊：シールドのMP消費速度10倍
+            const guardDrainRate = 15 * (1 - getGearBonusTotal('shieldMpCostReductionPct') / 100);
             myMp = Math.max(0, myMp - Math.max(0, guardDrainRate) * delta);
             if (myMp <= 0) triggerOverheat();
           } else {
@@ -8058,6 +8114,47 @@
                 s.vz = curDir.z * curSpeed;
               }
             }
+          }
+        } else if (s.isHoming && s.lockOn) {
+          // ロックオン弾の強化ホーミング：射程60m・ほぼ全方位を捕捉し、毎秒約7rad(≒400°)で旋回。標的は一度決めたら追い続ける。
+          _tmpVecA.set(s.vx, s.vy, s.vz);
+          const spd = _tmpVecA.length() || 44;
+          _tmpVecA.normalize();
+          const posOf = (t) => t && t.group && t.group.position;
+          let tgt = null;
+          if (s.isMine) {
+            const cands = (currentStage === 'training')
+              ? dummies.filter(d => d.hp > 0).map(d => ({ pos: d.mesh.position, ref: d }))
+              : Object.values(remotePlayers)
+                  .filter(rp => rp.group.visible && rp.hasPos && !rp.isInvisible && !rp.isDead)
+                  .map(rp => ({ pos: rp.group.position, ref: rp }));
+            if (s.lockTarget) tgt = cands.find(c => c.ref === s.lockTarget) || null; // 追跡中の標的が有効なら維持
+            if (!tgt) {
+              let bestDot = -0.5;
+              cands.forEach(c => {
+                _tmpVecB.copy(c.pos).add({ x: 0, y: 0.9, z: 0 }).sub(s.group.position);
+                const d = _tmpVecB.length();
+                if (d > 60) return;
+                const dot = _tmpVecA.dot(_tmpVecB.normalize());
+                if (dot > bestDot) { bestDot = dot; tgt = c; }
+              });
+              if (tgt) s.lockTarget = tgt.ref;
+            }
+            if (tgt) { _tmpVecC.copy(tgt.pos); } else { tgt = null; }
+          } else if (!isDead && invisibilityTimer <= 0) {
+            _tmpVecB.copy(playerPos).add({ x: 0, y: 0.9, z: 0 }).sub(s.group.position);
+            if (_tmpVecB.length() <= 60) { tgt = { pos: playerPos }; _tmpVecC.copy(playerPos); }
+          }
+          if (tgt) {
+            _tmpVecB.copy(_tmpVecC).add({ x: 0, y: 0.9, z: 0 }).sub(s.group.position).normalize();
+            const ang = _tmpVecA.angleTo(_tmpVecB);
+            const step = Math.min(ang, 7.0 * delta);
+            if (ang > 1e-4) {
+              const axis = new THREE.Vector3().crossVectors(_tmpVecA, _tmpVecB);
+              if (axis.lengthSq() < 1e-8) axis.set(0, 1, 0); else axis.normalize();
+              _tmpVecA.applyAxisAngle(axis, step);
+            }
+            s.vx = _tmpVecA.x * spd; s.vy = _tmpVecA.y * spd; s.vz = _tmpVecA.z * spd;
           }
         } else if (s.isHoming) {
           let closestEnemyPos = null;
@@ -8334,12 +8431,20 @@
         slow: '移動速度が0.6倍、通常弾の弾速が0.8倍になる…！',
         unify: '通常弾・ULT・戦術・ギアが全員同じ構成に統一される！',
         blind: 'ミニマップ非表示＋壁越しにネームタグが見えない！',
-        fever: '🔥 フィーバー！ 出現するEMが7倍！！'
+        fever: '🔥 フィーバー！ 50EMの出現率が大幅アップ！（5EMと50EMの出現率が逆転）'
       };
       const $ = (id) => document.getElementById(id);
+      // 複合イベント対応：有効なイベントは eventIds（1〜2個）。判定は必ず has() を使う。
+      const has = (id) => eventIds.includes(id);
+      const eventTitle = (ids) => {
+        const list = (ids && ids.length) ? ids : [];
+        const names = list.map(i => NAMES[i] || i).join(' × ');
+        return list.length > 1 ? `🌀 複合イベント：${names}` : (names ? `イベント：${names}` : '');
+      };
+      const eventDescs = (ids) => (ids || []).map(i => DESCS[i] || '').filter(Boolean).join('\n');
 
       let state = 'off';            // off | lobby | countdown | playing | finished
-      let eventId = null, hostId = null, players = [], scores = {};
+      let eventId = null, eventIds = [], hostId = null, players = [], scores = {};
       let endLocal = 0, cdEndLocal = 0, durationSec = 0;
       let unified = null, backup = null;
       const orbs = new Map();       // orbId -> { data, group, baseY, phase, pendingUntil }
@@ -8462,6 +8567,7 @@
       function onStart(data) {
         cleanupMatch(false);
         eventId = data.eventId;
+        eventIds = (Array.isArray(data.eventIds) && data.eventIds.length) ? data.eventIds.filter(x => NAMES[x]) : [data.eventId];
         durationSec = data.durationSec;
         players = data.players || players;
         scores = {}; players.forEach(p => { scores[p.id] = 0; });
@@ -8469,7 +8575,7 @@
         cdEndLocal = performance.now() + (data.countdownMs || 3000);
         endLocal = cdEndLocal + durationSec * 1000;
 
-        if (eventId === 'unify') setupUnify(data.unifySeed || 1);
+        if (has('unify')) setupUnify(data.unifySeed || 1);
 
         // 試合用に状態を初期化（HPは getMaxHp() 経由で「一撃必殺」なら1になる）
         try { ultPercent = 0.0; warpExpireTimer = 0; upgradeLevel = 1; thunderSpeedTimer = 0; thunderSpeedMultiplier = 1.0; } catch (e) {}
@@ -8482,10 +8588,11 @@
 
         $('event-lobby-overlay').style.display = 'none';
         $('event-result-overlay').style.display = 'none';
-        $('em-cd-name').innerText = `イベント：${NAMES[eventId] || eventId}`;
-        $('em-cd-desc').innerText = (DESCS[eventId] || '') + `（制限時間 ${Math.round(durationSec / 60)}分）`;
+        $('em-cd-name').innerText = eventTitle(eventIds);
+        $('em-cd-desc').innerText = eventDescs(eventIds) + `\n（制限時間 ${Math.round(durationSec / 60)}分）`;
+        $('em-cd-desc').style.whiteSpace = 'pre-line';
         $('event-countdown').style.display = 'flex';
-        $('em-hud-tag').innerText = `EVENT：${NAMES[eventId] || eventId}`;
+        $('em-hud-tag').innerText = (eventIds.length > 1 ? 'COMPOUND：' : 'EVENT：') + eventIds.map(i => NAMES[i] || i).join(' × ');
         $('event-hud').style.display = 'block';
         renderHud();
         try { document.body.requestPointerLock(); } catch (e) {}
@@ -8589,7 +8696,7 @@
         const res = data.results || [];
         const me = res.find(r => r.id === myPeerId);
         $('em-res-title').innerText = me ? (me.isWinner ? '🏆 VICTORY!' : `${me.rank}位`) : 'RESULT';
-        $('em-res-sub').innerText = `イベント：${NAMES[data.eventId] || data.eventId}` + (data.early ? '（人数不足のため早期終了）' : '');
+        $('em-res-sub').innerText = eventTitle((Array.isArray(data.eventIds) && data.eventIds.length) ? data.eventIds : [data.eventId]) + (data.early ? '（人数不足のため早期終了）' : '');
         const list = $('em-res-list'); list.innerHTML = '';
         res.forEach(r => {
           const d = document.createElement('div');
@@ -8647,7 +8754,7 @@
       // ブラインド: ミニマップは消さずに「砂嵐」を表示（レイアウトの余白を作らないため）
       let noiseImg = null;
       function drawBlindMinimap(ctx) {
-        if (eventId !== 'blind' || (state !== 'playing' && state !== 'countdown')) return false;
+        if (!has('blind') || (state !== 'playing' && state !== 'countdown')) return false;
         if (!noiseImg) noiseImg = ctx.createImageData(125, 125);
         const d = noiseImg.data;
         for (let i = 0; i < d.length; i += 4) {
@@ -8665,7 +8772,7 @@
         clearOrbs();
         restoreNameTags();
         restoreUnify();
-        eventId = null; scores = {};
+        eventId = null; eventIds = []; scores = {};
         const mm = $('minimap-container'); if (mm) mm.style.display = '';
         $('event-hud').style.display = 'none';
         $('event-countdown').style.display = 'none';
@@ -8751,7 +8858,7 @@
           }
 
           // ブラインド: 壁越しのネームタグを隠す（ミニマップは砂嵐描画に差し替え）
-          updateBlindNameTags(eventId === 'blind' && state === 'playing');
+          updateBlindNameTags(has('blind') && state === 'playing');
 
           // 統一: プロフィール再取得・所持チェックで装備/戦術が戻された場合に再適用（弾・ULT・戦術・メイン・サブ全て照合）
           if (unified && !unifiedMatches()) applyUnifiedSelection();
@@ -8776,7 +8883,7 @@
 
       // ---------- ミニマップ ----------
       function drawMinimap(ctx, mapScale, halfSize) {
-        if (state !== 'playing' || orbs.size === 0 || eventId === 'blind') return;
+        if (state !== 'playing' || orbs.size === 0 || has('blind')) return;
         for (const ob of orbs.values()) {
           const d = ob.data;
           const col = d.isDrop ? '#ff7675' : (d.size === 'large' ? '#ffd93d' : (d.size === 'medium' ? '#a29bfe' : '#74b9ff'));
@@ -8803,11 +8910,11 @@
       return {
         handle, update, reset, drawMinimap, drawBlindMinimap,
         unifyActive: () => !!unified,
-        moveMult: () => (state === 'playing' && eventId === 'slow') ? 0.6 : 1,
+        moveMult: () => (state === 'playing' && has('slow')) ? 0.6 : 1,
         jumpMult: () => 1, // Ver9.5修正: 「ゆっくり」のジャンプ力低下は廃止（互換のため関数は残す）
-        bulletSpeedMult: () => (state === 'playing' && eventId === 'slow') ? 0.8 : 1,
-        oneShot: () => (eventId === 'oneshot' && (state === 'countdown' || state === 'playing')),
-        ult200: () => (eventId === 'ult200' && state === 'playing'),
+        bulletSpeedMult: () => (state === 'playing' && has('slow')) ? 0.8 : 1,
+        oneShot: () => (has('oneshot') && (state === 'countdown' || state === 'playing')),
+        ult200: () => (has('ult200') && state === 'playing'),
         inputBlocked: () => (state === 'lobby' || state === 'countdown' || state === 'finished'),
         blocksResume: () => (state === 'lobby' || state === 'finished')
       };
