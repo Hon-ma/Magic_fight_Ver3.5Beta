@@ -1,4 +1,4 @@
-// 3D Magic FPS Duel - Ver9.5
+// 3D Magic FPS Duel - Ver6
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -22,45 +22,6 @@ const RATE_MATCH_MEMBERS = 2; // レート戦は完全1vs1
 const DISCONNECT_PENALTY = 10;
 
 // ================================================================
-// --- Ver9.5: イベントマッチ設定 ---
-// 制限時間内にEM(イベント・マナ)を最も多く集めた人の勝ち。最大4人・途中参加不可。
-// ================================================================
-const EVENT_MAX_MEMBERS = 4;
-const EVENT_MIN_START_MEMBERS = 2;          // 開始に必要な最低人数（1人では開始できない）
-const EVENT_COUNTDOWN_MS = 3000;            // 開始ボタン押下→実戦開始までのカウントダウン
-const EVENT_DURATIONS_SEC = process.env.MF_TEST_EVENT_SEC ? [Number(process.env.MF_TEST_EVENT_SEC)] : [180, 240, 300]; // 3分/4分/5分からランダム（MF_TEST_EVENT_SECは試験用の上書き）
-// 抽選重み。仕様書の確率(23%x5 + 8% = 123%)は合計100%にならないため、重みとして扱い正規化して抽選する。
-const EVENT_DEFS = [
-  { id: 'oneshot', name: '一撃必殺',   weight: 23 },
-  { id: 'ult200',  name: '200%',       weight: 23 },
-  { id: 'slow',    name: 'ゆっくり',   weight: 23 },
-  { id: 'unify',   name: '統一',       weight: 23 },
-  { id: 'blind',   name: 'ブラインド', weight: 23 },
-  { id: 'fever',   name: 'フィーバー', weight: 8 }
-];
-// 複合イベント：参加人数が4人の時、この確率で「2つのイベントが同時に発生」する
-const EVENT_COMPOUND_MEMBERS = 4;
-const EVENT_COMPOUND_CHANCE = 0.10;
-// EM球: 大/中/小 = 50/20/5EM、出現確率 15/35/50%
-const EM_ORB_TYPES = [
-  { size: 'large',  value: 50, weight: 15 },
-  { size: 'medium', value: 20, weight: 35 },
-  { size: 'small',  value: 5,  weight: 50 }
-];
-// フィーバー中：50EMと5EMの出現確率が逆転（大50%/中35%/小15%）
-const EM_ORB_TYPES_FEVER = [
-  { size: 'large',  value: 50, weight: 50 },
-  { size: 'medium', value: 20, weight: 35 },
-  { size: 'small',  value: 5,  weight: 15 }
-];
-const EM_SPAWN_INTERVAL_MS = 2500;  // 自動出現の間隔
-const EM_MAX_FIELD_ORBS = 12;       // 場に同時に存在できる自動出現球の上限（ドロップ球は対象外）
-const EM_CLAIM_MIN_INTERVAL_MS = 40; // 同一プレイヤーの回収申請の最短間隔（簡易チート/連打対策）
-const EM_INITIAL_ORBS = 6;          // 試合開始時にまとめて出す数
-// 順位倍率（最下位は人数に関わらず1.0倍）
-const EVENT_RANK_MULT = [1.2, 1.15, 1.1];
-
-// ================================================================
 // --- コイン経済 設定（Phase1）---
 // 金額感は「叩き台の仮数値」。設計書(gear_power_design.md)の1-1節に準拠。
 // レート戦限定（フリーバトルはコイン対象外）で運用する。
@@ -72,12 +33,7 @@ const COIN_MAX_KILLS_FOR_BONUS = RATE_KILLS_TO_WIN; // 1試合あたりのキル
 const COIN_EX_ULT_BONUS = 100; // EX ULTを1回でも発動した試合につき1回だけ加算
 const COIN_DISCONNECT_PENALTY_OVERRIDE = 0; // 切断による反則負けは戦績に関わらずコイン0
 
-// public/index.html を優先し、無ければ同階層の index.html を使う（zip直下に置いたままでも起動できる）
-const INDEX_HTML = (() => {
-  const candidates = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname, 'index.html')];
-  for (const f of candidates) { if (fs.existsSync(f)) return fs.readFileSync(f); }
-  throw new Error('index.html が見つかりません（public/index.html か ./index.html を置いてください）');
-})();
+const INDEX_HTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
 
 // ================================================================
 // --- Ver5: プレイヤープロフィール永続化ストア ---
@@ -100,71 +56,6 @@ const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_R
   : null;
 if (!redis) {
   console.warn('[profiles] UPSTASH_REDIS_REST_URL/TOKEN が未設定のため、ローカルファイル保存のみで動作します。');
-}
-
-
-// ================================================================
-// --- Ver9.5 サバイバル：ランキング（クライアントIDごとの自己ベスト）---
-// 保存形式: { [clientId]: { name, score, phase, kills, at } }
-// Upstash（あれば）＋ローカルファイル(survival_ranking.json)。プロフィールDBとは別キー。
-// スコアは自己申告のため上限・整数チェックのみ行う（厳密なチート対策は未実装）。
-// ================================================================
-const SURVIVAL_RANKING_PATH = path.join(__dirname, 'survival_ranking.json');
-const REDIS_SURVIVAL_KEY = 'magicfight:survival_ranking';
-const SURVIVAL_RANKING_TOP = 10;
-const SURVIVAL_SCORE_MAX = 1000000;
-let survivalRanking = {};
-
-async function loadSurvivalRanking() {
-  if (redis) {
-    try {
-      const remote = await redis.get(REDIS_SURVIVAL_KEY);
-      if (remote && typeof remote === 'object') { survivalRanking = remote; return; }
-      survivalRanking = {};
-      return;
-    } catch (e) {
-      console.error('[survival] Upstash読み込み失敗、ローカルにフォールバック:', e.message);
-    }
-  }
-  try {
-    if (fs.existsSync(SURVIVAL_RANKING_PATH)) survivalRanking = JSON.parse(fs.readFileSync(SURVIVAL_RANKING_PATH, 'utf8')) || {};
-  } catch (e) { survivalRanking = {}; }
-}
-function saveSurvivalRanking() {
-  try {
-    const tmp = `${SURVIVAL_RANKING_PATH}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify(survivalRanking), 'utf8');
-    fs.renameSync(tmp, SURVIVAL_RANKING_PATH);
-  } catch (e) { console.error('[survival] ローカル保存失敗:', e.message); }
-  if (redis) redis.set(REDIS_SURVIVAL_KEY, survivalRanking).catch((e) => console.error('[survival] Upstash保存失敗:', e.message));
-}
-function survivalRankingPayload(clientId) {
-  const list = Object.entries(survivalRanking)
-    .map(([id, r]) => ({ id, name: r.name, score: r.score, phase: r.phase, kills: r.kills }))
-    .sort((a, b) => b.score - a.score || b.phase - a.phase || a.id.localeCompare(b.id));
-  const idx = clientId ? list.findIndex(r => r.id === clientId) : -1;
-  return {
-    type: '__survival_ranking',
-    top: list.slice(0, SURVIVAL_RANKING_TOP).map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, phase: r.phase, kills: r.kills, me: r.id === clientId })),
-    myRank: idx >= 0 ? idx + 1 : null,
-    myBest: idx >= 0 ? { score: list[idx].score, phase: list[idx].phase, kills: list[idx].kills } : null,
-    total: list.length
-  };
-}
-// 戻り値: 自己ベスト更新したか
-function submitSurvivalScore(clientId, name, score, phase, kills) {
-  const toInt = (v, max) => Math.max(0, Math.min(max, Math.floor(Number(v) || 0)));
-  score = toInt(score, SURVIVAL_SCORE_MAX); phase = toInt(phase, 9999); kills = toInt(kills, 999999);
-  if (!clientId || score <= 0) return false;
-  const nm = String(name || '名無し').slice(0, 20);
-  const cur = survivalRanking[clientId];
-  if (cur && (cur.score > score || (cur.score === score && cur.phase >= phase))) {
-    if (cur.name !== nm) { cur.name = nm; saveSurvivalRanking(); }   // 名前だけ最新化
-    return false;
-  }
-  survivalRanking[clientId] = { name: nm, score, phase, kills, at: Date.now() };
-  saveSurvivalRanking();
-  return true;
 }
 
 // ================================================================
@@ -192,64 +83,8 @@ const INITIAL_ULT_IDS = ['beam'];
 // 排出内容は「破片95% / 通常弾0.8% / ULT0.5% / 戦術0.7% / 完成ギア3%」の重み付き抽選。
 // 抽選は必ずサーバー側の Math.random() で行い、結果だけをクライアントへ返す。
 // ================================================================
-// GEAR_IDS = ガチャ排出・破片の対象になる通常ギア(gear01〜20)。イベントギアは含めない。
 const GEAR_IDS = Array.from({ length: 20 }, (_, i) => `gear${String(i + 1).padStart(2, '0')}`);
 quest.configure({ gearIds: GEAR_IDS });
-
-// ================================================================
-// --- Ver9.6: イベントギア（EM交換のイベントショップ限定）---
-// gear21〜35。ガチャ非排出・破片なし・外しても破片は戻らない・全てメイン専用。
-// シーズンは毎月1日(JST)に切り替わる。EVENT_SEASON_EPOCH が「シーズン1」の年月。
-// ================================================================
-const EVENT_GEAR_IDS = Array.from({ length: 15 }, (_, i) => `gear${String(i + 21)}`);
-const ALL_GEAR_IDS = [...GEAR_IDS, ...EVENT_GEAR_IDS];
-const EVENT_SEASON_GEARS = {
-  1: ['gear21', 'gear22', 'gear23'],
-  2: ['gear24', 'gear25', 'gear26'],
-  3: ['gear27', 'gear28', 'gear29'],
-  4: ['gear30', 'gear31', 'gear32'],
-  5: ['gear33', 'gear34', 'gear35']
-};
-const EVENT_SEASON_EPOCH = { year: 2026, month: 10 }; // 2026年10月 = シーズン1
-function isEventGearId(id) { return EVENT_GEAR_IDS.includes(id); }
-
-// 現在(JST)のシーズン番号と、そのシーズンのイベントギア3種を返す。
-// シーズン6以降は、シーズン1〜5の15種から3種をシーズン番号シードで決定的に選ぶ（全サーバー/再起動で同じ結果）。
-function getEventSeasonInfo(now = Date.now()) {
-  const jst = new Date(now + 9 * 3600 * 1000);
-  const idx = (jst.getUTCFullYear() - EVENT_SEASON_EPOCH.year) * 12 + (jst.getUTCMonth() + 1 - EVENT_SEASON_EPOCH.month);
-  const season = Math.max(1, idx + 1);
-  let gearIds;
-  if (season <= 5) {
-    gearIds = EVENT_SEASON_GEARS[season].slice();
-  } else {
-    let seed = (season * 2654435761) >>> 0;
-    const rnd = () => { seed = (Math.imul(seed ^ (seed >>> 15), 2246822507) + 0x6D2B79F5) >>> 0; return seed / 4294967296; };
-    const pool = EVENT_GEAR_IDS.slice();
-    gearIds = [];
-    while (gearIds.length < 3) gearIds.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
-  }
-  return { season, gearIds };
-}
-
-// お詫び補填（デイリークエスト欄に「受け取る」カードとして表示。各プロフィールにつき1回のみ）
-const APOLOGY_REWARDS = {
-  apology_em_reset_202610: { title: '【お詫び】EMリセット不具合の補填', reward: { gachaTickets: 10 } }
-};
-
-// イベントショップのラインナップ（EM価格・シーズン内購入上限。limit=null は無制限）
-const EVENT_SHOP_ITEMS = {
-  coin100:  { price: 300,   limit: 20,   grant: { coins: 100 } },
-  coin500:  { price: 1500,  limit: 10,   grant: { coins: 500 } },
-  coin1000: { price: 3000,  limit: 5,    grant: { coins: 1000 } },
-  coin3000: { price: 7500,  limit: 1,    grant: { coins: 3000 } },
-  universal:{ price: 10000, limit: 4,    grant: { universalFragments: 1 } },
-  ticket5:  { price: 4000,  limit: 10,   grant: { gachaTickets: 5 } },
-  // イベントギアは gearSlot(0〜2) でシーズンのギア配列の何番目かを指す。上限なし。
-  gear0:    { price: 5000,  limit: null, gearSlot: 0 },
-  gear1:    { price: 5000,  limit: null, gearSlot: 1 },
-  gear2:    { price: 5000,  limit: null, gearSlot: 2 }
-};
 
 // ================================================================
 // --- ギアスロット装備（Phase4）---
@@ -277,23 +112,7 @@ const GEAR_META = {
   gear17: { mainSubSlots: 2, subOnly: true },
   gear18: { mainSubSlots: 2, subOnly: true },
   gear19: { mainSubSlots: 2, subOnly: true },
-  gear20: { mainSubSlots: 2, subOnly: true }, // スポーンチャージ（旧コンボチャージから置き換え。効果はクライアント側で処理）
-  // --- Ver9.6 イベントギア（全てメイン専用） ---
-  gear21: { mainSubSlots: 2, subOnly: true }, // 再装填
-  gear22: { mainSubSlots: 3, subOnly: true }, // 第六感
-  gear23: { mainSubSlots: 2, subOnly: true }, // ロックオン
-  gear24: { mainSubSlots: 2, subOnly: true }, // 緊急離脱
-  gear25: { mainSubSlots: 2, subOnly: true }, // 毒ガス
-  gear26: { mainSubSlots: 2, subOnly: true }, // 極秘使用
-  gear27: { mainSubSlots: 2, subOnly: true }, // 運試し１
-  gear28: { mainSubSlots: 1, subOnly: true }, // 運試し２
-  gear29: { mainSubSlots: 2, subOnly: true }, // 運試し３
-  gear30: { mainSubSlots: 2, subOnly: true }, // 唯我独尊（HP5未満で通常弾威力2倍）
-  gear31: { mainSubSlots: 2, subOnly: true }, // 天下無双（連続ダメージで攻撃力+5%ずつ）
-  gear32: { mainSubSlots: 2, subOnly: true }, // 疾風迅雷
-  gear33: { mainSubSlots: 0, subOnly: true }, // コピー
-  gear34: { mainSubSlots: 0, subOnly: true }, // ゼロフラット
-  gear35: { mainSubSlots: 0, subOnly: true }  // シャッフル
+  gear20: { mainSubSlots: 2, subOnly: true } // スポーンチャージ（旧コンボチャージから置き換え。効果はクライアント側で処理）
 };
 
 // 装備コスト・キャッシュバック（バランス調整済み：1-1節のコイン収入を基準に算出）
@@ -357,8 +176,6 @@ function addGearFragments(profile, gearId, amount) {
 // 装備中のギア1個を外す（＝消滅させて破片キャッシュバックする）共通処理。
 // 明示的な「外す」操作でも、メイン切替に伴う自動退避でも同じ処理を使う。
 function destroyEquippedGear(profile, gearId) {
-  // Ver9.6: イベントギアは外しても破片が出ない（そのまま消滅）。
-  if (isEventGearId(gearId)) return 0;
   return addGearFragments(profile, gearId, GEAR_UNEQUIP_FRAGMENT_CASHBACK);
 }
 
@@ -488,11 +305,6 @@ function defaultProfile(clientId) {
     // Phase2以降でショップ・ガチャ・ギア効果を順次実装していく。
     // ================================================================
     coins: 0,
-    em: 0,                          // Ver9.5: イベントマッチで獲得した最終EMの累計（所持EM）
-    apologyClaimed: {},             // Ver9.6: 受取済みのお詫び補填 { id: true }
-    emSeason: 0,                    // Ver9.6: 所持EMが属するシーズン（変わったらEMを0にリセット）
-    gachaTickets: 0,                // Ver9.6: ガチャチケット（単発ガチャのみ・コインより優先消費）
-    eventShop: { season: 0, bought: {} }, // Ver9.6: イベントショップの購入回数（シーズンが変わると自動リセット）
     unlockedShots: [...INITIAL_SHOT_IDS],  // 買い切りで所持している通常弾ID一覧（初期は魔法弾のみ）
     unlockedUlts: [...INITIAL_ULT_IDS],    // 買い切りで所持しているULT ID一覧（初期はメガビームのみ）
     unlockedTactics: [],            // 買い切り/ガチャ直撃で所持している戦術タイプ（例: 'beam_A'）
@@ -638,42 +450,6 @@ function getOrCreateProfile(clientId) {
   // ================================================================
   if (typeof p.coins !== 'number' || !Number.isFinite(p.coins)) p.coins = 0;
   p.coins = Math.max(0, Math.floor(p.coins));
-  if (typeof p.em !== 'number' || !Number.isFinite(p.em)) p.em = 0;
-  p.em = Math.max(0, Math.floor(p.em));
-  {
-    const cleaned = {};
-    if (p.apologyClaimed && typeof p.apologyClaimed === 'object') {
-      for (const id of Object.keys(APOLOGY_REWARDS)) if (p.apologyClaimed[id] === true) cleaned[id] = true;
-    }
-    p.apologyClaimed = cleaned;
-  }
-  if (typeof p.gachaTickets !== 'number' || !Number.isFinite(p.gachaTickets)) p.gachaTickets = 0;
-  p.gachaTickets = Math.max(0, Math.floor(p.gachaTickets));
-  // イベントショップの購入回数。シーズンが変わっていたらここでリセットする。
-  {
-    const curSeason = getEventSeasonInfo().season;
-    // EMはシーズンが変わると0にリセットする（シーズンをまたいで持ち越せない）。
-    // 注意：emSeason が未設定(旧データ)のプロフィールは「現在のシーズン」として採用するだけで、EMは消さない
-    // （過去にこの判定が誤って旧データのEMを0にしてしまった不具合の再発防止）。
-    if (!(typeof p.emSeason === 'number' && p.emSeason > 0)) {
-      p.emSeason = curSeason;
-      scheduleProfileSave();
-    } else if (p.emSeason !== curSeason) {
-      p.emSeason = curSeason;
-      if (p.em > 0) { p.em = 0; }
-      scheduleProfileSave();
-    }
-    if (!p.eventShop || typeof p.eventShop !== 'object' || p.eventShop.season !== curSeason) {
-      p.eventShop = { season: curSeason, bought: {} };
-    } else {
-      const cleaned = {};
-      for (const id of Object.keys(EVENT_SHOP_ITEMS)) {
-        const v = Number(p.eventShop.bought && p.eventShop.bought[id]);
-        if (Number.isFinite(v) && v > 0) cleaned[id] = Math.floor(v);
-      }
-      p.eventShop.bought = cleaned;
-    }
-  }
 
   // 所持リストは「正規のIDのみ」「重複なし」「初期付与分を必ず含む」状態に正規化する。
   // 不正なIDが紛れ込んでもここで落とされるため、クライアント改竄の保険にもなる。
@@ -693,7 +469,7 @@ function getOrCreateProfile(clientId) {
   const normalizeGearCountMap = (obj) => {
     const out = {};
     if (obj && typeof obj === 'object') {
-      for (const gearId of ALL_GEAR_IDS) {
+      for (const gearId of GEAR_IDS) {
         const v = obj[gearId];
         if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
           out[gearId] = Math.floor(v);
@@ -711,14 +487,14 @@ function getOrCreateProfile(clientId) {
   p.universalFragments = Math.floor(p.universalFragments);
 
   if (!p.equippedGear || typeof p.equippedGear !== 'object') p.equippedGear = { main: null, subs: [] };
-  if (p.equippedGear.main !== null && !ALL_GEAR_IDS.includes(p.equippedGear.main)) p.equippedGear.main = null;
+  if (p.equippedGear.main !== null && !GEAR_IDS.includes(p.equippedGear.main)) p.equippedGear.main = null;
   if (!Array.isArray(p.equippedGear.subs)) p.equippedGear.subs = [];
   let gearNormalizationChanged = false;
   // 不正/旧状態でサブに残っているメイン専用ギアや、メイン不在時のサブは
   // 通常の「外す」と同じく3破片へ戻してから除去する。
   const normalizedSubs = [];
   for (const id of p.equippedGear.subs) {
-    if (!ALL_GEAR_IDS.includes(id)) continue;
+    if (!GEAR_IDS.includes(id)) continue;
     if (GEAR_META[id].subOnly) {
       destroyEquippedGear(p, id);
       gearNormalizationChanged = true;
@@ -778,11 +554,6 @@ function publicProfilePayload(p) {
     setComments: p.setComments,
     // --- コイン経済・ショップ・ガチャ・ギアパワー（Phase0/1）---
     coins: p.coins,
-    em: p.em || 0,
-    gachaTickets: p.gachaTickets || 0,
-    eventShop: p.eventShop,
-    eventSeason: getEventSeasonInfo(),
-    apologies: Object.entries(APOLOGY_REWARDS).map(([id, a]) => ({ id, title: a.title, reward: a.reward, claimed: !!(p.apologyClaimed && p.apologyClaimed[id]) })),
     unlockedShots: p.unlockedShots,
     unlockedUlts: p.unlockedUlts,
     unlockedTactics: p.unlockedTactics,
@@ -795,9 +566,7 @@ function publicProfilePayload(p) {
     gachaFreeAvailable: p.gachaFreeLastClaimDate !== quest.getJstDateKey(),
     quests: quest.getQuestSnapshot(p),
     loginBonus: quest.getLoginBonusSnapshot(p),
-    monthlyCoinEarned: p.monthlyCoinEarned,
-    // Ver9.5 サバイバル：自己ベスト（ランキング保存庫から参照。未プレイはnull）
-    survivalBest: (survivalRanking[p.clientId] ? { score: survivalRanking[p.clientId].score, phase: survivalRanking[p.clientId].phase, kills: survivalRanking[p.clientId].kills } : null)
+    monthlyCoinEarned: p.monthlyCoinEarned
   };
 }
 
@@ -839,17 +608,6 @@ function getOrCreateRoom(roomName) {
       hostId: null,
       mode: 'free',
       matchActive: false,
-      // Ver9.5 イベントマッチ用状態: 'lobby' | 'countdown' | 'playing' | 'finished'
-      eventState: 'lobby',
-      eventId: null,
-      eventIds: [],
-      eventDurationSec: 0,
-      eventStartAt: 0,
-      eventOrbs: new Map(),
-      eventOrbSeq: 0,
-      eventTimer: null,
-      eventSpawnTimer: null,
-      eventStartTimer: null,
       rateResultActive: false,
       rematchRequests: new Set(),
       members: new Map()
@@ -881,7 +639,6 @@ function roomInfoPayload(room) {
   return {
     stage: room.stage,
     mode: room.mode,
-    eventState: room.mode === 'event' ? room.eventState : undefined,
     players: Array.from(room.members.values()).map(m => ({
       name: m.name,
       rate: m.rate,
@@ -1037,176 +794,6 @@ function finishRateMatch(roomName, winnerId, disconnectedId = null) {
   }
 }
 
-// ================================================================
-// --- Ver9.5: イベントマッチ エンジン ---
-// ================================================================
-function pickWeighted(list) {
-  const total = list.reduce((a, b) => a + b.weight, 0);
-  let r = Math.random() * total;
-  for (const item of list) {
-    r -= item.weight;
-    if (r < 0) return item;
-  }
-  return list[list.length - 1];
-}
-
-function clampCoord(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(-500, Math.min(500, n));
-}
-
-function eventScores(room) {
-  const scores = {};
-  for (const [id, m] of room.members) scores[id] = m.em || 0;
-  return scores;
-}
-
-function broadcastEventLobby(roomName) {
-  const room = rooms.get(roomName);
-  if (!room) return;
-  broadcastToRoom(roomName, {
-    type: '__event_lobby',
-    hostId: room.hostId,
-    capacity: EVENT_MAX_MEMBERS,
-    minStart: EVENT_MIN_START_MEMBERS,
-    players: Array.from(room.members.entries()).map(([id, m]) => ({ id, name: m.name }))
-  });
-}
-
-function clearEventTimers(room) {
-  if (room.eventTimer) { clearTimeout(room.eventTimer); room.eventTimer = null; }
-  if (room.eventSpawnTimer) { clearInterval(room.eventSpawnTimer); room.eventSpawnTimer = null; }
-  if (room.eventStartTimer) { clearTimeout(room.eventStartTimer); room.eventStartTimer = null; }
-}
-
-// EM球の自動出現。座標はサーバーがステージ形状を知らないため「slot(乱数)」だけ送り、
-// クライアント側がステージの球出現候補地点へ slot % 候補数 で対応付ける。
-function spawnFieldOrb(roomName) {
-  const room = rooms.get(roomName);
-  if (!room || room.eventState !== 'playing') return;
-  let fieldCount = 0;
-  for (const o of room.eventOrbs.values()) if (!o.isDrop) fieldCount++;
-  if (fieldCount >= EM_MAX_FIELD_ORBS) return;
-
-  const isFever = Array.isArray(room.eventIds) && room.eventIds.includes('fever');
-  const t = pickWeighted(isFever ? EM_ORB_TYPES_FEVER : EM_ORB_TYPES);
-  const orb = {
-    id: 'o' + (++room.eventOrbSeq),
-    size: t.size,
-    value: t.value,
-    slot: Math.floor(Math.random() * 1000000),
-    isDrop: false
-  };
-  room.eventOrbs.set(orb.id, orb);
-  broadcastToRoom(roomName, { type: '__em_spawn', orb });
-}
-
-function startEventMatch(roomName) {
-  const room = rooms.get(roomName);
-  if (!room) return;
-  clearEventTimers(room);
-
-  // イベント抽選。4人の時は10%で「複合イベント」（重複しない2種を同時開催）。
-  const ev = pickWeighted(EVENT_DEFS);
-  const evList = [ev];
-  const isCompound = room.members.size >= EVENT_COMPOUND_MEMBERS && Math.random() < EVENT_COMPOUND_CHANCE;
-  if (isCompound) {
-    const rest = EVENT_DEFS.filter(d => d.id !== ev.id);
-    evList.push(pickWeighted(rest));
-  }
-  const durationSec = EVENT_DURATIONS_SEC[Math.floor(Math.random() * EVENT_DURATIONS_SEC.length)];
-  room.eventId = ev.id;                       // 主イベント（互換用）
-  room.eventIds = evList.map(e => e.id);      // 実際に有効なイベント一覧（複合なら2つ）
-  room.eventDurationSec = durationSec;
-  room.eventState = 'countdown';
-  room.matchActive = true;
-  room.eventOrbs.clear();
-  room.eventOrbSeq = 0;
-  for (const m of room.members.values()) { m.em = 0; m.kills = 0; m.deaths = 0; }
-
-  const startAt = Date.now() + EVENT_COUNTDOWN_MS;
-  room.eventStartAt = startAt;
-
-  broadcastToRoom(roomName, {
-    type: '__event_start',
-    eventId: ev.id,
-    eventName: evList.map(e => e.name).join(' × '),
-    eventIds: room.eventIds,
-    isCompound,
-    durationSec,
-    startAt,                                   // サーバー時刻(ms)。クライアントは serverTimeOffset で補正して使う
-    countdownMs: EVENT_COUNTDOWN_MS,
-    unifySeed: Math.floor(Math.random() * 2147483647), // 「統一」用: 全員が同じシードから同じ装備を選ぶ
-    players: Array.from(room.members.entries()).map(([id, m]) => ({ id, name: m.name }))
-  });
-
-  room.eventStartTimer = setTimeout(() => {
-    room.eventStartTimer = null;
-    if (!rooms.has(roomName) || room.eventState !== 'countdown') return;
-    room.eventState = 'playing';
-    for (let i = 0; i < EM_INITIAL_ORBS; i++) spawnFieldOrb(roomName);
-    room.eventSpawnTimer = setInterval(() => spawnFieldOrb(roomName), EM_SPAWN_INTERVAL_MS);
-    room.eventTimer = setTimeout(() => endEventMatch(roomName, false), durationSec * 1000);
-  }, EVENT_COUNTDOWN_MS);
-}
-
-// 順位計算: EM降順。同点は同順位。最下位(最小EMと同値)は人数にかかわらず1.0倍。
-function computeEventResults(room) {
-  const entries = Array.from(room.members.entries()).map(([id, m]) => ({ id, name: m.name, em: m.em || 0, kills: m.kills || 0, deaths: m.deaths || 0 }));
-  entries.sort((a, b) => b.em - a.em);
-  const minEm = entries.length ? entries[entries.length - 1].em : 0;
-  let rank = 0;
-  let prevEm = null;
-  entries.forEach((e, i) => {
-    if (prevEm === null || e.em !== prevEm) rank = i + 1;
-    prevEm = e.em;
-    e.rank = rank;
-    const isLast = (e.em === minEm);
-    e.multiplier = isLast ? 1.0 : (EVENT_RANK_MULT[rank - 1] || 1.0);
-    e.finalEm = Math.round(e.em * e.multiplier); // 小数点四捨五入
-    e.isWinner = (rank === 1);
-  });
-  return entries;
-}
-
-function endEventMatch(roomName, early) {
-  const room = rooms.get(roomName);
-  if (!room || (room.eventState !== 'playing' && room.eventState !== 'countdown')) return;
-  clearEventTimers(room);
-  room.eventState = 'finished';
-  room.matchActive = false;
-  room.eventOrbs.clear();
-  const results = computeEventResults(room);
-  broadcastToRoom(roomName, {
-    type: '__event_result',
-    eventId: room.eventId,
-    eventIds: room.eventIds || (room.eventId ? [room.eventId] : []),
-    isCompound: Array.isArray(room.eventIds) && room.eventIds.length > 1,
-    early: !!early,
-    results
-  });
-  // 最終EM(順位倍率適用後)をプロフィールの所持EMへ加算する。
-  // 人数不足による早期終了（early）は、退出を利用した水増しを防ぐため付与しない。
-  if (!early) {
-    let changed = false;
-    for (const r of results) {
-      const m = room.members.get(r.id);
-      if (!m || !m.clientId || !(r.finalEm > 0)) continue;
-      const prof = getOrCreateProfile(m.clientId);
-      if (!prof) continue;
-      prof.em = Math.max(0, Math.floor((prof.em || 0) + r.finalEm));
-      prof.updatedAt = Date.now();
-      changed = true;
-      if (m.ws && m.ws.readyState === m.ws.OPEN) {
-        m.ws.send(JSON.stringify({ type: '__event_em_reward', gained: r.finalEm, total: prof.em }));
-      }
-    }
-    if (changed) scheduleProfileSave();
-  }
-  // TODO: EMの使い道（ショップ等）は仕様未確定。現状は所持EMの累積のみ。
-}
-
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(INDEX_HTML);
@@ -1267,22 +854,6 @@ wss.on('connection', (socket) => {
     }
 
     broadcastToRoom(roomName, { type: '__left', id: leavingId, count: room.members.size }, leavingId);
-
-    // Ver9.5: イベントマッチの退出処理
-    if (room.mode === 'event') {
-      if (room.members.size === 0) {
-        clearEventTimers(room);
-      } else if (room.eventState === 'lobby') {
-        broadcastEventLobby(roomName);
-      } else if ((room.eventState === 'playing' || room.eventState === 'countdown') && room.members.size < EVENT_MIN_START_MEMBERS) {
-        // 1人だけ残った場合は試合不成立にせず、残った人の勝ちとして早期終了する
-        endEventMatch(roomName, true);
-      } else if (room.eventState === 'playing') {
-        // 退出者をスコアボードから消すため、最新スコアを再送する
-        broadcastToRoom(roomName, { type: '__event_scores', scores: eventScores(room) });
-      }
-    }
-
     if (room.members.size === 0) rooms.delete(roomName);
 
     // Prevent the close event from performing the cleanup twice.
@@ -1311,18 +882,6 @@ wss.on('connection', (socket) => {
     // ================================================================
     // --- Ver5: プロフィール（セットコメント・戦績・ギア関連）の永続化 ---
     // ================================================================
-
-    // --- Ver9.5 サバイバル：スコア送信／ランキング取得（未参加でも可）---
-    if (data.type === '__survival_submit' || data.type === '__survival_ranking_request') {
-      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
-      if (data.type === '__survival_submit') {
-        const profile = getOrCreateProfile(clientId);
-        const nm = data.name || (profile && profile.name);
-        submitSurvivalScore(clientId, nm, data.score, data.phase, data.kills);
-      }
-      socket.send(JSON.stringify(survivalRankingPayload(clientId)));
-      return;
-    }
 
     // プロフィールの取得（未参加でも可。プロフィール画面を開いた時点で呼ばれる）
     if (data.type === '__profile_request') {
@@ -1497,79 +1056,6 @@ wss.on('connection', (socket) => {
       return;
     }
 
-    // --- お詫び補填の受取（デイリークエスト欄）---
-    // data: { type:'__apology_claim', clientId, id }
-    if (data.type === '__apology_claim') {
-      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
-      const profile = getOrCreateProfile(clientId);
-      const fail = (reason) => socket.send(JSON.stringify({ type: '__apology_claim_result', ok: false, reason }));
-      if (!profile) return fail('no_profile');
-      const id = String(data.id || '');
-      const apology = Object.prototype.hasOwnProperty.call(APOLOGY_REWARDS, id) ? APOLOGY_REWARDS[id] : null;
-      if (!apology) return fail('invalid_id');
-      if (profile.apologyClaimed[id]) return fail('already_claimed');
-      profile.apologyClaimed[id] = true;
-      if (apology.reward.gachaTickets) profile.gachaTickets = (profile.gachaTickets || 0) + apology.reward.gachaTickets;
-      if (apology.reward.coins) profile.coins += apology.reward.coins;
-      profile.updatedAt = Date.now();
-      scheduleProfileSave();
-      socket.send(JSON.stringify({ type: '__apology_claim_result', ok: true, id, title: apology.title, reward: apology.reward, profile: publicProfilePayload(profile) }));
-      return;
-    }
-
-    // ================================================================
-    // --- Ver9.6: イベントショップ（EM交換）---
-    // data: { type:'__event_shop_purchase', clientId, itemId }
-    // 価格・回数制限・シーズンのイベントギアは全てサーバーで検証する。
-    // ================================================================
-    if (data.type === '__event_shop_purchase') {
-      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
-      const profile = getOrCreateProfile(clientId);
-      const fail = (reason) => socket.send(JSON.stringify({ type: '__event_shop_result', ok: false, reason }));
-      if (!profile) return fail('no_profile');
-
-      const itemId = String(data.itemId || '');
-      const item = Object.prototype.hasOwnProperty.call(EVENT_SHOP_ITEMS, itemId) ? EVENT_SHOP_ITEMS[itemId] : null;
-      if (!item) return fail('invalid_id');
-
-      const seasonInfo = getEventSeasonInfo();
-      if (!profile.eventShop || profile.eventShop.season !== seasonInfo.season) {
-        profile.eventShop = { season: seasonInfo.season, bought: {} };
-      }
-      const bought = profile.eventShop.bought[itemId] || 0;
-      if (item.limit !== null && bought >= item.limit) return fail('limit_reached');
-      if ((profile.em || 0) < item.price) return fail('not_enough_em');
-
-      let grantedGearId = null;
-      if (item.gearSlot !== undefined) {
-        grantedGearId = seasonInfo.gearIds[item.gearSlot];
-        if (!grantedGearId) return fail('invalid_id');
-      }
-
-      profile.em -= item.price;
-      profile.eventShop.bought[itemId] = bought + 1;
-      if (item.grant) {
-        if (item.grant.coins) profile.coins += item.grant.coins;
-        if (item.grant.universalFragments) profile.universalFragments += item.grant.universalFragments;
-        if (item.grant.gachaTickets) profile.gachaTickets = (profile.gachaTickets || 0) + item.grant.gachaTickets;
-      }
-      if (grantedGearId) {
-        profile.completedGear[grantedGearId] = (profile.completedGear[grantedGearId] || 0) + 1;
-      }
-      profile.updatedAt = Date.now();
-      scheduleProfileSave();
-
-      socket.send(JSON.stringify({
-        type: '__event_shop_result',
-        ok: true,
-        itemId,
-        grantedGearId,
-        spent: item.price,
-        profile: publicProfilePayload(profile)
-      }));
-      return;
-    }
-
     // ================================================================
     // --- ガチャ（Phase3）---
     // data: { type:'__gacha_pull', clientId, times: 1|10 }
@@ -1596,16 +1082,13 @@ wss.on('connection', (socket) => {
         return;
       }
 
-      // Ver9.6: ガチャチケットは単発(1回)・非無料ガチャでのみ使用でき、コインより優先して消費する。
-      const useTicket = !isFreeDaily && times === 1 && (profile.gachaTickets || 0) > 0;
-      const totalCost = (isFreeDaily || useTicket) ? 0 : GACHA_COST * times;
+      const totalCost = isFreeDaily ? 0 : GACHA_COST * times;
       if (profile.coins < totalCost) {
         socket.send(JSON.stringify({ type: '__gacha_result', ok: false, reason: 'not_enough_coins' }));
         return;
       }
 
       profile.coins -= totalCost;
-      if (useTicket) profile.gachaTickets -= 1;
       const pulls = [];
       let gearCompletedGained = 0;
       for (let i = 0; i < times; i++) {
@@ -1639,7 +1122,6 @@ wss.on('connection', (socket) => {
         pulls,
         spent: totalCost,
         freeDaily: isFreeDaily,
-        usedTicket: useTicket,
         profile: publicProfilePayload(profile)
       }));
       return;
@@ -1693,7 +1175,7 @@ wss.on('connection', (socket) => {
       if (!profile) return fail('no_profile');
 
       const gearId = String(data.gearId || '');
-      if (!ALL_GEAR_IDS.includes(gearId)) return fail('invalid_id');
+      if (!GEAR_IDS.includes(gearId)) return fail('invalid_id');
       if (profile.equippedGear.main === gearId) return fail('already_equipped');
       if ((profile.completedGear[gearId] || 0) < 1) return fail('not_enough_inventory');
       if (profile.coins < GEAR_MAIN_EQUIP_COST) return fail('not_enough_coins');
@@ -1742,7 +1224,7 @@ wss.on('connection', (socket) => {
       if (!profile) return fail('no_profile');
 
       const gearId = String(data.gearId || '');
-      if (!ALL_GEAR_IDS.includes(gearId)) return fail('invalid_id');
+      if (!GEAR_IDS.includes(gearId)) return fail('invalid_id');
       if (GEAR_META[gearId].subOnly) return fail('main_only_gear');
       if (!profile.equippedGear.main) return fail('no_main_equipped');
 
@@ -1874,15 +1356,7 @@ wss.on('connection', (socket) => {
         return;
       }
 
-      // Ver9.5: イベントマッチは途中参加不可（待機中のみ入室できる）
-      if (!data.isHost && room.mode === 'event' && room.eventState !== 'lobby') {
-        socket.send(JSON.stringify({ type: '__event_in_progress' }));
-        socket.close();
-        return;
-      }
-
-      const memberCap = (room.mode === 'rate') ? RATE_MATCH_MEMBERS
-        : (room.mode === 'event' ? EVENT_MAX_MEMBERS : MAX_MEMBERS_PER_ROOM);
+      const memberCap = (room.mode === 'rate') ? RATE_MATCH_MEMBERS : MAX_MEMBERS_PER_ROOM;
       if (room.members.size >= memberCap) {
         socket.send(JSON.stringify({ type: '__room_full' }));
         socket.close();
@@ -1902,12 +1376,11 @@ wss.on('connection', (socket) => {
         // ホストの瞬断からの再接続で room.hostId が null になっていた場合に
         // 進行中のレート戦や確定済みのモードを誤って上書きしないため。
         if (isRoomNew) {
-          room.mode = (data.mode === 'rate') ? 'rate' : (data.mode === 'event' ? 'event' : 'free');
+          room.mode = (data.mode === 'rate') ? 'rate' : 'free';
           // 修正: レート戦は対戦相手が揃うまで matchActive にしない
           // （揃うタイミングは下のメンバー登録後に別途判定する）。
           // フリーバトルは従来通りホスト参加時点でアクティブ扱いにする。
-          // Ver9.5: イベントマッチは開始ボタンを押すまで matchActive にしない。
-          room.matchActive = (room.mode === 'free');
+          room.matchActive = (room.mode !== 'rate');
         }
       }
 
@@ -1962,10 +1435,6 @@ wss.on('connection', (socket) => {
 
       if (data.isHost && room.stage) {
         broadcastToRoom(roomName, { type: '__stage_update', stage: room.stage }, myId);
-      }
-      // Ver9.5: イベントマッチの待機画面（入室者名一覧）を全員へ更新
-      if (room.mode === 'event' && room.eventState === 'lobby') {
-        broadcastEventLobby(roomName);
       }
       return;
     }
@@ -2128,51 +1597,6 @@ wss.on('connection', (socket) => {
       return;
     }
 
-    // --- Ver9.5: イベントマッチ ---
-    if (data.type === '__event_start_request') {
-      if (room.mode !== 'event' || room.eventState !== 'lobby') return;
-      if (room.hostId !== myId) return; // ホストのみ
-      pruneDeadMembers(room);
-      if (room.members.size < EVENT_MIN_START_MEMBERS) {
-        socket.send(JSON.stringify({ type: '__event_start_denied', reason: 'not_enough_players', min: EVENT_MIN_START_MEMBERS }));
-        return;
-      }
-      startEventMatch(joinedRoom);
-      return;
-    }
-
-    if (data.type === '__em_pickup_claim') {
-      if (room.mode !== 'event' || room.eventState !== 'playing' || !currentMember) return;
-      const nowMs = Date.now();
-      if (currentMember.lastEmClaimAt && nowMs - currentMember.lastEmClaimAt < EM_CLAIM_MIN_INTERVAL_MS) return; // 連打対策
-      const orb = room.eventOrbs.get(String(data.orbId));
-      if (!orb) return; // 既に他の誰かが回収済み（早い者勝ち）
-      currentMember.lastEmClaimAt = nowMs;
-      room.eventOrbs.delete(orb.id);
-      currentMember.em = (currentMember.em || 0) + orb.value;
-      broadcastToRoom(joinedRoom, {
-        type: '__em_collected',
-        orbId: orb.id,
-        by: myId,
-        value: orb.value,
-        scores: eventScores(room)
-      });
-      return;
-    }
-
-    if (data.type === '__event_back_to_lobby') {
-      if (room.mode !== 'event' || room.eventState !== 'finished') return;
-      if (room.hostId !== myId) return;
-      for (const m of room.members.values()) { m.em = 0; m.kills = 0; m.deaths = 0; }
-      room.eventState = 'lobby';
-      room.matchActive = false;
-      room.eventId = null;
-      room.eventIds = [];
-      room.eventOrbs.clear();
-      broadcastEventLobby(joinedRoom);
-      return;
-    }
-
     // --- 撃破報告（レート戦のキル/デス集計＆勝敗判定） ---
     if (data.type === 'player_died') {
       if (room.mode === 'rate' && room.matchActive && currentMember) {
@@ -2188,34 +1612,6 @@ wss.on('connection', (socket) => {
 
         if (killerMember && killerMember.kills >= RATE_KILLS_TO_WIN) {
           finishRateMatch(joinedRoom, killerId);
-        }
-        return;
-      }
-
-      // Ver9.5: イベントマッチでは、倒された人の所持EMを全てその場に落とす
-      if (room.mode === 'event' && room.eventState === 'playing' && currentMember) {
-        currentMember.deaths += 1;
-        const killerId = data.killerId;
-        const killerMember = (killerId && killerId !== myId) ? room.members.get(killerId) : null;
-        if (killerMember) killerMember.kills += 1;
-
-        const lost = currentMember.em || 0;
-        currentMember.em = 0;
-        broadcastToRoom(joinedRoom, { ...data, senderId: myId }, myId);
-        if (lost > 0) {
-          const dropOrb = {
-            id: 'd' + (++room.eventOrbSeq),
-            size: 'drop',
-            value: lost,
-            x: clampCoord(data.x),
-            y: clampCoord(data.y),
-            z: clampCoord(data.z),
-            isDrop: true
-          };
-          room.eventOrbs.set(dropOrb.id, dropOrb);
-          broadcastToRoom(joinedRoom, { type: '__em_drop', orb: dropOrb, victimId: myId, killerId: killerId || null, scores: eventScores(room) });
-        } else {
-          broadcastToRoom(joinedRoom, { type: '__event_scores', scores: eventScores(room) });
         }
         return;
       }
@@ -2247,7 +1643,6 @@ setInterval(() => {
 // Upstashからプロフィールデータを読み込み終えてからlistenを開始する。
 // こうしないと、起動直後のアクセスが「空のprofileDB」を見てしまう可能性がある。
 loadProfileDBOnStartup().then(async () => {
-  await loadSurvivalRanking();
   await purgeLegacyMedalData();
   server.listen(PORT, () => {
     console.log(`Rewind & CCD Authoritative Server listening on port ${PORT}`);
