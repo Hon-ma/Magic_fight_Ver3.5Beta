@@ -102,6 +102,71 @@ if (!redis) {
   console.warn('[profiles] UPSTASH_REDIS_REST_URL/TOKEN が未設定のため、ローカルファイル保存のみで動作します。');
 }
 
+
+// ================================================================
+// --- Ver9.5 サバイバル：ランキング（クライアントIDごとの自己ベスト）---
+// 保存形式: { [clientId]: { name, score, phase, kills, at } }
+// Upstash（あれば）＋ローカルファイル(survival_ranking.json)。プロフィールDBとは別キー。
+// スコアは自己申告のため上限・整数チェックのみ行う（厳密なチート対策は未実装）。
+// ================================================================
+const SURVIVAL_RANKING_PATH = path.join(__dirname, 'survival_ranking.json');
+const REDIS_SURVIVAL_KEY = 'magicfight:survival_ranking';
+const SURVIVAL_RANKING_TOP = 10;
+const SURVIVAL_SCORE_MAX = 1000000;
+let survivalRanking = {};
+
+async function loadSurvivalRanking() {
+  if (redis) {
+    try {
+      const remote = await redis.get(REDIS_SURVIVAL_KEY);
+      if (remote && typeof remote === 'object') { survivalRanking = remote; return; }
+      survivalRanking = {};
+      return;
+    } catch (e) {
+      console.error('[survival] Upstash読み込み失敗、ローカルにフォールバック:', e.message);
+    }
+  }
+  try {
+    if (fs.existsSync(SURVIVAL_RANKING_PATH)) survivalRanking = JSON.parse(fs.readFileSync(SURVIVAL_RANKING_PATH, 'utf8')) || {};
+  } catch (e) { survivalRanking = {}; }
+}
+function saveSurvivalRanking() {
+  try {
+    const tmp = `${SURVIVAL_RANKING_PATH}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify(survivalRanking), 'utf8');
+    fs.renameSync(tmp, SURVIVAL_RANKING_PATH);
+  } catch (e) { console.error('[survival] ローカル保存失敗:', e.message); }
+  if (redis) redis.set(REDIS_SURVIVAL_KEY, survivalRanking).catch((e) => console.error('[survival] Upstash保存失敗:', e.message));
+}
+function survivalRankingPayload(clientId) {
+  const list = Object.entries(survivalRanking)
+    .map(([id, r]) => ({ id, name: r.name, score: r.score, phase: r.phase, kills: r.kills }))
+    .sort((a, b) => b.score - a.score || b.phase - a.phase || a.id.localeCompare(b.id));
+  const idx = clientId ? list.findIndex(r => r.id === clientId) : -1;
+  return {
+    type: '__survival_ranking',
+    top: list.slice(0, SURVIVAL_RANKING_TOP).map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, phase: r.phase, kills: r.kills, me: r.id === clientId })),
+    myRank: idx >= 0 ? idx + 1 : null,
+    myBest: idx >= 0 ? { score: list[idx].score, phase: list[idx].phase, kills: list[idx].kills } : null,
+    total: list.length
+  };
+}
+// 戻り値: 自己ベスト更新したか
+function submitSurvivalScore(clientId, name, score, phase, kills) {
+  const toInt = (v, max) => Math.max(0, Math.min(max, Math.floor(Number(v) || 0)));
+  score = toInt(score, SURVIVAL_SCORE_MAX); phase = toInt(phase, 9999); kills = toInt(kills, 999999);
+  if (!clientId || score <= 0) return false;
+  const nm = String(name || '名無し').slice(0, 20);
+  const cur = survivalRanking[clientId];
+  if (cur && (cur.score > score || (cur.score === score && cur.phase >= phase))) {
+    if (cur.name !== nm) { cur.name = nm; saveSurvivalRanking(); }   // 名前だけ最新化
+    return false;
+  }
+  survivalRanking[clientId] = { name: nm, score, phase, kills, at: Date.now() };
+  saveSurvivalRanking();
+  return true;
+}
+
 // ================================================================
 // --- ショップ（Phase2）：通常弾・ULT・戦術タイプの買い切り購入 ---
 // 購入判定は全てサーバー側で行い、クライアントの申告は信用しない。
@@ -730,7 +795,9 @@ function publicProfilePayload(p) {
     gachaFreeAvailable: p.gachaFreeLastClaimDate !== quest.getJstDateKey(),
     quests: quest.getQuestSnapshot(p),
     loginBonus: quest.getLoginBonusSnapshot(p),
-    monthlyCoinEarned: p.monthlyCoinEarned
+    monthlyCoinEarned: p.monthlyCoinEarned,
+    // Ver9.5 サバイバル：自己ベスト（ランキング保存庫から参照。未プレイはnull）
+    survivalBest: (survivalRanking[p.clientId] ? { score: survivalRanking[p.clientId].score, phase: survivalRanking[p.clientId].phase, kills: survivalRanking[p.clientId].kills } : null)
   };
 }
 
@@ -1244,6 +1311,18 @@ wss.on('connection', (socket) => {
     // ================================================================
     // --- Ver5: プロフィール（セットコメント・戦績・ギア関連）の永続化 ---
     // ================================================================
+
+    // --- Ver9.5 サバイバル：スコア送信／ランキング取得（未参加でも可）---
+    if (data.type === '__survival_submit' || data.type === '__survival_ranking_request') {
+      const clientId = String(data.clientId || myClientId || '').slice(0, 64);
+      if (data.type === '__survival_submit') {
+        const profile = getOrCreateProfile(clientId);
+        const nm = data.name || (profile && profile.name);
+        submitSurvivalScore(clientId, nm, data.score, data.phase, data.kills);
+      }
+      socket.send(JSON.stringify(survivalRankingPayload(clientId)));
+      return;
+    }
 
     // プロフィールの取得（未参加でも可。プロフィール画面を開いた時点で呼ばれる）
     if (data.type === '__profile_request') {
@@ -2168,6 +2247,7 @@ setInterval(() => {
 // Upstashからプロフィールデータを読み込み終えてからlistenを開始する。
 // こうしないと、起動直後のアクセスが「空のprofileDB」を見てしまう可能性がある。
 loadProfileDBOnStartup().then(async () => {
+  await loadSurvivalRanking();
   await purgeLegacyMedalData();
   server.listen(PORT, () => {
     console.log(`Rewind & CCD Authoritative Server listening on port ${PORT}`);
