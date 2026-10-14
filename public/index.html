@@ -1012,6 +1012,7 @@
           <div class="profile-stat-card"><div class="val" id="stat-rate-winrate">0%</div><div class="label">レート戦勝率</div></div>
           <div class="profile-stat-card"><div class="val" id="stat-coins">0</div><div class="label">所持コイン</div></div>
           <div class="profile-stat-card"><div class="val" id="stat-em">0</div><div class="label">所持EM</div></div>
+          <div class="profile-stat-card"><div class="val" id="stat-survival-best">—</div><div class="label">サバイバル最高スコア</div></div>
         </div>
       </div>
 
@@ -1382,6 +1383,8 @@
           <button class="mode-btn host" id="btn-goto-host">🏠 合言葉で部屋を作る (ホスト)</button>
           <button class="mode-btn join" id="btn-goto-join">⚔️ 合言葉で部屋に入る (参加)</button>
           <button class="mode-btn solo" id="btn-goto-solo">🎯 訓練場 (ソロ練習モード)</button>
+<button class="mode-btn solo" id="btn-goto-survival">🧟 サバイバル (ソロPvE)</button>
+          <button class="mode-btn solo" id="btn-survival-ranking">🏆 サバイバル ランキング</button>
         </div>
       </div>
     </div>
@@ -1563,6 +1566,8 @@
         </div>
         <div id="training-gear-message" aria-live="polite"></div>
       </div>
+
+      <div id="survival-gear-note" style="display:none; margin-top:18px; background:rgba(255,107,129,0.10); border:1.5px solid #ff6b81; border-radius:12px; padding:12px 16px; font-size:12px; color:#ffb8c2; line-height:1.6;">🧟 サバイバルでは<b>通常ギアは使用できません</b>（弾・ULT・戦術のみ）。代わりに、フェーズクリアごとに「サバイバル特製ギア」を3択から1つ獲得します。</div>
 
       <div class="btn-row">
         <button class="btn back" id="btn-step2-back">戻る</button>
@@ -1937,6 +1942,7 @@
       // --- コイン経済（Phase1）：所持コイン残高表示 ---
       setText('stat-coins', String(myProfile.coins || 0));
       setText('stat-em', String(myProfile.em || 0)); // Ver9.5: イベントマッチで獲得した所持EM
+      { const sb = myProfile.survivalBest; setText('stat-survival-best', sb && sb.score > 0 ? `${sb.score}（P${sb.phase}）` : '—'); } // Ver9.5: サバイバル最高スコア
 
       renderSetCommentGrid();
     }
@@ -2311,6 +2317,8 @@
     function refreshTrainingGearPanel() {
       const panel = document.getElementById('training-gear-panel');
       if (!panel) return;
+      const svNote = document.getElementById('survival-gear-note');
+      if (svNote) svNote.style.display = (gameModeChoice === 'survival') ? 'block' : 'none';
       const show = (gameModeChoice === 'solo');
       panel.style.display = show ? 'block' : 'none';
       if (!show) return;
@@ -3407,6 +3415,7 @@
       return (myProfile && myProfile.equippedGear) || { main: null, subs: [] };
     }
     function getEquippedGear() {
+      if (window.SurvivalMode && SurvivalMode.active()) return { main: null, subs: [] }; // サバイバル：通常ギア無効
       if (currentStage === 'training') return trainingFreeGear || { main: null, subs: [] };
       if (gearZeroFlat) return { main: null, subs: [] };
       if (gearOverride) return gearOverride;
@@ -4517,6 +4526,7 @@
     function getMaxHp() {
       if (window.EventMatch && EventMatch.oneShot()) return 1;
       const base = 100 + getGearBonusTotal('maxHp');
+      if (window.SurvivalMode && SurvivalMode.active()) return Math.max(1, Math.round((base + SurvivalMode.hpBonus()) * SurvivalMode.hpMult()));
       // gear32 疾風迅雷：最大HPが本来の1/3（四捨五入、最低1）
       if (isMainGear('gear32')) return Math.max(1, Math.round(base / 3));
       return base;
@@ -5009,6 +5019,9 @@
       // グレードアップ・ギア・発動中バフ等は爆風には適用しない。
       const splashDamage = 5;
 
+      // Ver9.5 サバイバル：Botへの爆風（基礎5ダメ。特製ギアの与ダメ倍率のみ乗る）
+      if (window.SurvivalMode && SurvivalMode.active()) { SurvivalMode.areaHit(blastCenter, 1.8, 5); return; }
+
       // ソロ・訓練場での爆風判定
       if (currentStage === 'training') {
         dummies.forEach(d => {
@@ -5043,6 +5056,7 @@
     }
 
     function findBestCrosshairTarget(camPos, camDir) {
+      if (window.SurvivalMode && SurvivalMode.active()) return SurvivalMode.bestTarget(camPos, camDir); // Ver9.5 サバイバル
       let bestTarget = null;
       let bestScore = -Infinity;
       let fallbackTarget = null;
@@ -5100,6 +5114,7 @@
     function getTargetCurrentPosition(targetInfo) {
       if (!targetInfo) return null;
 
+      if (targetInfo.type === 'surv') return window.SurvivalMode ? SurvivalMode.targetPos(targetInfo.bot) : null; // Ver9.5 サバイバル
       if (targetInfo.type === 'dummy') {
         let d = targetInfo.dummy;
         if (!d && typeof targetInfo.index === 'number') d = dummies[targetInfo.index];
@@ -5299,6 +5314,7 @@
     }
 
     function handleProfileServerMessage(data) {
+      if (data.type === '__survival_ranking') { if (window.SurvivalMode) SurvivalMode.onRanking(data); return; } // Ver9.5 サバイバル
       if (data.type === '__profile_result') {
         if (data.ok && data.profile) {
           myProfile = data.profile;
@@ -5840,6 +5856,7 @@
 
     function initNetwork(roomId) {
       currentRoomId = roomId;
+      if (gameModeChoice === 'survival') { myPeerId = "solo_player"; return; } // サバイバル：ネットワーク不要
       if (currentStage === 'training') {
         myPeerId = "solo_player";
         document.getElementById('info').innerText = '訓練場（ソロ練習モード）';
@@ -6381,6 +6398,7 @@
 
     function applyDamage(amount, attackerId, isCrit = false, isReflect = false, isNormalBullet = false) {
       if (window.EventMatch && EventMatch.inputBlocked()) return; // Ver9.5: 待機/カウントダウン/結果中は被弾しない
+      if (window.SurvivalMode && SurvivalMode.active() && !SurvivalMode.canTakeDamage()) return; // サバイバル：RUNNING以外は被弾しない
       if (myHp <= 0 || isDead || respawnInvincibleTimer > 0) return;
       if (isRateMatchOver) {
         // 診断ログ: 「ダメージを一切受けなくなる」症状の切り分け用。
@@ -6398,6 +6416,7 @@
       }
 
       let finalDmg = amount;
+      if (window.SurvivalMode) finalDmg *= SurvivalMode.incomingMult(); // 生き急ぎ
 
       // Phase5: gear08（被ダメージ軽減）は「通常弾の被ダメージ」限定の固定値軽減。
       // ULT・爆風などの特殊ダメージには適用しない。最低1は残す（0/マイナス化を防止）。
@@ -6532,6 +6551,7 @@
 
     function leaveGame() {
       if (window.EventMatch) EventMatch.reset();
+      if (window.SurvivalMode) SurvivalMode.reset();
       gearMatchReset();
       isGameStarted = false;
       releasePointerLock();
@@ -6630,6 +6650,23 @@
       updateSubtypePanelUI();
       refreshTrainingGearPanel(); // Phase5: 訓練場専用の自由ギアパネルの表示切替
       requestRoomInfoPreview(document.getElementById('room-input').value.trim() || 'arena888');
+    });
+
+    document.getElementById('btn-survival-ranking').addEventListener('click', () => { if (window.SurvivalMode) SurvivalMode.showRankingBoard(); });
+
+    document.getElementById('btn-goto-survival').addEventListener('click', () => {
+      gameModeChoice = 'survival';
+      isHost = false;
+      selectedStage = 'arena';
+      document.getElementById('mode-badge').innerText = `モード: サバイバル (闘技場・ソロ)`;
+      document.getElementById('stage-selection-area').style.display = 'none';
+      document.getElementById('battle-mode-area').style.display = 'none';
+      closeRoomPreview();
+      document.getElementById('step-1').style.display = 'none';
+      document.getElementById('step-2').style.display = 'flex';
+      enforceOwnedSelections();
+      updateSubtypePanelUI();
+      refreshTrainingGearPanel();
     });
 
     document.getElementById('btn-goto-solo').addEventListener('click', () => {
@@ -6765,6 +6802,9 @@
       if (gameModeChoice === 'solo') {
         buildStage('training');
         resetSpawn(true, false);
+      } else if (gameModeChoice === 'survival') {
+        buildStage('arena');
+        resetSpawn(true, false);
       } else if (gameModeChoice === 'host') {
         buildStage(selectedStage);
         resetSpawn(true, false);
@@ -6776,6 +6816,7 @@
       isGameStarted = true;
       document.getElementById('overlay').style.display = 'none';
       document.body.requestPointerLock();
+      if (gameModeChoice === 'survival') SurvivalMode.start(); // Ver9.5 サバイバル
     });
 
     document.getElementById('resume-overlay').addEventListener('click', () => { document.body.requestPointerLock(); });
@@ -6783,7 +6824,7 @@
     document.addEventListener('pointerlockchange', () => {
       isLocked = document.pointerLockElement === document.body;
       if (!isLocked) clearInputs();
-      document.getElementById('resume-overlay').style.display = (!isLocked && isGameStarted && !isDead && !(window.EventMatch && EventMatch.blocksResume())) ? 'flex' : 'none';
+      document.getElementById('resume-overlay').style.display = (!isLocked && isGameStarted && !isDead && !(window.EventMatch && EventMatch.blocksResume()) && !(window.SurvivalMode && SurvivalMode.blocksResume())) ? 'flex' : 'none';
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -6986,6 +7027,7 @@
 
     function handlePlayerDeath(killerId = null) {
       if (isDead || isRateMatchOver) return;
+      if (window.SurvivalMode && SurvivalMode.active()) { SurvivalMode.onPlayerDeath(); return; } // サバイバル：即ゲームオーバー
       isDead = true;
       clearInputs();
       myShield.visible = false;
@@ -7178,7 +7220,9 @@
       // クイックワープは「視界内に見えている敵」が対象。
       // 透明化中の敵は見えないためターゲット候補から除外する。
       // （ただし通常攻撃などの当たり判定は別処理なので、透明化中でも有効。）
-      const candidates = (currentStage === 'training')
+      const candidates = (window.SurvivalMode && SurvivalMode.active())
+        ? SurvivalMode.targets().map(t => ({ group: t.ref.group, hasPos: true, survBot: t.ref }))
+        : (currentStage === 'training')
         ? dummies.map(d => ({ group: d.mesh, hasPos: true, dummyRef: d }))
         : Object.entries(remotePlayers)
             .filter(([_, remote]) => remote.hasPos && !remote.isDead && !remote.isInvisible)
@@ -7245,7 +7289,9 @@
       }
 
       if (selectedUltType === 'warp' && selectedUltSubtype === 'B') {
-        if (currentStage === 'training' && targetEnemy.dummyRef) {
+        if (targetEnemy.survBot) {
+          SurvivalMode.warpHit(targetEnemy.survBot, 15); // Ver9.5 サバイバル（与ダメ倍率が乗る）
+        } else if (currentStage === 'training' && targetEnemy.dummyRef) {
           targetEnemy.dummyRef.hp -= 15;
           spawnDamagePopup(targetEnemy.dummyRef.mesh.position, 15, true);
           createExplosion(targetEnemy.dummyRef.mesh.position, 0xff7675);
@@ -7302,6 +7348,8 @@
         });
       }
 
+      if (window.SurvivalMode && SurvivalMode.active() && SurvivalMode.areaHit(playerPos, slamRadius, 10) > 0) hitSomeone = true;
+
       if (hitSomeone) {
         addUltCharge(50.0, true);
         addBattleLog(`<span style="color:#f1c40f">急降下スラム命中！周囲に10ダメージ＋ULTゲージ50%回復！</span>`);
@@ -7314,6 +7362,7 @@
       else triggerThunderFlash();
 
       broadcastMsg({ type: 'ult_thunder_strike', isEx });
+      if (window.SurvivalMode && SurvivalMode.active()) SurvivalMode.hurtAll(isEx ? 33 : 10, isEx); // サバイバル：Botは常に地上扱い
 
       let hitAirCount = 0;
       let hitGroundCount = 0;
@@ -7423,6 +7472,8 @@
         });
       }
 
+      if (window.SurvivalMode && SurvivalMode.active()) hitCurseCount += SurvivalMode.curseHit(centerPos, curseRadius, isEx);
+
       if (selectedUltType === 'curse' && selectedUltSubtype === 'A' && hitCurseCount > 0) {
         const mpGain = hitCurseCount * 50;
         myMp = Math.min(getMaxMp(), myMp + mpGain);
@@ -7466,6 +7517,8 @@
       const targets = (currentStage === 'training')
         ? dummies.map(d => ({ mesh: d.mesh, dummyRef: d }))
         : Object.entries(remotePlayers).filter(([_, rp]) => rp.hasPos && !rp.isDead).map(([pid, rp]) => ({ mesh: rp.group, peerId: pid, rpRef: rp }));
+
+      if (window.SurvivalMode && SurvivalMode.active()) SurvivalMode.beamHit(beamOrigin, beamDir, isEx ? 5.5 : 3.0, 4, isEx, hits);
 
       targets.forEach(t => {
         const enemyCenter = t.mesh.position.clone().add(new THREE.Vector3(0, 0.9, 0));
@@ -7549,6 +7602,7 @@
 
       // Ver9.5: イベントマッチのEM球をミニマップへ表示（ブラインド時はコンテナごと非表示）
       if (window.EventMatch) EventMatch.drawMinimap(mapCtx, mapScale, halfSize);
+      if (window.SurvivalMode) SurvivalMode.drawMinimap(mapCtx, mapScale, halfSize);
 
       if (invisibilityTimer <= 0) {
         const px = (playerPos.x + halfSize) * mapScale;
@@ -8167,7 +8221,9 @@
           const posOf = (t) => t && t.group && t.group.position;
           let tgt = null;
           if (s.isMine) {
-            const cands = (currentStage === 'training')
+            const cands = (window.SurvivalMode && SurvivalMode.active())
+              ? SurvivalMode.targets()
+              : (currentStage === 'training')
               ? dummies.filter(d => d.hp > 0).map(d => ({ pos: d.mesh.position, ref: d }))
               : Object.values(remotePlayers)
                   .filter(rp => rp.group.visible && rp.hasPos && !rp.isInvisible && !rp.isDead)
@@ -8206,7 +8262,9 @@
           _tmpVecA.set(s.vx, s.vy, s.vz).normalize();
 
           if (s.isMine) {
-            const candidates = (currentStage === 'training')
+            const candidates = (window.SurvivalMode && SurvivalMode.active())
+              ? SurvivalMode.targets().map(t => t.pos)
+              : (currentStage === 'training')
               ? dummies.map(d => d.mesh.position)
               : Object.values(remotePlayers)
                   .filter(rp => rp.group.visible && rp.hasPos && !rp.isInvisible && !rp.isDead)
@@ -8320,6 +8378,12 @@
               break;
             }
           }
+        }
+
+        // 2b. サバイバルのBotへの直撃判定（貫通時は弾を消さない）
+        if (!collided && s.isMine && window.SurvivalMode && SurvivalMode.active()) {
+          const sh = SurvivalMode.bulletHit(s, prevPos, nextPos);
+          if (sh && !sh.pierced) { collided = true; collidePoint = sh.point; }
         }
 
         // 3. マルチプレイでの相手プレイヤーへの直撃判定
@@ -8444,6 +8508,7 @@
       }
 
       if (window.EventMatch) EventMatch.update(delta);
+      if (window.SurvivalMode) SurvivalMode.update(delta);
       renderer.render(scene, camera);
     }
 
@@ -8965,5 +9030,505 @@
     })();
 
   </script>
+  <script id="survival-module">
+    // ================================================================
+    // Ver9.5 サバイバル（ソロPvE）モジュール  window.SurvivalMode
+    // 状態: IDLE / COUNTDOWN / RUNNING / GEAR_PICK / GAME_OVER
+    // メイン側からは active/update/reset/bulletHit/dmgMult/incomingMult/hpMult/hpBonus/
+    // blocksResume/canTakeDamage/onPlayerDeath/drawMinimap を呼ぶ。
+    // ================================================================
+    window.SurvivalMode = (function () {
+      const CFG = {
+        phaseSec: 180, countdownSec: 5,
+        growth: 1.3,            // フェーズごとの敵HP強化率（確定: 1.3倍）
+        botSpeedRatio: 0.5,     // Bot移動速度＝プレイヤー通常速度(11)の半分
+        playerBaseSpeed: 11,
+        baseHp: 10,             // フェーズ1のBot基礎HP（全弾種ワンパン可: 最低ダメージ10）
+        botsPerPhaseUnit: 3,    // 目標同時数 = 3 × phase（各タイプ phase 体）
+        maxBots: 60, maxBotBullets: 80,
+        botRadius: 0.9, bulletLife: 3.2,
+        near: 5, far: 10        // 近<=5 / 中 5〜10 / 遠>=10
+      };
+      const TYPES = {
+        heavy:  { label: '近距離', bullet: 'heavy',  color: 0xe74c3c, interval: 2.2, band: [0, 4.5] },
+        normal: { label: '中距離', bullet: 'magic',  color: 0x3498db, interval: 1.5, band: [6.0, 9.0] },
+        sniper: { label: '遠距離', bullet: 'sniper', color: 0x2ecc71, interval: 3.0, band: [12.0, 26.0] }
+      };
+      // ---- 特製ギアカタログ（全27種・等確率）----
+      const G = (id, name, desc, req, repeat) => ({ id, name, desc, req: req || null, repeat: !!repeat });
+      const CATALOG = [
+        G('rest1','休憩','立ち止まっている時、HPが毎秒1回復'), G('rest2','休憩2','「休憩」の回復量が1.5','rest1'), G('rest3','休憩3','「休憩」の回復間隔が0.8秒','rest2'),
+        G('pierce1','貫通','通常弾が30%の確率で敵を貫通'), G('pierce2','貫通2','「貫通」の確率が50%','pierce1'), G('pierce3','貫通3','「貫通」した弾の威力が1.5倍','pierce2'),
+        G('hasty1','生き急ぎ','与ダメ・被ダメどちらも50%増加'), G('hasty2','生き急ぎ2','被ダメ増加が30%に緩和','hasty1'), G('hasty3','生き急ぎ3','被ダメ増加が10%に緩和','hasty2'),
+        G('head1','ヘッドショット','10%の確率でクリティカル(ダメージ2倍)'), G('head2','ヘッドショット2','クリティカル倍率が3倍','head1'), G('head3','ヘッドショット3','クリティカル確率が20%','head2'),
+        G('mp1','超持続','敵に弾を当てるとMP5回復'), G('mp2','超持続2','MP回復量が10','mp1'), G('mp3','超持続3','MP回復量が15','mp2'),
+        G('vamp1','吸血','敵を倒すとHP5回復'), G('vamp2','吸血2','HP回復量10','vamp1'), G('vamp3','吸血3','HP回復量15','vamp2'),
+        G('vital1','生命力','敵を倒すと5%の確率で最大HP+10(HPは回復しない)'), G('vital2','生命力2','確率が10%','vital1'), G('vital3','生命力3','確率が15%','vital2'),
+        G('take1','道連れ','敵を倒すと周り(半径2m)の敵が10%の確率で倒れる'), G('take2','道連れ2','確率が30%','take1'), G('take3','道連れ3','効果範囲が半径4m','take2'),
+        G('haisui','背水の陣','最大HPが半分になるが与ダメが2倍',null,true), G('kuniku','苦肉の策','最大HPが1.5倍になるが与ダメが半分',null,true), G('heal','救急医療','HPを全回復',null,true)
+      ];
+      const BY_ID = {}; CATALOG.forEach(g => BY_ID[g.id] = g);
+
+      let state = 'IDLE', runId = 0, phase = 1, phaseLeft = 0, cdLeft = 0, score = 0, kills = 0, phaseKills = 0;
+      let owned = {};            // id -> 取得回数
+      let counters = { haisui: 0, kuniku: 0 };
+      let hpBonus = 0, bots = [], botBullets = [], nextBotId = 1, restTimer = 0, lastPX = 0, lastPZ = 0, paused = false, pickLock = false;
+      let ui = null, shared = null;
+
+      const has = id => (owned[id] || 0) > 0;
+      const rnd = (a, b) => a + Math.random() * (b - a);
+
+      // ---------- 効果値 ----------
+      function dmgMult() {
+        if (state === 'IDLE') return 1;
+        let m = 1;
+        if (has('hasty1')) m *= 1.5;
+        m *= Math.pow(2, counters.haisui) * Math.pow(0.5, counters.kuniku);
+        return m;
+      }
+      function incomingMult() {
+        if (state === 'IDLE' || !has('hasty1')) return 1;
+        return has('hasty3') ? 1.1 : (has('hasty2') ? 1.3 : 1.5);
+      }
+      function hpMult() { return state === 'IDLE' ? 1 : Math.pow(0.5, counters.haisui) * Math.pow(1.5, counters.kuniku); }
+      function critChance() { return !has('head1') ? 0 : (has('head3') ? 0.2 : 0.1); }
+      function critMult() { return has('head2') ? 3 : 2; }
+      function pierceChance() { return !has('pierce1') ? 0 : (has('pierce2') ? 0.5 : 0.3); }
+      function mpRegain() { return !has('mp1') ? 0 : (has('mp3') ? 15 : (has('mp2') ? 10 : 5)); }
+      function vampHeal() { return !has('vamp1') ? 0 : (has('vamp3') ? 15 : (has('vamp2') ? 10 : 5)); }
+      function vitalChance() { return !has('vital1') ? 0 : (has('vital3') ? 0.15 : (has('vital2') ? 0.10 : 0.05)); }
+      function takeChance() { return !has('take1') ? 0 : (has('take2') ? 0.3 : 0.1); }
+      function takeRadius() { return has('take3') ? 4 : 2; }
+
+      function clampHp() { const m = getMaxHp(); if (myHp > m) myHp = m; updateHudBars(); }
+
+      // ---------- 共有ジオメトリ/マテリアル ----------
+      function sharedRes() {
+        if (shared) return shared;
+        shared = {
+          body: new THREE.CylinderGeometry(0.55, 0.65, 1.5, 10), head: new THREE.SphereGeometry(0.4, 10, 8),
+          bar: new THREE.PlaneGeometry(1.4, 0.16), bulletGeo: new THREE.SphereGeometry(0.28, 8, 6),
+          barBg: new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.DoubleSide, depthTest: false }),
+          barFg: new THREE.MeshBasicMaterial({ color: 0xff4757, side: THREE.DoubleSide, depthTest: false }),
+          mats: {}, bMats: {}
+        };
+        Object.keys(TYPES).forEach(k => {
+          shared.mats[k] = new THREE.MeshStandardMaterial({ color: TYPES[k].color, roughness: 0.6 });
+          shared.bMats[k] = new THREE.MeshBasicMaterial({ color: TYPES[k].color });
+        });
+        shared.headMat = new THREE.MeshStandardMaterial({ color: 0xf5d7b5 });
+        return shared;
+      }
+
+      // ---------- Bot ----------
+      function botMaxHp() { return Math.max(1, Math.ceil(CFG.baseHp * Math.pow(CFG.growth, phase - 1))); }
+      function spotFree(x, z) {
+        const box = new THREE.Box3(); box.min.set(x - 0.8, 0.3, z - 0.8); box.max.set(x + 0.8, 3.0, z + 0.8);
+        for (const c of colliders) if (c.intersectsBox(box)) return false;
+        return true;
+      }
+      function pickSpawn() {
+        const half = currentMapSize / 2 - 4;
+        for (let t = 0; t < 40; t++) {
+          const x = rnd(-half, half), z = rnd(-half, half);
+          if (Math.hypot(x - playerPos.x, z - playerPos.z) < 22) continue;
+          if (spotFree(x, z)) return { x, z };
+        }
+        return { x: -35, z: -35 };
+      }
+      function spawnBot(type) {
+        const r = sharedRes(), sp = pickSpawn(), g = new THREE.Group();
+        const body = new THREE.Mesh(r.body, r.mats[type]); body.position.y = 0.75;
+        const head = new THREE.Mesh(r.head, r.headMat); head.position.y = 1.85;
+        g.add(body, head);
+        const barBg = new THREE.Mesh(r.bar, r.barBg), barFg = new THREE.Mesh(r.bar, r.barFg);
+        barBg.position.y = barFg.position.y = 2.6; barBg.renderOrder = 10; barFg.renderOrder = 11;
+        g.add(barBg, barFg);
+        g.position.set(sp.x, 0, sp.z); scene.add(g);
+        const mh = botMaxHp();
+        bots.push({ id: nextBotId++, type, group: g, barFg, hp: mh, maxHp: mh, alive: true, strafe: Math.random() < 0.5 ? 1 : -1,
+          strafeT: rnd(0.8, 2.2), cd: rnd(0.8, TYPES[type].interval), stuck: 0, curse: 0 });
+      }
+      function removeBot(b) { scene.remove(b.group); }
+      function targetCounts() {
+        const per = Math.min(phase, Math.floor(CFG.maxBots / 3));
+        return { heavy: per, normal: per, sniper: per };
+      }
+      function replenish() {
+        const need = targetCounts(), have = { heavy: 0, normal: 0, sniper: 0 };
+        bots.forEach(b => { if (b.alive) have[b.type]++; });
+        Object.keys(need).forEach(k => { for (let i = have[k]; i < need[k]; i++) spawnBot(k); });
+      }
+      function botBlocked(x, z) {
+        const box = new THREE.Box3(); box.min.set(x - 0.5, 0.35, z - 0.5); box.max.set(x + 0.5, 2.2, z + 0.5);
+        for (const c of colliders) if (c.intersectsBox(box)) return true;
+        return false;
+      }
+      function hasLOS(from, to) {
+        const d = to.clone().sub(from), dist = d.length(); if (dist < 0.01) return true;
+        ccdRaycaster.set(from, d.normalize()); ccdRaycaster.far = dist;
+        return ccdRaycaster.intersectObjects(obstacleMeshes).length === 0;
+      }
+      function fireBotBullet(b, dist) {
+        if (botBullets.length >= CFG.maxBotBullets) return;
+        const T = TYPES[b.type], meta = bulletMasterData[T.bullet];
+        const from = new THREE.Vector3(b.group.position.x, 1.7, b.group.position.z);
+        const to = new THREE.Vector3(playerPos.x, playerPos.y + 0.85, playerPos.z);
+        if (!hasLOS(from, to)) return;
+        const dir = to.clone().sub(from).normalize();
+        const mesh = new THREE.Mesh(sharedRes().bulletGeo, sharedRes().bMats[b.type]);
+        const sc = meta.scale || 1; mesh.scale.setScalar(sc); mesh.position.copy(from); scene.add(mesh);
+        botBullets.push({ mesh, pos: from.clone(), start: from.clone(), vel: dir.multiplyScalar(meta.speed), life: CFG.bulletLife, type: T.bullet, scale: sc, hit: false });
+      }
+      function updateBots(dt) {
+        const px = playerPos.x, pz = playerPos.z, speed = CFG.playerBaseSpeed * CFG.botSpeedRatio;
+        for (const b of bots) {
+          if (!b.alive) continue;
+          const T = TYPES[b.type], p = b.group.position;
+          let dx = px - p.x, dz = pz - p.z; const dist = Math.hypot(dx, dz) || 0.001; dx /= dist; dz /= dist;
+          let mx = 0, mz = 0;
+          if (dist > T.band[1]) { mx += dx; mz += dz; }          // 遠すぎ→接近
+          else if (dist < T.band[0]) { mx -= dx; mz -= dz; }     // 近すぎ→後退
+          b.strafeT -= dt;
+          if (b.strafeT <= 0) { b.strafe = Math.random() < 0.5 ? 1 : -1; b.strafeT = rnd(0.8, 2.2); }
+          mx += -dz * b.strafe * 0.7; mz += dx * b.strafe * 0.7;  // 横移動で回避
+          const ml = Math.hypot(mx, mz) || 1; mx /= ml; mz /= ml;
+          if (b.curse > 0) b.curse -= dt;                           // カース弱体：6秒間 移動速度0.5倍
+          const spd = b.curse > 0 ? speed * 0.5 : speed;
+          const nx = p.x + mx * spd * dt, nz = p.z + mz * spd * dt, half = currentMapSize / 2 - 1.5;
+          let moved = false;
+          const cx = Math.max(-half, Math.min(half, nx)), cz = Math.max(-half, Math.min(half, nz));
+          if (!botBlocked(cx, p.z)) { p.x = cx; moved = true; }
+          if (!botBlocked(p.x, cz)) { p.z = cz; moved = true; }
+          b.stuck = moved ? 0 : b.stuck + dt;
+          if (b.stuck > 0.6) { b.strafe = -b.strafe; b.strafeT = rnd(0.8, 1.6); b.stuck = 0; }
+          p.y = 0;
+          b.group.rotation.y = Math.atan2(-dx, -dz);   // プレイヤーの方を向く（ワープは背後に出る）
+          // 射撃（距離帯が合っている時のみ）
+          b.cd -= dt;
+          const inBand = b.type === 'heavy' ? dist <= CFG.near : (b.type === 'normal' ? (dist > CFG.near && dist < CFG.far) : dist >= CFG.far);
+          if (b.cd <= 0 && inBand) { fireBotBullet(b, dist); b.cd = T.interval * rnd(0.85, 1.2); }
+          // HPバーをカメラへ向ける
+          b.group.children[2].lookAt(camera.position); b.group.children[3].lookAt(camera.position);
+        }
+      }
+      function updateBotBullets(dt) {
+        for (let i = botBullets.length - 1; i >= 0; i--) {
+          const s = botBullets[i];
+          const prev = s.pos.clone(), next = prev.clone().addScaledVector(s.vel, dt);
+          s.life -= dt; let dead = s.life <= 0 || s.hit;
+          if (!dead) {
+            const seg = next.clone().sub(prev), len = seg.length();
+            if (len > 0) {
+              ccdRaycaster.set(prev, seg.clone().normalize()); ccdRaycaster.far = len;
+              if (ccdRaycaster.intersectObjects(obstacleMeshes).length > 0) dead = true;
+            }
+            if (!dead && next.y <= 0.2) dead = true;
+          }
+          if (!dead && state === 'RUNNING' && !isDead && myHp > 0) {
+            const c = new THREE.Vector3(playerPos.x, playerPos.y + 0.85, playerPos.z), r = 1.1 * s.scale + 0.3;
+            if (distToSegmentSquared(c, prev, next) <= r * r) { hitPlayer(s, next); dead = true; }
+          }
+          if (dead) { scene.remove(s.mesh); botBullets.splice(i, 1); }   // 着弾エフェクトは出さない
+          else { s.pos.copy(next); s.mesh.position.copy(next); }
+        }
+      }
+      function hitPlayer(s, hitPoint) {
+        if (respawnInvincibleTimer > 0) return;
+        let dmg = computeUnbuffedBulletDamage(s.type, s.start, hitPoint, false);
+        if (fullShieldTimer > 0) dmg *= 0.4;
+        else if (isGuarding) { dmg = 5; if (superMagicTimer <= 0) { myMp = Math.max(0, myMp - 30); if (myMp <= 0) triggerOverheat(); } }
+        if (isVulnerable) { dmg *= 1.5; isVulnerable = false; }
+        if (dmg > 0) { applyDamage(dmg, 'surv_bot', false, false, false); triggerHitEffect(); }
+      }
+
+      // ---------- 撃破・ギア効果 ----------
+      function killBot(b, chain) {
+        if (!b.alive) return;                 // 二重撃破・二重加点の防止
+        b.alive = false; removeBot(b);
+        score += phase; kills++; phaseKills++;
+        const vh = vampHeal(); if (vh > 0) { myHp = Math.min(getMaxHp(), myHp + vh); }
+        if (Math.random() < vitalChance()) { hpBonus += 10; addBattleLog('<span style="color:#55efc4">💗 生命力！最大HP+10</span>'); }
+        if (!chain && takeChance() > 0) {
+          const r = takeRadius(), c = b.group.position;
+          bots.forEach(o => { if (o.alive && Math.hypot(o.group.position.x - c.x, o.group.position.z - c.z) <= r && Math.random() < takeChance()) killBot(o, true); });
+        }
+        bots = bots.filter(o => o.alive);
+        updateHudBars(); renderHud();
+      }
+      // 貫通できる弾種：通常弾（魔法弾・重量弾・狙撃弾）。爆弾・反射弾は貫通しない。
+      const PIERCE_TYPES = { magic: 1, heavy: 1, sniper: 1 };
+      // 戻り値：null（当たらず）／{point, pierced}。貫通した弾は消えず、貫通された敵にもダメージは入る。
+      // 1回の判定区間に複数の敵がいる場合は、手前から順に全員へダメージを与える（貫通が続く限り）。
+      function bulletHit(s, prev, next) {
+        if (state !== 'RUNNING') return null;
+        if (!s._sHit) s._sHit = new Set();
+        const hits = [];
+        for (const b of bots) {
+          if (!b.alive || s._sHit.has(b.id)) continue;
+          const c = new THREE.Vector3(b.group.position.x, 1.0, b.group.position.z), r = CFG.botRadius + 0.3 * (s.scale || 1);
+          const res = distToSegmentSquared(c, prev, next);
+          if (res.distSq > r * r) continue;
+          hits.push({ b, res, t: res.hitPoint.distanceTo(prev) });
+        }
+        hits.sort((x, y) => x.t - y.t);
+        let last = null;
+        for (const h of hits) {
+          const b = h.b, res = h.res;
+          if (!b.alive) continue;                       // 道連れ等で既に倒れた敵は飛ばす
+          let dmg = computeBulletDamage(s.bulletType, s.startPos, res.hitPoint, s.isExSuperHoming) * dmgMult();
+          if (s._sPierced && has('pierce3')) dmg *= 1.5;   // 貫通した弾の威力1.5倍（貫通後に当たる敵から）
+          let crit = false;
+          if (Math.random() < critChance()) { dmg *= critMult(); crit = true; }
+          dmg = Math.max(1, Math.round(dmg));
+          b.hp -= dmg; b.barFg.scale.x = Math.max(0.001, b.hp / b.maxHp);
+          spawnDamagePopup(b.group.position.clone().setY(1.8), dmg, crit);
+          const mp = mpRegain(); if (mp > 0) { myMp = Math.min(getMaxMp(), myMp + mp); updateHudBars(); }
+          addUltCharge(ultMasterData[selectedUltType].baseHitCharge, false);
+          s._sHit.add(b.id);
+          if (b.hp <= 0) killBot(b, false);
+          const pierced = !!PIERCE_TYPES[s.bulletType] && Math.random() < pierceChance();
+          if (!pierced) return { point: res.hitPoint, pierced: false };   // 貫通しなかった：この敵で弾は消える
+          s._sPierced = true; last = { point: res.hitPoint, pierced: true };
+        }
+        return last;
+      }
+
+      // ---------- ULT・戦術など直接ダメージ用ヘルパー ----------
+      function hurt(b, raw, crit) {
+        if (state !== 'RUNNING' || !b.alive) return;
+        const dmg = Math.max(1, Math.round(raw * dmgMult()));
+        b.hp -= dmg; b.barFg.scale.x = Math.max(0.001, b.hp / b.maxHp);
+        spawnDamagePopup(b.group.position.clone().setY(1.8), dmg, !!crit);
+        if (b.hp <= 0) killBot(b, false);
+      }
+      function areaHit(center, radius, raw) {
+        let n = 0;
+        bots.slice().forEach(b => { if (b.alive && center.distanceTo(new THREE.Vector3(b.group.position.x, 0.9, b.group.position.z)) <= radius) { hurt(b, raw, false); n++; } });
+        return n;
+      }
+      function hurtAll(raw, crit) { let n = 0; bots.slice().forEach(b => { if (b.alive) { hurt(b, raw, crit); n++; } }); return n; }
+      function beamHit(origin, dir, radius, raw, isEx, obstacleHits) {
+        let n = 0;
+        bots.slice().forEach(b => {
+          if (!b.alive) return;
+          const c = new THREE.Vector3(b.group.position.x, 0.9, b.group.position.z), to = c.clone().sub(origin), pd = to.dot(dir);
+          if (pd <= 0 || pd >= 65) return;
+          if (c.distanceTo(origin.clone().addScaledVector(dir, pd)) >= radius) return;
+          const blocked = obstacleHits.some(h => h.distance < pd);
+          addUltCharge((isEx || !blocked) ? 6.0 : 3.0, true);
+          hurt(b, (isEx || !blocked) ? raw : raw / 2, isEx); n++;
+        });
+        return n;
+      }
+      // ---------- ホーミング／ロックオン／ワープ用の標的API ----------
+      function targets() { return state === 'RUNNING' ? bots.filter(b => b.alive).map(b => ({ pos: b.group.position, ref: b })) : []; }
+      function targetPos(b) { return (b && b.alive && bots.indexOf(b) >= 0) ? b.group.position.clone().add(new THREE.Vector3(0, 0.9, 0)) : null; }
+      function bestTarget(camPos, camDir) {
+        let best = null, bs = -Infinity, fb = null, fs = -Infinity;
+        targets().forEach(t => {
+          const v = t.pos.clone().add(new THREE.Vector3(0, 0.9, 0)).sub(camPos), d = v.length(); if (d < 0.1) return;
+          const dot = camDir.dot(v.normalize()), sc = dot - d * 0.0005;
+          if (dot > 0 && sc > bs) { bs = sc; best = { type: 'surv', bot: t.ref }; }
+          if (sc > fs) { fs = sc; fb = { type: 'surv', bot: t.ref }; }
+        });
+        return best || fb;
+      }
+      function warpHit(b, raw) { if (b && b.alive) { hurt(b, raw, true); } }
+      function curseHit(center, radius, isEx) {
+        let n = 0;
+        bots.slice().forEach(b => {
+          if (!b.alive) return;
+          if (center.distanceTo(new THREE.Vector3(b.group.position.x, 0.9, b.group.position.z)) > radius) return;
+          n++; b.curse = 6.0;
+          if (isEx) { const lost = Math.floor(b.hp * 0.33); if (lost > 0 && b.hp - lost >= 1) { b.hp -= lost; b.barFg.scale.x = Math.max(0.001, b.hp / b.maxHp); spawnDamagePopup(b.group.position.clone().setY(1.8), lost, true); } }
+        });
+        return n;
+      }
+
+      // ---------- ギア抽選・取得 ----------
+      function eligible() { return CATALOG.filter(g => (g.repeat || !has(g.id)) && (!g.req || has(g.req))); }
+      function draw3() {
+        const pool = eligible(); const out = [];
+        while (out.length < 3 && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+        return out;
+      }
+      function applyGear(g) {
+        owned[g.id] = (owned[g.id] || 0) + 1;
+        if (g.id === 'haisui') counters.haisui++;
+        if (g.id === 'kuniku') counters.kuniku++;
+        if (g.id === 'heal') myHp = getMaxHp();
+        clampHp();
+        addBattleLog(`<span style="color:#ffd93d">🎁 特製ギア獲得：${g.name}</span>`);
+      }
+
+      // ---------- UI ----------
+      function mk(tag, id, css, parent) { const e = document.createElement(tag); if (id) e.id = id; e.style.cssText = css || ''; (parent || document.body).appendChild(e); return e; }
+      function buildUi() {
+        if (ui) return;
+        ui = {};
+        ui.hud = mk('div', 'survival-hud', 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:60;display:none;text-align:center;color:#fff;font-weight:bold;text-shadow:0 0 6px #000;pointer-events:none;font-size:15px;');
+        ui.cd = mk('div', 'survival-countdown', 'position:fixed;inset:0;z-index:61;display:none;align-items:center;justify-content:center;flex-direction:column;color:#ffd93d;font-weight:900;text-shadow:0 0 18px #000;pointer-events:none;');
+        ui.pick = mk('div', 'survival-pick', 'position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:rgba(10,8,20,0.88);color:#fff;');
+        ui.over = mk('div', 'survival-over', 'position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:rgba(10,8,20,0.9);color:#fff;');
+      }
+      function renderHud() {
+        if (!ui) return;
+        const gl = CATALOG.filter(g => has(g.id)).map(g => g.name + ((owned[g.id] > 1) ? '×' + owned[g.id] : '')).join(' / ');
+        const t = Math.max(0, Math.ceil(phaseLeft)), m = Math.floor(t / 60), s = String(t % 60).padStart(2, '0');
+        ui.hud.innerHTML = `<div style="font-size:18px">PHASE ${phase} ｜ ${m}:${s}</div><div>SCORE ${score} ｜ 撃破 ${kills} ｜ 敵 ${bots.length}体</div>` +
+          (gl ? `<div style="font-size:11px;font-weight:normal;max-width:520px;color:#ffeaa7">${gl}</div>` : '');
+      }
+      function showCountdown(n) {
+        ui.cd.style.display = 'flex';
+        ui.cd.innerHTML = `<div style="font-size:26px">PHASE ${phase} 開始まで</div><div style="font-size:120px;line-height:1">${n}</div>`;
+      }
+      function showPick() {
+        const picks = draw3(); pickLock = false;
+        ui.pick.style.display = 'flex'; ui.pick.innerHTML = `<div style="font-size:30px;font-weight:900;color:#55efc4">PHASE ${phase} CLEAR!</div><div style="font-size:15px">特製ギアを1つ選んでください</div>`;
+        const row = mk('div', null, 'display:flex;gap:14px;flex-wrap:wrap;justify-content:center;', ui.pick);
+        picks.forEach(g => {
+          const c = mk('div', null, 'width:200px;padding:16px;border:2px solid #ffd93d;border-radius:12px;background:#1e1b2e;cursor:pointer;text-align:center;', row);
+          c.innerHTML = `<div style="font-size:19px;font-weight:bold;color:#ffd93d;margin-bottom:8px">${g.name}</div><div style="font-size:13px;line-height:1.5">${g.desc}</div>`;
+          c.addEventListener('click', () => {
+            if (pickLock || state !== 'GEAR_PICK') return; pickLock = true;   // 連打・二重取得防止
+            applyGear(g); ui.pick.style.display = 'none'; ui.pick.innerHTML = '';
+            phase++; beginCountdown();
+            try { document.body.requestPointerLock(); } catch (e) {}
+          });
+        });
+      }
+      // ---------- ランキング（server.js: __survival_submit / __survival_ranking_request）----------
+      function myName() { try { return String((typeof savedData !== 'undefined' && savedData && savedData.playerName) || playerName || '魔導士A').slice(0, 20); } catch (e) { return '魔導士A'; } }
+      function submitScore() {
+        const myRun = runId;
+        sendProfileMessage({ type: '__survival_submit', clientId: MY_CLIENT_ID, name: myName(), score, phase, kills },
+          () => { if (ui && ui.rank && myRun === runId) ui.rank.textContent = 'ランキングに接続できませんでした（スコアは未登録）'; });
+      }
+      function requestRanking() {
+        sendProfileMessage({ type: '__survival_ranking_request', clientId: MY_CLIENT_ID }, () => {});
+      }
+      function rankingHtml(d) {
+        const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        let h = '<div style="font-weight:bold;color:#ffd93d;margin-bottom:4px">🏆 サバイバル ランキング（自己ベスト）</div>';
+        if (!(d.top || []).length) h += '<div style="color:#aaa">まだ記録がありません</div>';
+        (d.top || []).forEach(r => {
+          h += `<div style="${r.me ? 'color:#55efc4;font-weight:bold' : ''}">${r.rank}位　${esc(r.name)}　${r.score}点（P${r.phase}／撃破${r.kills}）</div>`;
+        });
+        if (d.myRank && d.myBest && d.myRank > (d.top || []).length) h += `<div style="color:#55efc4;margin-top:4px">あなた：${d.myRank}位　${d.myBest.score}点（P${d.myBest.phase}）</div>`;
+        else if (!d.myRank) h += '<div style="color:#aaa;margin-top:4px">あなたは未登録です</div>';
+        return h;
+      }
+      function onRanking(d) {
+        if (!ui) return;
+        const h = rankingHtml(d);
+        if (state === 'GAME_OVER' && ui.rank) ui.rank.innerHTML = h;                 // ゲームオーバー画面
+        if (ui.board && ui.board.style.display !== 'none' && ui.boardBody) ui.boardBody.innerHTML = h;   // タイトル画面のランキング
+      }
+      // タイトル画面からのランキング表示（ゲーム外・IDLE時）
+      function showRankingBoard() {
+        buildUi();
+        if (!ui.board) {
+          ui.board = mk('div', 'survival-board', 'position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:rgba(10,8,20,0.88);color:#fff;');
+          ui.boardBody = mk('div', 'survival-board-body', 'min-width:320px;max-width:92vw;padding:14px 18px;border:1px solid #6c5ce7;border-radius:10px;background:#16132a;font-size:14px;line-height:1.8;text-align:left;', ui.board);
+          const c = mk('button', null, 'padding:10px 26px;font-size:16px;border-radius:8px;border:none;cursor:pointer;background:#6c5ce7;color:#fff;', ui.board);
+          c.textContent = '閉じる'; c.addEventListener('click', () => { ui.board.style.display = 'none'; });
+        }
+        ui.board.style.display = 'flex'; ui.boardBody.textContent = 'ランキング取得中…';
+        sendProfileMessage({ type: '__survival_ranking_request', clientId: MY_CLIENT_ID },
+          () => { if (ui.board.style.display !== 'none') ui.boardBody.textContent = 'ランキングに接続できませんでした'; });
+      }
+      function showOver() {
+        ui.over.style.display = 'flex';
+        ui.over.innerHTML = `<div style="font-size:34px;font-weight:900;color:#ff6b81">GAME OVER</div><div style="font-size:20px">到達フェーズ ${phase} ／ スコア ${score} ／ 撃破 ${kills}</div>`;
+        ui.rank = mk('div', 'survival-rank', 'min-width:300px;max-width:90vw;padding:10px 16px;border:1px solid #6c5ce7;border-radius:10px;background:#16132a;font-size:13px;line-height:1.7;text-align:left;', ui.over);
+        ui.rank.textContent = 'ランキング送信中…';
+        submitScore();
+        const bt = (label, fn) => { const b = mk('button', null, 'padding:10px 26px;font-size:16px;border-radius:8px;border:none;cursor:pointer;background:#6c5ce7;color:#fff;', ui.over); b.textContent = label; b.addEventListener('click', fn); };
+        bt('もう一度挑戦', () => { ui.over.style.display = 'none'; ui.over.innerHTML = ''; start(); try { document.body.requestPointerLock(); } catch (e) {} });
+        bt('終了してタイトルへ', () => { leaveGame(); });
+      }
+
+      // ---------- 進行 ----------
+      function clearField() {
+        bots.forEach(removeBot); bots = [];
+        botBullets.forEach(s => scene.remove(s.mesh)); botBullets = [];
+      }
+      function beginCountdown() { state = 'COUNTDOWN'; cdLeft = CFG.countdownSec; clearField(); showCountdown(Math.ceil(cdLeft)); renderHud(); }
+      function startPhase() { state = 'RUNNING'; phaseLeft = CFG.phaseSec; phaseKills = 0; ui.cd.style.display = 'none'; replenish(); renderHud(); }
+      function phaseClear() {
+        if (state !== 'RUNNING') return;
+        state = 'PHASE_CLEAR'; clearField();
+        state = 'GEAR_PICK'; releasePointerLock(); showPick();
+      }
+      function onPlayerDeath() {
+        if (state === 'GAME_OVER') return;
+        state = 'GAME_OVER'; isDead = true; clearInputs(); clearField();
+        ui.cd.style.display = 'none'; releasePointerLock(); showOver();
+      }
+      function start() {
+        buildUi(); runId++;
+        clearField(); owned = {}; counters = { haisui: 0, kuniku: 0 }; hpBonus = 0;
+        phase = 1; score = 0; kills = 0; phaseKills = 0; restTimer = 0; paused = false; pickLock = false;
+        ui.pick.style.display = 'none'; ui.over.style.display = 'none'; ui.hud.style.display = 'block';
+        document.getElementById('death-overlay').style.display = 'none';
+        state = 'COUNTDOWN';
+        resetSpawn(true, false);
+        playerPos.set(0, 2.5, 0);                           // 闘技場の中央（中央台座の上に着地）
+        camera.position.set(0, 2.5 + eyeHeight, 0);
+        myHp = getMaxHp(); myMp = getMaxMp(); isDead = false; ultPercent = 0; lastPX = 0; lastPZ = 0;
+        updateHudBars();
+        document.getElementById('info').innerText = 'サバイバル（闘技場）';
+        beginCountdown();
+      }
+      function reset() {
+        state = 'IDLE'; runId++;
+        clearField(); owned = {}; counters = { haisui: 0, kuniku: 0 }; hpBonus = 0; paused = false;
+        if (ui) { ui.hud.style.display = 'none'; ui.cd.style.display = 'none'; ui.pick.style.display = 'none'; ui.over.style.display = 'none'; ui.pick.innerHTML = ''; ui.over.innerHTML = ''; }
+      }
+      document.addEventListener('visibilitychange', () => { paused = document.hidden; });
+
+      function update(delta) {
+        if (state === 'IDLE' || state === 'GAME_OVER') return;
+        if (paused || document.hidden) return;
+        // 一時停止：Esc等でポインタロックが外れている間はカウントダウン/戦闘を止める（再開は「クリックして操作再開」）
+        if ((state === 'COUNTDOWN' || state === 'RUNNING') && typeof isLocked !== 'undefined' && !isLocked) return;
+        const dt = Math.min(delta, 0.1);                   // 復帰時に経過時間を一気に適用しない
+        if (state === 'COUNTDOWN') {
+          cdLeft -= dt; if (cdLeft <= 0) startPhase(); else showCountdown(Math.ceil(cdLeft));
+          return;
+        }
+        if (state !== 'RUNNING') return;
+        // 休憩
+        const moved = Math.hypot(playerPos.x - lastPX, playerPos.z - lastPZ) > 0.02; lastPX = playerPos.x; lastPZ = playerPos.z;
+        if (has('rest1') && !isDead) {
+          if (moved) restTimer = 0;
+          else { restTimer += dt; const iv = has('rest3') ? 0.8 : 1.0; if (restTimer >= iv) { restTimer -= iv; myHp = Math.min(getMaxHp(), myHp + (has('rest2') ? 1.5 : 1)); updateHudBars(); } }
+        }
+        updateBots(dt); updateBotBullets(dt);
+        if (state !== 'RUNNING') return;                   // 被弾死亡を優先（時間切れと同フレームでもGAME_OVER）
+        replenish();
+        phaseLeft -= dt; renderHud();
+        if (phaseLeft <= 0) phaseClear();
+      }
+      function drawMinimap(ctx, scale, half) {
+        if (state !== 'RUNNING') return;
+        ctx.fillStyle = '#e17055';
+        bots.forEach(b => { ctx.beginPath(); ctx.arc((b.group.position.x + half) * scale, (b.group.position.z + half) * scale, 2.5, 0, Math.PI * 2); ctx.fill(); });
+      }
+
+      return {
+        start, reset, update, targets, targetPos, bestTarget, warpHit, bulletHit, areaHit, hurtAll, beamHit, curseHit, drawMinimap, onPlayerDeath, onRanking, requestRanking, showRankingBoard, dmgMult, incomingMult, hpMult,
+        hpBonus: () => hpBonus,
+        active: () => state !== 'IDLE',
+        canTakeDamage: () => state === 'RUNNING',
+        blocksResume: () => state === 'GEAR_PICK' || state === 'GAME_OVER',
+        _bots: () => bots, _own: (id) => { owned[id] = (owned[id]||0)+1; },
+        _debug: () => ({ state, phase, score, kills, bots: bots.length, bullets: botBullets.length, owned }),
+        _catalog: CATALOG, _eligible: eligible, _draw3: draw3, _cfg: CFG
+      };
+    })();
+  </script>
+
 </body>
 </html>
