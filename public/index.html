@@ -9048,7 +9048,7 @@
         baseHp: 10,             // フェーズ1のBot基礎HP（全弾種ワンパン可: 最低ダメージ10）
         botsPerPhaseUnit: 3,    // 目標同時数 = 3 × phase（各タイプ phase 体）
         maxBots: 60, maxBotBullets: 80,
-        botRadius: 0.9, bulletLife: 3.2, botBulletSpeedMult: 0.8,   // 敵の弾速倍率（全タイプ共通の弱体化 0.8倍）
+        botRadius: 0.9, bulletLife: 3.2, botBulletSpeedMult: 0.5, botBulletDmgMult: 1 / 3,   // 敵の弾速倍率0.5倍／敵弾ダメージ倍率1/3（全タイプ共通）
         
         near: 5, far: 10        // 近<=5 / 中 5〜10 / 遠>=10
       };
@@ -9244,6 +9244,7 @@
         if (fullShieldTimer > 0) dmg *= 0.4;
         else if (isGuarding) { dmg = 5; if (superMagicTimer <= 0) { myMp = Math.max(0, myMp - 30); if (myMp <= 0) triggerOverheat(); } }
         if (isVulnerable) { dmg *= 1.5; isVulnerable = false; }
+        dmg *= CFG.botBulletDmgMult;   // 敵弾ダメージは通常の1/3（ガード・脆弱化等の補正後に最終適用）
         if (dmg > 0) { applyDamage(dmg, 'surv_bot', false, false, false); triggerHitEffect(); }
       }
 
