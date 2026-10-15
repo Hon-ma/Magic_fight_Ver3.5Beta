@@ -1942,7 +1942,7 @@
       // --- コイン経済（Phase1）：所持コイン残高表示 ---
       setText('stat-coins', String(myProfile.coins || 0));
       setText('stat-em', String(myProfile.em || 0)); // Ver9.5: イベントマッチで獲得した所持EM
-      { const sb = myProfile.survivalBest; setText('stat-survival-best', sb && sb.score > 0 ? `${sb.score}（P${sb.phase}）` : '—'); } // Ver9.5: サバイバル最高スコア
+      { const sb = myProfile.survivalBest; setText('stat-survival-best', sb && Number.isFinite(sb.score) ? `${sb.score}（P${sb.phase}）` : '—'); } // Ver9.5: サバイバル最高スコア
 
       renderSetCommentGrid();
     }
@@ -9046,7 +9046,8 @@
         baseHp: 10,             // フェーズ1のBot基礎HP（全弾種ワンパン可: 最低ダメージ10）
         botsPerPhaseUnit: 3,    // 目標同時数 = 3 × phase（各タイプ phase 体）
         maxBots: 60, maxBotBullets: 80,
-        botRadius: 0.9, bulletLife: 3.2,
+        botRadius: 0.9, bulletLife: 3.2, botBulletSpeedMult: 0.8,   // 敵の弾速倍率（全タイプ共通の弱体化 0.8倍）
+        
         near: 5, far: 10        // 近<=5 / 中 5〜10 / 遠>=10
       };
       const TYPES = {
@@ -9178,7 +9179,7 @@
         const dir = to.clone().sub(from).normalize();
         const mesh = new THREE.Mesh(sharedRes().bulletGeo, sharedRes().bMats[b.type]);
         const sc = meta.scale || 1; mesh.scale.setScalar(sc); mesh.position.copy(from); scene.add(mesh);
-        botBullets.push({ mesh, pos: from.clone(), start: from.clone(), vel: dir.multiplyScalar(meta.speed), life: CFG.bulletLife, type: T.bullet, scale: sc, hit: false });
+        botBullets.push({ mesh, pos: from.clone(), start: from.clone(), vel: dir.multiplyScalar(meta.speed * CFG.botBulletSpeedMult), life: CFG.bulletLife, type: T.bullet, scale: sc, hit: false });
       }
       function updateBots(dt) {
         const px = playerPos.x, pz = playerPos.z, speed = CFG.playerBaseSpeed * CFG.botSpeedRatio;
@@ -9227,7 +9228,7 @@
           }
           if (!dead && state === 'RUNNING' && !isDead && myHp > 0) {
             const c = new THREE.Vector3(playerPos.x, playerPos.y + 0.85, playerPos.z), r = 1.1 * s.scale + 0.3;
-            if (distToSegmentSquared(c, prev, next) <= r * r) { hitPlayer(s, next); dead = true; }
+            if (distToSegmentSquared(c, prev, next).distSq <= r * r) { hitPlayer(s, next); dead = true; }   // ※戻り値は {distSq, hitPoint, t}。数値と直接比較すると常にfalseになり被弾しない
           }
           if (dead) { scene.remove(s.mesh); botBullets.splice(i, 1); }   // 着弾エフェクトは出さない
           else { s.pos.copy(next); s.mesh.position.copy(next); }
@@ -9523,7 +9524,7 @@
         active: () => state !== 'IDLE',
         canTakeDamage: () => state === 'RUNNING',
         blocksResume: () => state === 'GEAR_PICK' || state === 'GAME_OVER',
-        _bots: () => bots, _own: (id) => { owned[id] = (owned[id]||0)+1; },
+        _bots: () => bots, _bullets: () => botBullets, _own: (id) => { owned[id] = (owned[id]||0)+1; },
         _debug: () => ({ state, phase, score, kills, bots: bots.length, bullets: botBullets.length, owned }),
         _catalog: CATALOG, _eligible: eligible, _draw3: draw3, _cfg: CFG
       };
