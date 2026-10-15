@@ -9040,6 +9040,8 @@
     window.SurvivalMode = (function () {
       const CFG = {
         phaseSecChoices: [60, 120, 180], countdownSec: 5,   // 各フェーズの制限時間は1/2/3分からランダム
+        endCountSec: 5,         // フェーズ終了の何秒前からカウント表示するか
+        pickGuardMs: 1000,      // 特製ギア選択：表示直後の誤タップ防止（この間はクリック無効）
         respawnDelayMin: 1, respawnDelayMax: 3,        // 撃破後、補充までの待ち時間(秒)
        
         growth: 1.3,            // フェーズごとの敵HP強化率（確定: 1.3倍）
@@ -9068,7 +9070,7 @@
         G('vamp1','吸血','敵を倒すとHP5回復'), G('vamp2','吸血2','HP回復量10','vamp1'), G('vamp3','吸血3','HP回復量15','vamp2'),
         G('vital1','生命力','敵を倒すと5%の確率で最大HP+10(HPは回復しない)'), G('vital2','生命力2','確率が10%','vital1'), G('vital3','生命力3','確率が15%','vital2'),
         G('take1','道連れ','敵を倒すと周り(半径2m)の敵が10%の確率で倒れる'), G('take2','道連れ2','確率が30%','take1'), G('take3','道連れ3','効果範囲が半径4m','take2'),
-        G('haisui','背水の陣','最大HPが半分になるが与ダメが2倍',null,true), G('kuniku','苦肉の策','最大HPが1.5倍になるが与ダメが半分',null,true), G('heal','救急医療','HPを全回復',null,true)
+        G('haisui','背水の陣','最大HPが半分になるが与ダメが2倍',null,true), G('kuniku','苦肉の策','最大HPが1.5倍になるが与ダメが半分',null,true), G('charge','即時充電','ULTが現在のチャージに加えて100%溜まる',null,true)
       ];
       const BY_ID = {}; CATALOG.forEach(g => BY_ID[g.id] = g);
 
@@ -9360,11 +9362,22 @@
         while (out.length < 3 && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
         return out;
       }
+      // 即時充電：現在のチャージに +100%（上限は通常の addUltCharge と同じ。ULT系の補正は受けない）
+      function chargeUlt100() {
+        const maxCap = (selectedUltType === 'upgrade' && upgradeLevel < 4) ? 100.0 : 200.0;
+        const prev = ultPercent;
+        ultPercent = Math.min(maxCap, ultPercent + 100.0);
+        if (selectedUltType === 'warp' && ultPercent >= 100.0) {
+          warpExpireTimer = (selectedUltSubtype === 'A') ? 6.0 : 3.0;   // 既存のワープ仕様に合わせて有効時間を付与
+        }
+        if (prev < 200.0 && ultPercent >= 200.0) triggerExNotification();
+        updateHudBars();
+      }
       function applyGear(g) {
         owned[g.id] = (owned[g.id] || 0) + 1;
         if (g.id === 'haisui') counters.haisui++;
         if (g.id === 'kuniku') counters.kuniku++;
-        if (g.id === 'heal') myHp = getMaxHp();
+        if (g.id === 'charge') chargeUlt100();
         clampHp();
         addBattleLog(`<span style="color:#ffd93d">🎁 特製ギア獲得：${g.name}</span>`);
       }
@@ -9376,6 +9389,7 @@
         ui = {};
         ui.hud = mk('div', 'survival-hud', 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:60;display:none;text-align:center;color:#fff;font-weight:bold;text-shadow:0 0 6px #000;pointer-events:none;font-size:15px;');
         ui.cd = mk('div', 'survival-countdown', 'position:fixed;inset:0;z-index:61;display:none;align-items:center;justify-content:center;flex-direction:column;color:#ffd93d;font-weight:900;text-shadow:0 0 18px #000;pointer-events:none;');
+        ui.end = mk('div', 'survival-endcount', 'position:fixed;left:0;right:0;top:18%;z-index:61;display:none;align-items:center;justify-content:center;flex-direction:column;color:#ff7675;font-weight:900;text-shadow:0 0 14px #000;opacity:0.85;pointer-events:none;');
         ui.pick = mk('div', 'survival-pick', 'position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:rgba(10,8,20,0.88);color:#fff;');
         ui.over = mk('div', 'survival-over', 'position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:rgba(10,8,20,0.9);color:#fff;');
       }
@@ -9390,20 +9404,41 @@
         ui.cd.style.display = 'flex';
         ui.cd.innerHTML = `<div style="font-size:26px">PHASE ${phase} 開始まで</div><div style="font-size:120px;line-height:1">${n}</div>`;
       }
+      // フェーズ終了前カウント（残り endCountSec 秒から）。操作の邪魔にならないよう上寄せ・やや小さめ・半透明
+      let endCountShown = 0;
+      function showEndCount(n) {
+        if (n === endCountShown) return;
+        endCountShown = n;
+        ui.end.style.display = 'flex';
+        ui.end.innerHTML = `<div style="font-size:20px">PHASE ${phase} 終了まで</div><div style="font-size:84px;line-height:1">${n}</div>`;
+      }
+      function hideEndCount() { endCountShown = 0; if (ui && ui.end) ui.end.style.display = 'none'; }
       function showPick() {
         const picks = draw3(); pickLock = false;
+        const shownAt = performance.now();                  // 表示時刻（誤タップ防止用）
+        const guarded = () => performance.now() - shownAt < CFG.pickGuardMs;
+        const cards = [];
         ui.pick.style.display = 'flex'; ui.pick.innerHTML = `<div style="font-size:30px;font-weight:900;color:#55efc4">PHASE ${phase} CLEAR!</div><div style="font-size:15px">特製ギアを1つ選んでください</div>`;
         const row = mk('div', null, 'display:flex;gap:14px;flex-wrap:wrap;justify-content:center;', ui.pick);
         picks.forEach(g => {
           const c = mk('div', null, 'width:200px;padding:16px;border:2px solid #ffd93d;border-radius:12px;background:#1e1b2e;cursor:pointer;text-align:center;', row);
           c.innerHTML = `<div style="font-size:19px;font-weight:bold;color:#ffd93d;margin-bottom:8px">${g.name}</div><div style="font-size:13px;line-height:1.5">${g.desc}</div>`;
+          cards.push(c);
           c.addEventListener('click', () => {
+            if (guarded()) return;                          // 表示後1秒間は反応しない
             if (pickLock || state !== 'GEAR_PICK') return; pickLock = true;   // 連打・二重取得防止
             applyGear(g); ui.pick.style.display = 'none'; ui.pick.innerHTML = '';
             phase++; beginCountdown();
             try { document.body.requestPointerLock(); } catch (e) {}
           });
         });
+        // ガード中は見た目も無効に（暗く表示→1秒後に通常表示）
+        const myRun = runId;
+        cards.forEach(c => { c.style.opacity = '0.4'; c.style.cursor = 'default'; });
+        setTimeout(() => {
+          if (myRun !== runId || state !== 'GEAR_PICK') return;
+          cards.forEach(c => { c.style.opacity = '1'; c.style.cursor = 'pointer'; });
+        }, CFG.pickGuardMs);
       }
       // ---------- ランキング（server.js: __survival_submit / __survival_ranking_request）----------
       function myName() { try { return String((typeof savedData !== 'undefined' && savedData && savedData.playerName) || playerName || '魔導士A').slice(0, 20); } catch (e) { return '魔導士A'; } }
@@ -9461,17 +9496,18 @@
         bots.forEach(removeBot); bots = []; pendingSpawns = [];
         botBullets.forEach(s => scene.remove(s.mesh)); botBullets = [];
       }
-      function beginCountdown() { state = 'COUNTDOWN'; cdLeft = CFG.countdownSec; clearField(); showCountdown(Math.ceil(cdLeft)); renderHud(); }
-      function startPhase() { state = 'RUNNING'; phaseLeft = CFG.phaseSecChoices[Math.floor(Math.random() * CFG.phaseSecChoices.length)]; phaseKills = 0; ui.cd.style.display = 'none'; replenish(); renderHud(); }
+      function beginCountdown() { hideEndCount(); state = 'COUNTDOWN'; cdLeft = CFG.countdownSec; clearField(); showCountdown(Math.ceil(cdLeft)); renderHud(); }
+      function startPhase() { hideEndCount(); state = 'RUNNING'; phaseLeft = CFG.phaseSecChoices[Math.floor(Math.random() * CFG.phaseSecChoices.length)]; phaseKills = 0; ui.cd.style.display = 'none'; replenish(); renderHud(); }
       function phaseClear() {
         if (state !== 'RUNNING') return;
-        state = 'PHASE_CLEAR'; clearField();
+        state = 'PHASE_CLEAR'; clearField(); hideEndCount();
+        myHp = getMaxHp(); updateHudBars();                  // フェーズ終了時にHP全回復
         state = 'GEAR_PICK'; releasePointerLock(); showPick();
       }
       function onPlayerDeath() {
         if (state === 'GAME_OVER') return;
         state = 'GAME_OVER'; isDead = true; clearInputs(); clearField();
-        ui.cd.style.display = 'none'; releasePointerLock(); showOver();
+        ui.cd.style.display = 'none'; hideEndCount(); releasePointerLock(); showOver();
       }
       function start() {
         buildUi(); runId++;
@@ -9491,7 +9527,7 @@
       function reset() {
         state = 'IDLE'; runId++;
         clearField(); owned = {}; counters = { haisui: 0, kuniku: 0 }; hpBonus = 0; paused = false;
-        if (ui) { ui.hud.style.display = 'none'; ui.cd.style.display = 'none'; ui.pick.style.display = 'none'; ui.over.style.display = 'none'; ui.pick.innerHTML = ''; ui.over.innerHTML = ''; }
+        if (ui) { ui.hud.style.display = 'none'; ui.cd.style.display = 'none'; hideEndCount(); ui.pick.style.display = 'none'; ui.over.style.display = 'none'; ui.pick.innerHTML = ''; ui.over.innerHTML = ''; }
       }
       document.addEventListener('visibilitychange', () => { paused = document.hidden; });
 
@@ -9520,6 +9556,7 @@
         }
         replenish();
         phaseLeft -= dt; renderHud();
+        if (phaseLeft > 0 && phaseLeft <= CFG.endCountSec) showEndCount(Math.ceil(phaseLeft));
         if (phaseLeft <= 0) phaseClear();
       }
       function drawMinimap(ctx, scale, half) {
