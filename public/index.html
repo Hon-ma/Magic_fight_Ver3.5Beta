@@ -823,6 +823,7 @@
     .mode-btn.host { background: #00cec9; color: #111; }
     .mode-btn.join { background: #0984e3; color: #fff; }
     .mode-btn.solo { background: #6c5ce7; color: #fff; margin-top: 6px; }
+    .mode-btn.survival { background: #e17055; color: #fff; margin-top: 6px; }
     .mode-btn:hover { transform: scale(1.02); filter: brightness(1.15); }
 
     .header-badge {
@@ -1012,7 +1013,7 @@
           <div class="profile-stat-card"><div class="val" id="stat-rate-winrate">0%</div><div class="label">レート戦勝率</div></div>
           <div class="profile-stat-card"><div class="val" id="stat-coins">0</div><div class="label">所持コイン</div></div>
           <div class="profile-stat-card"><div class="val" id="stat-em">0</div><div class="label">所持EM</div></div>
-          <div class="profile-stat-card"><div class="val" id="stat-survival-best">—</div><div class="label">サバイバル最高スコア</div></div>
+          <div class="profile-stat-card" id="stat-survival-best-card" style="cursor:pointer;border-color:#e17055" title="クリックでサバイバルランキングを表示"><div class="val" id="stat-survival-best">—</div><div class="label">サバイバル最高スコア 🏆ランキングを見る</div></div>
         </div>
       </div>
 
@@ -1383,8 +1384,7 @@
           <button class="mode-btn host" id="btn-goto-host">🏠 合言葉で部屋を作る (ホスト)</button>
           <button class="mode-btn join" id="btn-goto-join">⚔️ 合言葉で部屋に入る (参加)</button>
           <button class="mode-btn solo" id="btn-goto-solo">🎯 訓練場 (ソロ練習モード)</button>
-<button class="mode-btn solo" id="btn-goto-survival">🧟 サバイバル (ソロPvE)</button>
-          <button class="mode-btn solo" id="btn-survival-ranking">🏆 サバイバル ランキング</button>
+<button class="mode-btn survival" id="btn-goto-survival">🧟 サバイバル (ソロPvE)</button>
         </div>
       </div>
     </div>
@@ -6652,7 +6652,7 @@
       requestRoomInfoPreview(document.getElementById('room-input').value.trim() || 'arena888');
     });
 
-    document.getElementById('btn-survival-ranking').addEventListener('click', () => { if (window.SurvivalMode) SurvivalMode.showRankingBoard(); });
+    document.getElementById('stat-survival-best-card').addEventListener('click', () => { if (window.SurvivalMode) SurvivalMode.showRankingBoard(); });
 
     document.getElementById('btn-goto-survival').addEventListener('click', () => {
       gameModeChoice = 'survival';
@@ -9039,7 +9039,9 @@
     // ================================================================
     window.SurvivalMode = (function () {
       const CFG = {
-        phaseSec: 180, countdownSec: 5,
+        phaseSecChoices: [60, 120, 180], countdownSec: 5,   // 各フェーズの制限時間は1/2/3分からランダム
+        respawnDelayMin: 1, respawnDelayMax: 3,        // 撃破後、補充までの待ち時間(秒)
+       
         growth: 1.3,            // フェーズごとの敵HP強化率（確定: 1.3倍）
         botSpeedRatio: 0.5,     // Bot移動速度＝プレイヤー通常速度(11)の半分
         playerBaseSpeed: 11,
@@ -9070,6 +9072,7 @@
       ];
       const BY_ID = {}; CATALOG.forEach(g => BY_ID[g.id] = g);
 
+      let pendingSpawns = [];
       let state = 'IDLE', runId = 0, phase = 1, phaseLeft = 0, cdLeft = 0, score = 0, kills = 0, phaseKills = 0;
       let owned = {};            // id -> 取得回数
       let counters = { haisui: 0, kuniku: 0 };
@@ -9158,6 +9161,7 @@
       function replenish() {
         const need = targetCounts(), have = { heavy: 0, normal: 0, sniper: 0 };
         bots.forEach(b => { if (b.alive) have[b.type]++; });
+        pendingSpawns.forEach(q => { have[q.type]++; });      // 補充待ちの分も数える（即時補充しない）
         Object.keys(need).forEach(k => { for (let i = have[k]; i < need[k]; i++) spawnBot(k); });
       }
       function botBlocked(x, z) {
@@ -9247,6 +9251,7 @@
       function killBot(b, chain) {
         if (!b.alive) return;                 // 二重撃破・二重加点の防止
         b.alive = false; removeBot(b);
+        pendingSpawns.push({ type: b.type, t: rnd(CFG.respawnDelayMin, CFG.respawnDelayMax) });   // 1〜3秒後に補充
         score += phase; kills++; phaseKills++;
         const vh = vampHeal(); if (vh > 0) { myHp = Math.min(getMaxHp(), myHp + vh); }
         if (Math.random() < vitalChance()) { hpBonus += 10; addBattleLog('<span style="color:#55efc4">💗 生命力！最大HP+10</span>'); }
@@ -9452,11 +9457,11 @@
 
       // ---------- 進行 ----------
       function clearField() {
-        bots.forEach(removeBot); bots = [];
+        bots.forEach(removeBot); bots = []; pendingSpawns = [];
         botBullets.forEach(s => scene.remove(s.mesh)); botBullets = [];
       }
       function beginCountdown() { state = 'COUNTDOWN'; cdLeft = CFG.countdownSec; clearField(); showCountdown(Math.ceil(cdLeft)); renderHud(); }
-      function startPhase() { state = 'RUNNING'; phaseLeft = CFG.phaseSec; phaseKills = 0; ui.cd.style.display = 'none'; replenish(); renderHud(); }
+      function startPhase() { state = 'RUNNING'; phaseLeft = CFG.phaseSecChoices[Math.floor(Math.random() * CFG.phaseSecChoices.length)]; phaseKills = 0; ui.cd.style.display = 'none'; replenish(); renderHud(); }
       function phaseClear() {
         if (state !== 'RUNNING') return;
         state = 'PHASE_CLEAR'; clearField();
@@ -9508,6 +9513,10 @@
         }
         updateBots(dt); updateBotBullets(dt);
         if (state !== 'RUNNING') return;                   // 被弾死亡を優先（時間切れと同フレームでもGAME_OVER）
+        for (let i = pendingSpawns.length - 1; i >= 0; i--) {
+          pendingSpawns[i].t -= dt;
+          if (pendingSpawns[i].t <= 0) { const q = pendingSpawns.splice(i, 1)[0]; spawnBot(q.type); }
+        }
         replenish();
         phaseLeft -= dt; renderHud();
         if (phaseLeft <= 0) phaseClear();
@@ -9525,7 +9534,7 @@
         canTakeDamage: () => state === 'RUNNING',
         blocksResume: () => state === 'GEAR_PICK' || state === 'GAME_OVER',
         _bots: () => bots, _bullets: () => botBullets, _own: (id) => { owned[id] = (owned[id]||0)+1; },
-        _debug: () => ({ state, phase, score, kills, bots: bots.length, bullets: botBullets.length, owned }),
+        _debug: () => ({ state, phase, phaseLeft, score, kills, bots: bots.length, bullets: botBullets.length, owned }),
         _catalog: CATALOG, _eligible: eligible, _draw3: draw3, _cfg: CFG
       };
     })();
